@@ -1,0 +1,101 @@
+"""Profissionais: Barber, BarberUnit (atuação N:N), TimeOff."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+from typing import TYPE_CHECKING, List, Optional
+
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    ForeignKey,
+    Identity,
+    Index,
+    Numeric,
+    Text,
+    TIMESTAMP,
+    func,
+    text,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .base import Base
+
+if TYPE_CHECKING:
+    from .appointment import AppointmentItem
+    from .organization import Organization
+    from .unit import Unit
+    from .user import UserUnit
+
+
+class Barber(Base):
+    __tablename__ = "barbers"
+    __table_args__ = (
+        CheckConstraint(
+            "commission_pct >= 0 AND commission_pct <= 1",
+            name="barbers_commission_range",
+        ),
+        Index("idx_barbers_org", "organization_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    specialty: Mapped[Optional[str]] = mapped_column(Text)
+    commission_pct: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4), nullable=False, server_default=text("0")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+
+    organization: Mapped["Organization"] = relationship(back_populates="barbers")
+    unit_links: Mapped[List["BarberUnit"]] = relationship(back_populates="barber")
+    user_links: Mapped[List["UserUnit"]] = relationship(back_populates="barber")
+    time_off: Mapped[List["TimeOff"]] = relationship(back_populates="barber")
+    appointment_items: Mapped[List["AppointmentItem"]] = relationship(
+        back_populates="barber"
+    )
+
+
+class BarberUnit(Base):
+    __tablename__ = "barber_units"
+    __table_args__ = (Index("idx_barber_units_unit", "unit_id"),)
+
+    barber_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("barbers.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    unit_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("units.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    barber: Mapped["Barber"] = relationship(back_populates="unit_links")
+    unit: Mapped["Unit"] = relationship(back_populates="barber_links")
+
+
+class TimeOff(Base):
+    __tablename__ = "time_off"
+    __table_args__ = (
+        CheckConstraint("end_at > start_at", name="time_off_valid"),
+        Index("idx_time_off_barber", "barber_id", "start_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    barber_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("barbers.id", ondelete="CASCADE"), nullable=False
+    )
+    start_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    end_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+
+    barber: Mapped["Barber"] = relationship(back_populates="time_off")
