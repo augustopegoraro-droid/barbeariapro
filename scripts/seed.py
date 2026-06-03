@@ -1,10 +1,14 @@
 # file: scripts/seed.py
-"""Seed mínimo do P0.
+"""Seed completo do MVP BarbeariaPro.
 
-Roda com a role DONA das tabelas (ADMIN_DATABASE_URL), que bypassa a RLS — é
-o único jeito de inserir a `organizations` (a policy filtra por id, que só
-existe após o INSERT). Cria 2 organizações, cada uma com 1 unidade e 1 usuário
-'owner', e reaplica os GRANTs DML à role do app (que opera SOB RLS).
+Cria:
+  - Plano "MVP"
+  - Organização "Barbearia Taylor e Thedy"
+  - 1 Unidade
+  - 1 Usuário owner
+  - 2 Barbeiros (Taylor, Thedy) vinculados à unidade
+  - 4 Serviços (Corte, Barba, Combo, Pigmentação)
+  - Horários de funcionamento Seg-Sex 09h-19h / Sáb 09h-17h
 
 Uso:
     cp .env.example .env   # ajuste os segredos/URLs
@@ -15,18 +19,22 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
-# Permite importar `app` e `models` a partir da raiz do projeto.
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + "/.."))
 
 from app.core.security import hash_password  # noqa: E402
 from models import (  # noqa: E402
+    Barber,
+    BarberUnit,
+    BusinessHours,
     Organization,
     Plan,
+    Service,
+    ServiceCategory,
     Subscription,
     Unit,
     UnitRole,
@@ -45,7 +53,6 @@ NOW = datetime.now(timezone.utc)
 
 
 def reaplicar_grants(session: Session) -> None:
-    """GRANTs DML para a role do app (necessários a cada recriação do schema)."""
     try:
         session.execute(text(f"GRANT USAGE ON SCHEMA public TO {APP_ROLE}"))
         session.execute(
@@ -57,15 +64,13 @@ def reaplicar_grants(session: Session) -> None:
         session.execute(
             text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {APP_ROLE}")
         )
-        print(f"[grants] aplicados para a role '{APP_ROLE}'.")
-    except Exception as exc:  # role pode não existir ainda
-        print(f"[grants] AVISO: não foi possível aplicar ({exc}).")
+        print(f"[grants] aplicados para '{APP_ROLE}'.")
+    except Exception as exc:
+        print(f"[grants] AVISO: {exc}")
 
 
 def get_or_create_plan(session: Session) -> Plan:
-    plan = session.execute(
-        select(Plan).where(Plan.name == "MVP")
-    ).scalar_one_or_none()
+    plan = session.execute(select(Plan).where(Plan.name == "MVP")).scalar_one_or_none()
     if plan is None:
         plan = Plan(name="MVP", price_month=0, max_units=5, max_barbers=20)
         session.add(plan)
@@ -74,15 +79,22 @@ def get_or_create_plan(session: Session) -> Plan:
     return plan
 
 
-def create_org(session: Session, plan: Plan, name: str, email: str) -> tuple[int, str]:
+def seed_org(session: Session, plan: Plan) -> tuple[int, int]:
+    """Cria a organização principal e retorna (org_id, unit_id)."""
+    org_name = "Barbearia Taylor e Thedy"
     existing = session.execute(
-        select(Organization).where(Organization.name == name)
+        select(Organization).where(Organization.name == org_name)
     ).scalar_one_or_none()
-    if existing is not None:
-        print(f"[org] '{name}' já existe (id={existing.id}); pulando.")
-        return existing.id, email
 
-    org = Organization(name=name)
+    if existing is not None:
+        unit = session.execute(
+            select(Unit).where(Unit.organization_id == existing.id)
+        ).scalar_one_or_none()
+        unit_id = unit.id if unit else 0
+        print(f"[org] '{org_name}' já existe: org_id={existing.id}, unit_id={unit_id}")
+        return existing.id, unit_id
+
+    org = Organization(name=org_name)
     session.add(org)
     session.flush()
 
@@ -91,24 +103,116 @@ def create_org(session: Session, plan: Plan, name: str, email: str) -> tuple[int
             organization_id=org.id,
             plan_id=plan.id,
             current_period_start=NOW,
-            current_period_end=NOW + timedelta(days=30),
+            current_period_end=NOW + timedelta(days=365),
         )
     )
-    unit = Unit(organization_id=org.id, name=f"{name} - Unidade 1")
+
+    unit = Unit(
+        organization_id=org.id,
+        name="Taylor e Thedy - Unidade Central",
+        timezone="America/Sao_Paulo",
+        address="Rua das Barbearias, 123",
+    )
     session.add(unit)
     session.flush()
 
+    # Usuário owner
     user = User(
         organization_id=org.id,
-        email=email,
+        email="proprietario@barbearia.test",
         password_hash=hash_password(PASSWORD),
     )
     session.add(user)
     session.flush()
-
     session.add(UserUnit(user_id=user.id, unit_id=unit.id, role=UnitRole.owner))
-    print(f"[org] '{name}' criada: id={org.id} | login: {email}")
-    return org.id, email
+    print(f"[org] criada: org_id={org.id}, unit_id={unit.id}")
+    print(f"[user] owner: proprietario@barbearia.test / {PASSWORD}")
+
+    # Barbeiros
+    barbers_data = [
+        ("Taylor", "Cortes clássicos e modernos"),
+        ("Thedy", "Barba e coloração"),
+    ]
+    for bname, bspec in barbers_data:
+        existing_b = session.execute(
+            select(Barber)
+            .where(Barber.organization_id == org.id)
+            .where(Barber.name == bname)
+        ).scalar_one_or_none()
+        if existing_b is None:
+            b = Barber(
+                organization_id=org.id,
+                name=bname,
+                specialty=bspec,
+                commission_pct="0.40",
+            )
+            session.add(b)
+            session.flush()
+            session.add(BarberUnit(barber_id=b.id, unit_id=unit.id))
+            print(f"[barber] {bname}: id={b.id}")
+
+    # Serviços
+    services_data = [
+        ("Corte de Cabelo", ServiceCategory.cabelo, 30, "35.00"),
+        ("Barba", ServiceCategory.barba, 30, "25.00"),
+        ("Corte + Barba", ServiceCategory.combo, 60, "55.00"),
+        ("Pigmentação de Barba", ServiceCategory.quimica, 45, "60.00"),
+    ]
+    for sname, scat, sdur, sprice in services_data:
+        existing_s = session.execute(
+            select(Service)
+            .where(Service.organization_id == org.id)
+            .where(Service.name == sname)
+        ).scalar_one_or_none()
+        if existing_s is None:
+            s = Service(
+                organization_id=org.id,
+                name=sname,
+                category=scat,
+                default_duration_min=sdur,
+                price=sprice,
+            )
+            session.add(s)
+            session.flush()
+            print(f"[service] {sname}: id={s.id} R${sprice} {sdur}min")
+
+    # Horários de funcionamento
+    # Seg(1)–Sex(5): 09h–19h | Sáb(6): 09h–17h
+    weekdays_full = [1, 2, 3, 4, 5]
+    weekdays_short = [6]
+    for wd in weekdays_full:
+        existing_bh = session.execute(
+            select(BusinessHours)
+            .where(BusinessHours.unit_id == unit.id)
+            .where(BusinessHours.weekday == wd)
+        ).scalar_one_or_none()
+        if existing_bh is None:
+            session.add(
+                BusinessHours(
+                    unit_id=unit.id,
+                    weekday=wd,
+                    open_time=time(9, 0),
+                    close_time=time(19, 0),
+                )
+            )
+    for wd in weekdays_short:
+        existing_bh = session.execute(
+            select(BusinessHours)
+            .where(BusinessHours.unit_id == unit.id)
+            .where(BusinessHours.weekday == wd)
+        ).scalar_one_or_none()
+        if existing_bh is None:
+            session.add(
+                BusinessHours(
+                    unit_id=unit.id,
+                    weekday=wd,
+                    open_time=time(9, 0),
+                    close_time=time(17, 0),
+                )
+            )
+    print(f"[hours] Seg-Sex 09-19h, Sáb 09-17h configurados para unit_id={unit.id}")
+
+    return org.id, unit.id
 
 
 def main() -> None:
@@ -116,16 +220,17 @@ def main() -> None:
     with Session(engine) as session, session.begin():
         reaplicar_grants(session)
         plan = get_or_create_plan(session)
-        org_a = create_org(session, plan, "Barbearia A", "owner1@barbeariapro.test")
-        org_b = create_org(session, plan, "Barbearia B", "owner2@barbeariapro.test")
+        org_id, unit_id = seed_org(session, plan)
 
     print("\n=== SEED CONCLUÍDO ===")
-    for org_id, email in (org_a, org_b):
-        print(f"  organization_id={org_id}  email={email}  senha={PASSWORD}")
-    print(
-        "\nLogin exige organization_id + email + senha. Faça login na org A e "
-        "confira em /auth/me que organizations_visible == 1 (não enxerga a B)."
-    )
+    print(f"  BOT_ORGANIZATION_ID={org_id}")
+    print(f"  BOT_UNIT_ID={unit_id}")
+    print(f"\nAdicione ao .env:")
+    print(f"  BOT_ORGANIZATION_ID={org_id}")
+    print(f"  BOT_UNIT_ID={unit_id}")
+    print(f"  BOT_API_KEY=<chave-segura-gerada-por-voce>")
+    print(f"\nLogin owner: proprietario@barbearia.test / {PASSWORD}")
+    print(f"  organization_id={org_id}")
 
 
 if __name__ == "__main__":

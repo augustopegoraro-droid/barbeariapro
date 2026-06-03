@@ -21,5 +21,10 @@ class Settings(BaseSettings):
     # Driver async psycopg3: postgresql+psycopg://...
     database_url: str = Field(..., description="URL async da role do app.")
 
+    # Bot / n8n chatbot
+    bot_api_key: str = ""
+    bot_organization_id: int = 0
+    bot_unit_id: int = 0
+
 
 settings = Settings()  # type: ignore[call-arg]
