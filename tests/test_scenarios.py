@@ -465,15 +465,26 @@ def test_workflow_nao_usa_staticdata_para_debounce():
 
 
 def test_cancel_tool_tem_phone_param():
-    """Tool de cancelamento deve ter phone como parâmetro."""
+    """Tool de cancelamento deve ter phone como parâmetro (formato n8n v1.1: parametersQuery.values)."""
     import json
     with open("workflows.json") as f:
         data = json.load(f)
     bot_wf = [w for w in data if w.get("name") == "BarbeariaPro Bot - WhatsApp Chatbot"][0]
     t_cancel = [n for n in bot_wf["nodes"] if n["id"] == "t-cancel"][0]
-    params = t_cancel["parameters"].get("queryParameters", {}).get("parameters", [])
-    param_names = [p["name"] for p in params]
-    assert "phone" in param_names, "cancelar_agendamento deve exigir phone"
+    # Formato novo (n8n v1.1): parametersQuery.values com valueProvider
+    params_new = t_cancel["parameters"].get("parametersQuery", {}).get("values", [])
+    param_names_new = [p["name"] for p in params_new]
+    # Formato antigo (legado, não deve existir mais)
+    params_old = t_cancel["parameters"].get("queryParameters", {}).get("parameters", [])
+    assert not params_old, "queryParameters.parameters (formato antigo) não deve existir mais"
+    assert "phone" in param_names_new, (
+        "cancelar_agendamento deve ter phone em parametersQuery.values (formato n8n v1.1)"
+    )
+    # Verificar que é modelRequired (obrigatório pelo modelo)
+    phone_entry = next(p for p in params_new if p["name"] == "phone")
+    assert phone_entry.get("valueProvider") == "modelRequired", (
+        "phone deve ter valueProvider=modelRequired"
+    )
 
 
 if __name__ == "__main__":

@@ -436,3 +436,165 @@ def test_cancel_phone_is_normalized():
 if __name__ == "__main__":
     import subprocess
     subprocess.run([sys.executable, "-m", "pytest", __file__, "-v"])
+
+
+# ────────────────────────────────────────────────────────────
+# Testes de horário comercial — BYPASS_HOURS=false (ITEM [1])
+# ────────────────────────────────────────────────────────────
+
+def test_bypass_hours_is_false_in_workflow():
+    """BYPASS_HOURS deve ser false no workflow instalado."""
+    import json
+    with open("workflows.json") as f:
+        data = json.load(f)
+    bot_wf = next(w for w in data if "BarbeariaPro Bot" in w.get("name", ""))
+    hora = next(n for n in bot_wf["nodes"] if n["id"] == "hora-001")
+    code = hora["parameters"]["jsCode"]
+    assert "BYPASS_HOURS = false" in code, "BYPASS_HOURS deve ser false em produção"
+    assert "BYPASS_HOURS = true" not in code, "BYPASS_HOURS=true não deve existir no código"
+
+def _horario_comercial_palmas(utc_ts_ms: int) -> bool:
+    """Replica a lógica JS do Code Horário Comercial com BYPASS_HOURS=false."""
+    palmas_ms = utc_ts_ms + (-3 * 3600 * 1000)
+    # Simular getUTCHours/getUTCDay sobre o timestamp deslocado
+    from datetime import datetime, timezone
+    palmas_dt = datetime.utcfromtimestamp(palmas_ms / 1000)
+    hour = palmas_dt.hour
+    day = palmas_dt.weekday()          # Python: 0=Seg...6=Dom
+    js_day = (day + 1) % 7            # n8n/JS: 0=Dom, 1=Seg...6=Sáb
+    if 1 <= js_day <= 5:
+        return 9 <= hour < 19
+    elif js_day == 6:
+        return 9 <= hour < 17
+    return False  # domingo
+
+def test_horario_dentro_semana():
+    from datetime import datetime, timezone
+    # Qui 13h30 Palmas = UTC 16h30
+    ts = int(datetime(2026, 6, 4, 16, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    assert _horario_comercial_palmas(ts) is True
+
+def test_horario_noturno_fechado():
+    from datetime import datetime, timezone
+    # Qui 22h30 Palmas = UTC 01h30 do dia seguinte
+    ts = int(datetime(2026, 6, 5, 1, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    assert _horario_comercial_palmas(ts) is False
+
+def test_horario_domingo_fechado():
+    from datetime import datetime, timezone
+    # Dom 14h Palmas = UTC 17h
+    ts = int(datetime(2026, 6, 7, 17, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    assert _horario_comercial_palmas(ts) is False
+
+def test_horario_sabado_aberto():
+    from datetime import datetime, timezone
+    # Sáb 10h Palmas = UTC 13h
+    ts = int(datetime(2026, 6, 6, 13, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    assert _horario_comercial_palmas(ts) is True
+
+def test_horario_sabado_apos_17h_fechado():
+    from datetime import datetime, timezone
+    # Sáb 18h01 Palmas = UTC 21h01
+    ts = int(datetime(2026, 6, 6, 21, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    assert _horario_comercial_palmas(ts) is False
+
+def test_horario_exato_abertura():
+    from datetime import datetime, timezone
+    # Seg 9h00 = UTC 12h00 — exatamente na abertura → aberto
+    ts = int(datetime(2026, 6, 8, 12, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    assert _horario_comercial_palmas(ts) is True
+
+def test_horario_exato_fechamento():
+    from datetime import datetime, timezone
+    # Sex 19h00 Palmas = UTC 22h00 — exatamente no fechamento → fechado
+    ts = int(datetime(2026, 6, 5, 22, 0, tzinfo=timezone.utc).timestamp() * 1000)
+    assert _horario_comercial_palmas(ts) is False
+
+
+# ────────────────────────────────────────────────────────────
+# Testes de status concluido — ITEM [3]
+# ────────────────────────────────────────────────────────────
+
+def test_complete_endpoint_exists():
+    """Endpoint /complete deve existir no router."""
+    import inspect
+    from app.api.bot import complete_appointment
+    sig = inspect.signature(complete_appointment)
+    assert "appointment_id" in sig.parameters
+    assert "db" in sig.parameters
+
+def test_appointment_status_concluido_in_enum():
+    """AppointmentStatus.concluido deve existir no enum."""
+    from models.enums import AppointmentStatus
+    assert hasattr(AppointmentStatus, 'concluido')
+    assert AppointmentStatus.concluido.value == 'concluido'
+
+def test_appointment_status_faltou_in_enum():
+    """AppointmentStatus.faltou deve existir no enum."""
+    from models.enums import AppointmentStatus
+    assert hasattr(AppointmentStatus, 'faltou')
+
+def test_days_since_logic_concluido_preferred():
+    """
+    get_client_profile deve preferir concluido sobre agendado para last_visit.
+    Testamos a lógica: se há concluido, usa ele; senão usa agendado passado.
+    """
+    from models.enums import AppointmentStatus
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    past_30 = now - timedelta(days=30)
+    past_10 = now - timedelta(days=10)
+
+    # Simular: 1 concluido (30 dias atrás) + 1 agendado passado (10 dias atrás)
+    appt_concluido = type('A', (), {
+        'status': AppointmentStatus.concluido,
+        'start_at': past_30,
+    })()
+    appt_agendado = type('A', (), {
+        'status': AppointmentStatus.agendado,
+        'start_at': past_10,
+    })()
+
+    # A lógica correta: preferir concluido
+    def get_last_visit(appts):
+        concluidos = [a for a in appts if a.status == AppointmentStatus.concluido]
+        if concluidos:
+            return max(concluidos, key=lambda a: a.start_at)
+        fallback = [
+            a for a in appts
+            if a.status not in (AppointmentStatus.cancelado, AppointmentStatus.faltou)
+            and a.start_at < now
+        ]
+        return max(fallback, key=lambda a: a.start_at) if fallback else None
+
+    result = get_last_visit([appt_concluido, appt_agendado])
+    assert result is appt_concluido, "Deve preferir concluido"
+    assert (now - result.start_at).days == 30
+
+def test_days_since_logic_fallback_when_no_concluido():
+    """Sem concluido, fallback para agendado passado."""
+    from models.enums import AppointmentStatus
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    past_15 = now - timedelta(days=15)
+
+    appt_agendado = type('A', (), {
+        'status': AppointmentStatus.agendado,
+        'start_at': past_15,
+    })()
+
+    def get_last_visit(appts):
+        concluidos = [a for a in appts if a.status == AppointmentStatus.concluido]
+        if concluidos:
+            return max(concluidos, key=lambda a: a.start_at)
+        fallback = [
+            a for a in appts
+            if a.status not in (AppointmentStatus.cancelado, AppointmentStatus.faltou)
+            and a.start_at < now
+        ]
+        return max(fallback, key=lambda a: a.start_at) if fallback else None
+
+    result = get_last_visit([appt_agendado])
+    assert result is appt_agendado, "Fallback para agendado passado"

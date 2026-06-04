@@ -145,6 +145,20 @@ async def debounce_flush(body: _FlushIn, _auth: _BotAuth = None):
     return _FlushOut(message="\n".join(messages), is_new_session=is_new_session)
 
 
+class _DebugSessionIn(BaseModel):
+    phone: str
+    minutes_ago: int = Field(..., description="Simula último flush X minutos atrás (para testes)")
+
+
+@router.post("/debounce/debug-set-session", include_in_schema=False)
+async def debug_set_session(_auth: _BotAuth, body: _DebugSessionIn):
+    """DEBUG ONLY — simula sessão antiga para testar detecção de nova sessão."""
+    async with _debounce_lock:
+        _debounce.pop(body.phone, None)
+        _last_flush[body.phone] = _mono() - (body.minutes_ago * 60.0)
+    return {"ok": True, "simulated_minutes_ago": body.minutes_ago}
+
+
 # ---------------------------------------------------------------------------
 # Schemas de saída/entrada
 # ---------------------------------------------------------------------------
@@ -365,17 +379,31 @@ async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
 
     now_utc = datetime.now(timezone.utc)
 
-    # Última visita passada (ignora agendamentos futuros e cancelados)
+    # Última visita: preferir status 'concluido' (confirmado), fallback para
+    # agendamentos passados não cancelados (aproximação até ter marcação manual)
     last_appt = (
         await db.execute(
             select(Appointment)
             .where(Appointment.client_id == client.id)
-            .where(Appointment.status != AppointmentStatus.cancelado)
-            .where(Appointment.start_at < now_utc)
+            .where(Appointment.status == AppointmentStatus.concluido)
             .order_by(Appointment.start_at.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
+
+    if last_appt is None:
+        # Fallback: qualquer passado não cancelado
+        last_appt = (
+            await db.execute(
+                select(Appointment)
+                .where(Appointment.client_id == client.id)
+                .where(Appointment.status != AppointmentStatus.cancelado)
+                .where(Appointment.status != AppointmentStatus.faltou)
+                .where(Appointment.start_at < now_utc)
+                .order_by(Appointment.start_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
 
     days_since = None
     last_date = None
@@ -770,6 +798,37 @@ async def cancel_appointment(
         raise HTTPException(409, f"Agendamento não pode ser cancelado (status atual: {appt.status.value})")
 
     appt.status = AppointmentStatus.cancelado
+
+    row = (
+        await db.execute(
+            select(Barber.name, Service.name)
+            .select_from(AppointmentItem)
+            .join(Barber, Barber.id == AppointmentItem.barber_id)
+            .join(Service, Service.id == AppointmentItem.service_id)
+            .where(AppointmentItem.appointment_id == appt.id)
+            .limit(1)
+        )
+    ).first()
+
+    return _appt_out(appt, row[0] if row else "—", row[1] if row else "—")
+
+
+@router.patch("/appointments/{appointment_id}/complete", response_model=AppointmentOut)
+async def complete_appointment(
+    appointment_id: int,
+    db: BotDB,
+) -> AppointmentOut:
+    """Marca agendamento como concluído. Usado pela equipe após o atendimento."""
+    appt = (
+        await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+    ).scalar_one_or_none()
+
+    if not appt:
+        raise HTTPException(404, "Agendamento não encontrado")
+    if appt.status != AppointmentStatus.agendado:
+        raise HTTPException(409, f"Só é possível concluir agendamentos com status 'agendado' (atual: {appt.status.value})")
+
+    appt.status = AppointmentStatus.concluido
 
     row = (
         await db.execute(
