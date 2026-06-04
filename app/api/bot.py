@@ -9,9 +9,9 @@ from decimal import Decimal
 from typing import Annotated, List, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -37,6 +37,112 @@ BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
 
 _SLOT_STEP = 30  # minutos entre slots
 _E164 = re.compile(r"^\+[1-9][0-9]{7,14}$")
+
+# ---------------------------------------------------------------------------
+# Debounce buffer — concorrência via asyncio.Lock por telefone
+# ---------------------------------------------------------------------------
+import asyncio as _asyncio
+from time import monotonic as _mono
+
+_debounce_lock = _asyncio.Lock()
+_debounce: dict[str, dict] = {}       # phone → {messages: list[str], ts: float}
+_last_flush: dict[str, float] = {}    # phone → monotonic ts do último flush
+_DEBOUNCE_STALE = 30.0                # buffer morto após 30s sem flush
+_SESSION_GAP = 4 * 3600.0            # gap > 4h desde o último flush → nova sessão
+
+# Deduplicação de re-delivery: message_id → monotonic timestamp de quando foi visto
+_seen_ids: dict[str, float] = {}
+_SEEN_TTL = 24 * 3600.0              # descarta entradas com mais de 24h
+
+
+def _purge_seen_ids(now: float) -> None:
+    """Remove message_ids expirados (chamado internamente sem lock extra)."""
+    expired = [k for k, ts in _seen_ids.items() if now - ts > _SEEN_TTL]
+    for k in expired:
+        del _seen_ids[k]
+
+
+class _DebounceIn(BaseModel):
+    phone: str
+    message: str
+    message_id: Optional[str] = None  # ID da mensagem do WhatsApp para deduplicação
+
+
+class _DebounceOut(BaseModel):
+    proceed: bool
+    is_new_session: bool = False
+
+
+class _FlushIn(BaseModel):
+    phone: str
+
+
+class _FlushOut(BaseModel):
+    message: str
+    is_new_session: bool = False
+
+
+def _require_bot_token(
+    x_bot_token: Annotated[Optional[str], Header(alias="X-Bot-Token")] = None,
+) -> None:
+    from app.core.config import settings
+    if not settings.bot_api_key or x_bot_token != settings.bot_api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Bot token inválido")
+
+
+_BotAuth = Annotated[None, Depends(_require_bot_token)]
+
+
+@router.post("/debounce", response_model=_DebounceOut)
+async def debounce_entry(body: _DebounceIn, _auth: _BotAuth = None):
+    """Registra mensagem no buffer. Retorna proceed=True apenas para o primeiro
+    da rajada; os demais retornam proceed=False e encerram no n8n.
+    Ignora re-deliveries via message_id. Detecta nova sessão por gap de tempo."""
+    phone = body.phone
+    async with _debounce_lock:
+        now = _mono()
+
+        # Deduplicação por message_id (re-delivery do WhatsApp)
+        if body.message_id:
+            _purge_seen_ids(now)
+            if body.message_id in _seen_ids:
+                return _DebounceOut(proceed=False, is_new_session=False)
+            _seen_ids[body.message_id] = now
+
+        buf = _debounce.get(phone)
+
+        # Detectar nova sessão: compara o momento do último flush com agora
+        # Se não há registro de flush anterior, é definitivamente uma nova sessão
+        last_flush_ts = _last_flush.get(phone)
+        if last_flush_ts is None:
+            is_new_session = True
+        else:
+            is_new_session = (now - last_flush_ts) > _SESSION_GAP
+
+        if buf is None or (now - buf["ts"]) > _DEBOUNCE_STALE:
+            _debounce[phone] = {
+                "messages": [body.message],
+                "ts": now,
+                "is_new_session": is_new_session,
+            }
+            return _DebounceOut(proceed=True, is_new_session=is_new_session)
+
+        buf["messages"].append(body.message)
+        buf["ts"] = now
+        return _DebounceOut(proceed=False, is_new_session=False)
+
+
+@router.post("/debounce/flush", response_model=_FlushOut)
+async def debounce_flush(body: _FlushIn, _auth: _BotAuth = None):
+    """Lê e limpa o buffer. Chamado pelo controller após o Wait de 5s."""
+    async with _debounce_lock:
+        buf = _debounce.pop(body.phone, None)
+        if buf is not None:
+            _last_flush[body.phone] = _mono()
+    messages = buf["messages"] if buf else []
+    is_new_session = buf.get("is_new_session", False) if buf else False
+    return _FlushOut(message="\n".join(messages), is_new_session=is_new_session)
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +173,18 @@ class ClientOut(BaseModel):
     id: int
     name: str
     phone_e164: str
+
+
+class ClientProfileOut(BaseModel):
+    found: bool
+    id: Optional[int] = None
+    name: Optional[str] = None
+    total_appointments: int = 0
+    last_visit_date: Optional[str] = None
+    days_since_last_visit: Optional[int] = None
+    favorite_barber_id: Optional[int] = None
+    favorite_barber_name: Optional[str] = None
+    favorite_service_name: Optional[str] = None
 
 
 class Slot(BaseModel):
@@ -196,7 +314,9 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
     ).scalar_one_or_none()
 
     if existing:
-        existing.name = body.name
+        # Só atualiza se o novo nome for mais informativo (mais caracteres)
+        if len(body.name) > len(existing.name or ""):
+            existing.name = body.name
         client = existing
     else:
         client = Client(
@@ -217,6 +337,101 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
         )
 
     return ClientOut(id=client.id, name=client.name, phone_e164=client.phone_e164)
+
+
+@router.get("/clients/profile", response_model=ClientProfileOut)
+async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
+    phone = _normalize_phone(phone)
+    org_id = settings.bot_organization_id
+
+    client = (
+        await db.execute(
+            select(Client)
+            .where(Client.organization_id == org_id)
+            .where(Client.phone_e164 == phone)
+        )
+    ).scalar_one_or_none()
+
+    if not client:
+        return ClientProfileOut(found=False)
+
+    total = (
+        await db.execute(
+            select(func.count(Appointment.id))
+            .where(Appointment.client_id == client.id)
+            .where(Appointment.status != AppointmentStatus.cancelado)
+        )
+    ).scalar_one()
+
+    now_utc = datetime.now(timezone.utc)
+
+    # Última visita passada (ignora agendamentos futuros e cancelados)
+    last_appt = (
+        await db.execute(
+            select(Appointment)
+            .where(Appointment.client_id == client.id)
+            .where(Appointment.status != AppointmentStatus.cancelado)
+            .where(Appointment.start_at < now_utc)
+            .order_by(Appointment.start_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    days_since = None
+    last_date = None
+    if last_appt:
+        appt_utc = last_appt.start_at if last_appt.start_at.tzinfo else last_appt.start_at.replace(tzinfo=timezone.utc)
+        days_since = (now_utc - appt_utc).days
+        last_date = last_appt.start_at.date().isoformat()
+
+    fav_barber_row = (
+        await db.execute(
+            select(AppointmentItem.barber_id, func.count().label("cnt"))
+            .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
+            .where(Appointment.client_id == client.id)
+            .where(Appointment.status != AppointmentStatus.cancelado)
+            .group_by(AppointmentItem.barber_id)
+            .order_by(func.count().desc())
+            .limit(1)
+        )
+    ).first()
+
+    fav_barber_id = fav_barber_name = None
+    if fav_barber_row:
+        fav_barber_id = fav_barber_row[0]
+        b = (await db.execute(select(Barber).where(Barber.id == fav_barber_id))).scalar_one_or_none()
+        if b:
+            fav_barber_name = b.name
+
+    fav_svc_row = (
+        await db.execute(
+            select(AppointmentItem.service_id, func.count().label("cnt"))
+            .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
+            .where(Appointment.client_id == client.id)
+            .where(Appointment.status != AppointmentStatus.cancelado)
+            .group_by(AppointmentItem.service_id)
+            .order_by(func.count().desc())
+            .limit(1)
+        )
+    ).first()
+
+    fav_svc_name = None
+    if fav_svc_row:
+        s = (await db.execute(select(Service).where(Service.id == fav_svc_row[0]))).scalar_one_or_none()
+        if s:
+            fav_svc_name = s.name
+
+    return ClientProfileOut(
+        found=True,
+        id=client.id,
+        name=client.name,
+        total_appointments=total or 0,
+        last_visit_date=last_date,
+        days_since_last_visit=days_since,
+        favorite_barber_id=fav_barber_id,
+        favorite_barber_name=fav_barber_name,
+        favorite_service_name=fav_svc_name,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +593,51 @@ async def create_appointment(body: AppointmentCreateIn, db: BotDB) -> Appointmen
     if start_utc <= datetime.now(timezone.utc):
         raise HTTPException(422, "Horário já passou")
 
+    # Validar horário comercial e alinhamento à grade
+    unit = (await db.execute(select(Unit).where(Unit.id == unit_id))).scalar_one_or_none()
+    tz_name = unit.timezone if unit else "America/Sao_Paulo"
+    tz = ZoneInfo(tz_name)
+    start_local = start_utc.astimezone(tz)
+    pg_weekday = (start_local.weekday() + 1) % 7  # 0=Dom, 1=Seg ... 6=Sáb
+
+    bh_for_day = (
+        await db.execute(
+            select(BusinessHours)
+            .where(BusinessHours.unit_id == unit_id)
+            .where(BusinessHours.weekday == pg_weekday)
+        )
+    ).scalars().all()
+
+    if not bh_for_day:
+        raise HTTPException(422, "Barbearia fechada neste dia da semana")
+
+    bh = max(
+        bh_for_day,
+        key=lambda x: (x.close_time.hour * 60 + x.close_time.minute)
+        - (x.open_time.hour * 60 + x.open_time.minute),
+    )
+
+    slot_h, slot_m = start_local.hour, start_local.minute
+    open_h, open_m = bh.open_time.hour, bh.open_time.minute
+    close_h, close_m = bh.close_time.hour, bh.close_time.minute
+
+    if not (
+        (open_h * 60 + open_m) <= (slot_h * 60 + slot_m) < (close_h * 60 + close_m)
+    ):
+        raise HTTPException(
+            422,
+            f"Horário fora do expediente — funcionamos das {bh.open_time.strftime('%Hh%M')} "
+            f"às {bh.close_time.strftime('%Hh%M')}",
+        )
+
+    minutes_from_open = (slot_h * 60 + slot_m) - (open_h * 60 + open_m)
+    if minutes_from_open % _SLOT_STEP != 0:
+        raise HTTPException(
+            422,
+            f"Horário inválido — use intervalos de {_SLOT_STEP} minutos a partir das "
+            f"{bh.open_time.strftime('%H:%M')} (ex: 09:00, 09:30, 10:00...)",
+        )
+
     conflict = (
         await db.execute(
             select(Appointment.id)
@@ -393,7 +653,9 @@ async def create_appointment(body: AppointmentCreateIn, db: BotDB) -> Appointmen
     if conflict:
         raise HTTPException(409, "Horário indisponível — conflito de agendamento")
 
-    # display_number sequencial por unidade
+    # display_number sequencial por unidade — advisory lock garante atomicidade
+    # pg_advisory_xact_lock é liberado automaticamente ao fim da transação
+    await db.execute(text(f"SELECT pg_advisory_xact_lock({unit_id})"))
     next_num = (
         await db.execute(
             select(func.coalesce(func.max(Appointment.display_number), 0) + 1)
@@ -476,13 +738,34 @@ async def list_appointments(
 
 
 @router.patch("/appointments/{appointment_id}/cancel", response_model=AppointmentOut)
-async def cancel_appointment(appointment_id: int, db: BotDB) -> AppointmentOut:
+async def cancel_appointment(
+    appointment_id: int,
+    db: BotDB,
+    phone: str = Query(..., description="Telefone E.164 do solicitante (+5511999998888)"),
+) -> AppointmentOut:
+    phone = _normalize_phone(phone)
+    org_id = settings.bot_organization_id
+
+    owner = (
+        await db.execute(
+            select(Client)
+            .where(Client.organization_id == org_id)
+            .where(Client.phone_e164 == phone)
+        )
+    ).scalar_one_or_none()
+    if not owner:
+        raise HTTPException(404, "Cliente não encontrado para este telefone")
+
     appt = (
-        await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+        await db.execute(
+            select(Appointment)
+            .where(Appointment.id == appointment_id)
+            .where(Appointment.client_id == owner.id)
+        )
     ).scalar_one_or_none()
 
     if not appt:
-        raise HTTPException(404, "Agendamento não encontrado")
+        raise HTTPException(404, "Agendamento não encontrado para este cliente")
     if appt.status != AppointmentStatus.agendado:
         raise HTTPException(409, f"Agendamento não pode ser cancelado (status atual: {appt.status.value})")
 
