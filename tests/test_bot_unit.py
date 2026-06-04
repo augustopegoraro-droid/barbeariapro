@@ -598,3 +598,153 @@ def test_days_since_logic_fallback_when_no_concluido():
 
     result = get_last_visit([appt_agendado])
     assert result is appt_agendado, "Fallback para agendado passado"
+
+
+# ────────────────────────────────────────────────────────────
+# Testes de deduplicação por conteúdo (Camada 2) — anti-redelivery tardio
+# ────────────────────────────────────────────────────────────
+
+def _reset_content_state(phone: str = None):
+    """Limpa todo o estado de debounce e deduplicação para isolamento dos testes."""
+    import app.api.bot as m
+    m._debounce.clear()
+    m._seen_ids.clear()
+    m._seen_content.clear()
+    m._last_flush.clear()
+
+
+@pytest.mark.asyncio
+async def test_content_dedup_blocks_redelivery_within_window():
+    """Mesma mensagem do mesmo phone dentro de 30s → segunda bloqueada com proceed=False."""
+    _reset_content_state()
+    from app.api.bot import _DebounceIn, _FlushIn, debounce_entry, debounce_flush
+
+    phone = "+5563000000020"
+    msg = "quais serviços vocês oferecem?"
+
+    r1 = await debounce_entry(_DebounceIn(phone=phone, message=msg), None)
+    assert r1.proceed is True
+
+    # Flush simula execução do AI Agent (buffer limpo)
+    await debounce_flush(_FlushIn(phone=phone), None)
+
+    # Redelivery chega dentro de 30s (buffer já foi flushed, message_id diferente)
+    r2 = await debounce_entry(_DebounceIn(phone=phone, message=msg, message_id="novo-id"), None)
+    assert r2.proceed is False, "Redelivery dentro de 30s deve ser bloqueado pela camada 2"
+
+
+@pytest.mark.asyncio
+async def test_content_dedup_allows_after_window_expires():
+    """Mesmo conteúdo após TTL expirado → permitido (nova mensagem legítima)."""
+    import app.api.bot as m
+    _reset_content_state()
+    from app.api.bot import _DebounceIn, _FlushIn, debounce_entry, debounce_flush
+
+    phone = "+5563000000021"
+    msg = "quero agendar"
+
+    r1 = await debounce_entry(_DebounceIn(phone=phone, message=msg), None)
+    assert r1.proceed is True
+    await debounce_flush(_FlushIn(phone=phone), None)
+
+    # Simular expiração do TTL: retroceder o timestamp 31s
+    content_key = f"{phone}:{m._normalize_msg(msg)}"
+    m._seen_content[content_key] -= 31.0
+
+    r2 = await debounce_entry(_DebounceIn(phone=phone, message=msg), None)
+    assert r2.proceed is True, "Após 30s o mesmo conteúdo deve ser permitido"
+
+
+@pytest.mark.asyncio
+async def test_content_dedup_different_content_same_phone_allowed():
+    """Conteúdo diferente no mesmo phone → ambos passam."""
+    _reset_content_state()
+    from app.api.bot import _DebounceIn, _FlushIn, debounce_entry, debounce_flush
+
+    phone = "+5563000000022"
+
+    r1 = await debounce_entry(_DebounceIn(phone=phone, message="oi"), None)
+    assert r1.proceed is True
+    await debounce_flush(_FlushIn(phone=phone), None)
+
+    r2 = await debounce_entry(_DebounceIn(phone=phone, message="quero agendar"), None)
+    assert r2.proceed is True, "Conteúdo diferente deve sempre passar"
+
+
+@pytest.mark.asyncio
+async def test_content_dedup_same_content_different_phones_allowed():
+    """Mesmo conteúdo em phones diferentes → ambos passam (chave inclui phone)."""
+    _reset_content_state()
+    from app.api.bot import _DebounceIn, debounce_entry
+
+    msg = "oi tudo bem"
+    r1 = await debounce_entry(_DebounceIn(phone="+5563000000023", message=msg), None)
+    r2 = await debounce_entry(_DebounceIn(phone="+5563000000024", message=msg), None)
+    assert r1.proceed is True
+    assert r2.proceed is True, "Phones diferentes nunca interferem entre si"
+
+
+@pytest.mark.asyncio
+async def test_content_dedup_normalization_catches_whitespace_variation():
+    """Variações de espaço/case são normalizadas — tratadas como mesmo conteúdo."""
+    _reset_content_state()
+    from app.api.bot import _DebounceIn, _FlushIn, debounce_entry, debounce_flush
+
+    phone = "+5563000000025"
+
+    r1 = await debounce_entry(_DebounceIn(phone=phone, message="Oi  Tudo  Bem"), None)
+    assert r1.proceed is True
+    await debounce_flush(_FlushIn(phone=phone), None)
+
+    # Redelivery com espaçamento/capitalização diferente → mesmo conteúdo normalizado
+    r2 = await debounce_entry(_DebounceIn(phone=phone, message="oi tudo bem"), None)
+    assert r2.proceed is False, "Variação de espaço/case deve ser tratada como redelivery"
+
+
+@pytest.mark.asyncio
+async def test_content_dedup_logs_warning_on_redelivery(caplog):
+    """Redelivery suspeito deve gerar log WARNING com phone e elapsed_s."""
+    import logging
+    _reset_content_state()
+    from app.api.bot import _DebounceIn, _FlushIn, debounce_entry, debounce_flush
+
+    phone = "+5563000000026"
+    msg = "mensagem duplicada"
+
+    await debounce_entry(_DebounceIn(phone=phone, message=msg), None)
+    await debounce_flush(_FlushIn(phone=phone), None)
+
+    with caplog.at_level(logging.WARNING, logger="app.api.bot"):
+        r2 = await debounce_entry(_DebounceIn(phone=phone, message=msg), None)
+
+    assert r2.proceed is False
+    assert any("redelivery_suspected" in rec.message for rec in caplog.records), \
+        "Deve logar WARNING com 'redelivery_suspected'"
+    assert any(phone in rec.message for rec in caplog.records), \
+        "Log deve conter o phone"
+
+
+@pytest.mark.asyncio
+async def test_content_dedup_redelivery_before_flush_also_blocked():
+    """Redelivery que chega ANTES do flush (durante janela ativa) também é bloqueado."""
+    _reset_content_state()
+    from app.api.bot import _DebounceIn, debounce_entry
+
+    phone = "+5563000000027"
+    msg = "preciso de ajuda"
+
+    r1 = await debounce_entry(_DebounceIn(phone=phone, message=msg), None)
+    assert r1.proceed is True
+
+    # Redelivery chega enquanto buffer ainda existe (sem flush)
+    r2 = await debounce_entry(_DebounceIn(phone=phone, message=msg, message_id="outro-id"), None)
+    assert r2.proceed is False, "Redelivery antes do flush deve ser bloqueado pela camada 2"
+
+
+@pytest.mark.asyncio
+async def test_normalize_msg_function():
+    """_normalize_msg: lowercase + colapso de espaços e newlines."""
+    from app.api.bot import _normalize_msg
+    assert _normalize_msg("Oi  Tudo\nBem") == "oi tudo bem"
+    assert _normalize_msg("  AGENDAMENTO  ") == "agendamento"
+    assert _normalize_msg("quais\t\tserviços?") == "quais serviços?"

@@ -42,6 +42,7 @@ _E164 = re.compile(r"^\+[1-9][0-9]{7,14}$")
 # Debounce buffer — concorrência via asyncio.Lock por telefone
 # ---------------------------------------------------------------------------
 import asyncio as _asyncio
+import logging as _logging
 from time import monotonic as _mono
 
 _debounce_lock = _asyncio.Lock()
@@ -50,16 +51,34 @@ _last_flush: dict[str, float] = {}    # phone → monotonic ts do último flush
 _DEBOUNCE_STALE = 30.0                # buffer morto após 30s sem flush
 _SESSION_GAP = 4 * 3600.0            # gap > 4h desde o último flush → nova sessão
 
-# Deduplicação de re-delivery: message_id → monotonic timestamp de quando foi visto
+# Camada 1 — deduplicação por message_id (redelivery exato)
 _seen_ids: dict[str, float] = {}
 _SEEN_TTL = 24 * 3600.0              # descarta entradas com mais de 24h
 
+# Camada 2 — deduplicação por conteúdo (redelivery tardio: mesmo texto no mesmo phone ≤ 30s)
+_seen_content: dict[str, float] = {}  # "phone:msg_normalizado" → monotonic ts
+_CONTENT_TTL = 30.0
+
+_logger = _logging.getLogger(__name__)
+
+
+def _normalize_msg(text: str) -> str:
+    """Normalização mínima para comparar conteúdo: lowercase + colapso de espaços."""
+    return " ".join(text.lower().split())
+
 
 def _purge_seen_ids(now: float) -> None:
-    """Remove message_ids expirados (chamado internamente sem lock extra)."""
+    """Remove message_ids expirados (chamado dentro do lock)."""
     expired = [k for k, ts in _seen_ids.items() if now - ts > _SEEN_TTL]
     for k in expired:
         del _seen_ids[k]
+
+
+def _purge_seen_content(now: float) -> None:
+    """Remove entradas de conteúdo expiradas (chamado dentro do lock)."""
+    expired = [k for k, ts in _seen_content.items() if now - ts > _CONTENT_TTL]
+    for k in expired:
+        del _seen_content[k]
 
 
 class _DebounceIn(BaseModel):
@@ -98,17 +117,32 @@ _BotAuth = Annotated[None, Depends(_require_bot_token)]
 async def debounce_entry(body: _DebounceIn, _auth: _BotAuth = None):
     """Registra mensagem no buffer. Retorna proceed=True apenas para o primeiro
     da rajada; os demais retornam proceed=False e encerram no n8n.
-    Ignora re-deliveries via message_id. Detecta nova sessão por gap de tempo."""
+    Camada 1: ignora re-deliveries exatos via message_id.
+    Camada 2: ignora re-deliveries tardios via conteúdo normalizado (30s).
+    Detecta nova sessão por gap de tempo."""
     phone = body.phone
     async with _debounce_lock:
         now = _mono()
 
-        # Deduplicação por message_id (re-delivery do WhatsApp)
+        # Camada 1 — deduplicação por message_id (redelivery exato)
         if body.message_id:
             _purge_seen_ids(now)
             if body.message_id in _seen_ids:
                 return _DebounceOut(proceed=False, is_new_session=False)
             _seen_ids[body.message_id] = now
+
+        # Camada 2 — deduplicação por conteúdo normalizado (redelivery tardio ≤ 30s)
+        if body.message:
+            content_key = f"{phone}:{_normalize_msg(body.message)}"
+            _purge_seen_content(now)
+            if content_key in _seen_content:
+                elapsed = now - _seen_content[content_key]
+                _logger.warning(
+                    "redelivery_suspected phone=%s elapsed_s=%.1f message_id=%s",
+                    phone, elapsed, body.message_id or "none",
+                )
+                return _DebounceOut(proceed=False, is_new_session=False)
+            _seen_content[content_key] = now
 
         buf = _debounce.get(phone)
 
