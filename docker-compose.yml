@@ -1,0 +1,145 @@
+# BarbeariaPro — infraestrutura completa
+#
+# Serviços:
+#   postgres    — banco da aplicação (porta 5432)
+#   n8n         — orquestrador do chatbot (porta 5678)
+#   evolution   — gateway WhatsApp (porta 8080) + postgres + redis próprios
+#
+# O FastAPI (uvicorn) roda no HOST, não neste compose.
+# Containers acessam a API via host.docker.internal:8000.
+#
+# Uso:
+#   cp .env.example .env          # preencher variáveis
+#   docker compose up -d
+#   docker compose logs -f        # acompanhar logs
+#
+# Primeira instalação:
+#   docker compose up -d postgres
+#   .venv/bin/alembic upgrade head
+#   .venv/bin/python scripts/seed.py
+#   docker compose up -d
+#
+# Importar workflow n8n após subir:
+#   docker compose cp workflows.json n8n:/tmp/
+#   docker compose exec n8n n8n import:workflow --input=/tmp/workflows.json
+#   docker compose exec n8n n8n publish:workflow --id=25QZQ664N6hrIg59
+#   docker compose restart n8n
+
+services:
+
+  # ──────────────────────────────────────────────────────────────
+  # PostgreSQL — banco da aplicação BarbeariaPro
+  # ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16
+    container_name: barbeariapro-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-barbeariapro}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - barbearia
+
+  # ──────────────────────────────────────────────────────────────
+  # n8n — orquestrador de automação (chatbot WhatsApp)
+  # ──────────────────────────────────────────────────────────────
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_RELEASE_TYPE: stable
+      # Segredos do chatbot — referenciados no workflow como $env.VAR
+      BOT_API_KEY: ${BOT_API_KEY}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    extra_hosts:
+      # Permite que n8n acesse o FastAPI rodando no host
+      - "host.docker.internal:host-gateway"
+    networks:
+      - barbearia
+
+  # ──────────────────────────────────────────────────────────────
+  # Evolution API — gateway WhatsApp
+  # ──────────────────────────────────────────────────────────────
+  evolution-postgres:
+    image: postgres:15
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD:-evolution123}
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+    networks:
+      - evolution
+
+  evolution-redis:
+    image: redis:latest
+    container_name: evolution_redis
+    restart: always
+    networks:
+      - evolution
+
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution_api
+    restart: always
+    depends_on:
+      - evolution-postgres
+      - evolution-redis
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8080}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      POSTGRES_DATABASE: evolution
+      POSTGRES_USERNAME: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD:-evolution123}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_POSTGRES_PASSWORD:-evolution123}@evolution-postgres:5432/evolution
+      REDIS_URI: redis://evolution-redis:6379
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379
+      TZ: America/Sao_Paulo
+    volumes:
+      - evolution_instances:/evolution/instances
+    extra_hosts:
+      # Permite webhook de volta ao host (FastAPI ou n8n)
+      - "host.docker.internal:host-gateway"
+    networks:
+      - evolution
+
+volumes:
+  postgres_data:
+    name: barbeariapro_postgres_data
+  n8n_data:
+    name: n8n_data
+    external: true          # volume já existente; não recriar
+  evolution_postgres_data:
+    name: barbearia-whatsapp_postgres_data
+    external: true          # volume já existente; não recriar
+  evolution_instances:
+    name: barbearia-whatsapp_evolution_instances
+    external: true          # volume já existente; não recriar
+
+networks:
+  barbearia:
+    name: barbearia_network
+  evolution:
+    name: barbearia-whatsapp_default
+    external: true          # rede já existente da evolution
