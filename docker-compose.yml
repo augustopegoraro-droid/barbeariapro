@@ -61,6 +61,7 @@ services:
       - "5678:5678"
     environment:
       N8N_RELEASE_TYPE: stable
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       # Segredos do chatbot — referenciados no workflow como $env.VAR
       BOT_API_KEY: ${BOT_API_KEY}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
