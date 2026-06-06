@@ -65,6 +65,7 @@ services:
       # Segredos do chatbot — referenciados no workflow como $env.VAR
       BOT_API_KEY: ${BOT_API_KEY}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:

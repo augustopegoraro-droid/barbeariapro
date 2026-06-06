@@ -56,6 +56,8 @@ class Client(Base):
     acquisition_channel: Mapped[Optional[ContactChannel]] = mapped_column(
         pg_enum(ContactChannel, "contact_channel")
     )
+    last_photo_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_photo_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

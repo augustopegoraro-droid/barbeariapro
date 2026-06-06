@@ -230,6 +230,11 @@ class ClientProfileOut(BaseModel):
     total_appointments: int = 0
     last_visit_date: Optional[str] = None
     days_since_last_visit: Optional[int] = None
+    last_barber_name: Optional[str] = None
+    last_service_name: Optional[str] = None
+    preferred_time: Optional[str] = None
+    has_photo_reference: bool = False
+    last_photo_description: Optional[str] = None
     favorite_barber_id: Optional[int] = None
     favorite_barber_name: Optional[str] = None
     favorite_service_name: Optional[str] = None
@@ -387,6 +392,35 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
     return ClientOut(id=client.id, name=client.name, phone_e164=client.phone_e164)
 
 
+class ClientPhotoIn(BaseModel):
+    phone: str
+    photo_url: str
+    description: Optional[str] = None
+
+
+@router.patch("/clients/photo", status_code=200)
+async def update_client_photo(body: ClientPhotoIn, db: BotDB, _auth: _BotAuth = None):
+    """Salva URL e descrição gerada por Vision da última foto de referência."""
+    phone = _normalize_phone(body.phone)
+    org_id = settings.bot_organization_id
+
+    client = (
+        await db.execute(
+            select(Client)
+            .where(Client.organization_id == org_id)
+            .where(Client.phone_e164 == phone)
+        )
+    ).scalar_one_or_none()
+
+    if not client:
+        return {"ok": False, "reason": "client_not_found"}
+
+    client.last_photo_url = body.photo_url
+    if body.description:
+        client.last_photo_description = body.description
+    return {"ok": True}
+
+
 @router.get("/clients/profile", response_model=ClientProfileOut)
 async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
     phone = _normalize_phone(phone)
@@ -441,10 +475,41 @@ async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
 
     days_since = None
     last_date = None
+    last_barber_name = None
+    last_service_name = None
     if last_appt:
         appt_utc = last_appt.start_at if last_appt.start_at.tzinfo else last_appt.start_at.replace(tzinfo=timezone.utc)
         days_since = (now_utc - appt_utc).days
         last_date = last_appt.start_at.date().isoformat()
+
+        last_item_row = (
+            await db.execute(
+                select(Barber.name, Service.name)
+                .select_from(AppointmentItem)
+                .join(Barber, Barber.id == AppointmentItem.barber_id)
+                .join(Service, Service.id == AppointmentItem.service_id)
+                .where(AppointmentItem.appointment_id == last_appt.id)
+                .limit(1)
+            )
+        ).first()
+        if last_item_row:
+            last_barber_name = last_item_row[0]
+            last_service_name = last_item_row[1]
+
+    # Horário preferido: mode do hour dos agendamentos passados convertido para Palmas (UTC-3)
+    times_result = (
+        await db.execute(
+            select(func.extract("hour", Appointment.start_at).label("hour"))
+            .where(Appointment.client_id == client.id)
+            .where(Appointment.status != AppointmentStatus.cancelado)
+            .where(Appointment.start_at < now_utc)
+        )
+    ).all()
+    preferred_time = None
+    if times_result:
+        hours_local = [(int(r.hour) - 3) % 24 for r in times_result]
+        mode_hour = max(set(hours_local), key=hours_local.count)
+        preferred_time = f"{mode_hour:02d}:00"
 
     fav_barber_row = (
         await db.execute(
@@ -490,6 +555,11 @@ async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
         total_appointments=total or 0,
         last_visit_date=last_date,
         days_since_last_visit=days_since,
+        last_barber_name=last_barber_name,
+        last_service_name=last_service_name,
+        preferred_time=preferred_time,
+        has_photo_reference=bool(client.last_photo_url),
+        last_photo_description=client.last_photo_description,
         favorite_barber_id=fav_barber_id,
         favorite_barber_name=fav_barber_name,
         favorite_service_name=fav_svc_name,
