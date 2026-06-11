@@ -19,6 +19,7 @@ from models import (
     AppointmentItem,
     AppointmentStatus,
     Barber,
+    BarberService,
     Client,
     Service,
     Unit,
@@ -54,6 +55,7 @@ class ServiceSimpleOut(BaseModel):
     name: str
     default_duration_min: int
     price: float
+    has_variable_price: bool
 
 
 class AgendaCriarIn(BaseModel):
@@ -61,6 +63,7 @@ class AgendaCriarIn(BaseModel):
     start_at: datetime
     barber_id: int
     service_id: int
+    price_override: Optional[float] = None
 
 
 class AgendaReagendar(BaseModel):
@@ -183,21 +186,26 @@ async def list_barbers_for_agenda(
 async def list_services_for_agenda(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    barber_id: Optional[int] = Query(None, description="Filtrar por profissional"),
 ) -> list[ServiceSimpleOut]:
-    """Lista serviços ativos para seleção no modal de novo agendamento."""
+    """Lista serviços ativos. Com barber_id, retorna apenas os serviços do profissional."""
     unit_links = (
         await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
     ).scalars().all()
     require_full_access(resolve_role_with_barber(list(unit_links))[0])
 
-    services = (
-        await db.execute(
-            select(Service)
-            .where(Service.is_active.is_(True))
-            .where(Service.deleted_at.is_(None))
-            .order_by(Service.name)
+    stmt = (
+        select(Service)
+        .where(Service.is_active.is_(True))
+        .where(Service.deleted_at.is_(None))
+        .order_by(Service.name)
+    )
+    if barber_id is not None:
+        stmt = stmt.join(BarberService, BarberService.service_id == Service.id).where(
+            BarberService.barber_id == barber_id
         )
-    ).scalars().all()
+
+    services = (await db.execute(stmt)).scalars().all()
 
     return [
         ServiceSimpleOut(
@@ -205,6 +213,7 @@ async def list_services_for_agenda(
             name=s.name,
             default_duration_min=s.default_duration_min,
             price=float(s.price),
+            has_variable_price=s.has_variable_price,
         )
         for s in services
     ]
@@ -235,6 +244,33 @@ async def criar_agendamento(
     svc = (await db.execute(select(Service).where(Service.id == body.service_id))).scalar_one_or_none()
     if not svc or not svc.is_active:
         raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Serviço não encontrado ou inativo.")
+
+    # Validar que o profissional executa o serviço
+    bs_link = (
+        await db.execute(
+            select(BarberService)
+            .where(BarberService.barber_id == body.barber_id)
+            .where(BarberService.service_id == body.service_id)
+        )
+    ).scalar_one_or_none()
+    if not bs_link:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Este profissional não realiza este serviço.",
+        )
+
+    # Validar price_override
+    if body.price_override is not None:
+        if not svc.has_variable_price:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Este serviço não permite alteração de preço.",
+            )
+        if body.price_override < 0:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "O preço não pode ser negativo.",
+            )
 
     # Normalizar para UTC
     if body.start_at.tzinfo is None:
@@ -279,6 +315,8 @@ async def criar_agendamento(
         )
     ).scalar_one()
 
+    final_price = body.price_override if body.price_override is not None else float(svc.price)
+
     appt = Appointment(
         organization_id=current_user.organization_id,
         unit_id=unit.id,
@@ -288,7 +326,7 @@ async def criar_agendamento(
         end_at=end_utc,
         status=AppointmentStatus.agendado,
         booking_channel=None,
-        total_amount=svc.price,
+        total_amount=final_price,
         created_by_user_id=current_user.id,
     )
     db.add(appt)
@@ -305,7 +343,7 @@ async def criar_agendamento(
         appointment_id=appt_id,
         service_id=svc.id,
         barber_id=barber.id,
-        price_charged=svc.price,
+        price_charged=final_price,
         duration_minutes=svc.default_duration_min,
     ))
     await db.commit()

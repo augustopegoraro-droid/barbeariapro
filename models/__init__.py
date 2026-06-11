@@ -28,7 +28,7 @@ from .enums import (
 from .organization import Organization, Plan, Subscription
 from .unit import BusinessHours, Unit
 from .user import User, UserUnit
-from .barber import Barber, BarberUnit, TimeOff
+from .barber import Barber, BarberService, BarberUnit, TimeOff
 from .client import Client, ClientConsent
 from .service import Service
 from .appointment import Appointment, AppointmentItem
@@ -61,6 +61,7 @@ __all__ = [
     "User",
     "UserUnit",
     "Barber",
+    "BarberService",
     "BarberUnit",
     "TimeOff",
     # clientes
@@ -68,6 +69,7 @@ __all__ = [
     "ClientConsent",
     # serviços
     "Service",
+    "BarberService",
     # agenda
     "Appointment",
     "AppointmentItem",

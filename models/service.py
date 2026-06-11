@@ -27,6 +27,7 @@ from .enums import ServiceCategory, pg_enum
 
 if TYPE_CHECKING:
     from .appointment import AppointmentItem
+    from .barber import BarberService
     from .organization import Organization
 
 
@@ -54,6 +55,9 @@ class Service(Base):
     cost: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, server_default=text("0")
     )
+    has_variable_price: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
@@ -65,4 +69,7 @@ class Service(Base):
     organization: Mapped["Organization"] = relationship(back_populates="services")
     appointment_items: Mapped[List["AppointmentItem"]] = relationship(
         back_populates="service"
+    )
+    barber_links: Mapped[List["BarberService"]] = relationship(
+        back_populates="service", cascade="all, delete-orphan"
     )

@@ -25,6 +25,7 @@ from .base import Base
 if TYPE_CHECKING:
     from .appointment import AppointmentItem
     from .organization import Organization
+    from .service import Service
     from .unit import Unit
     from .user import UserUnit
 
@@ -61,6 +62,9 @@ class Barber(Base):
     time_off: Mapped[List["TimeOff"]] = relationship(back_populates="barber")
     appointment_items: Mapped[List["AppointmentItem"]] = relationship(
         back_populates="barber"
+    )
+    service_links: Mapped[List["BarberService"]] = relationship(
+        back_populates="barber", cascade="all, delete-orphan"
     )
 
 
@@ -99,3 +103,24 @@ class TimeOff(Base):
     reason: Mapped[Optional[str]] = mapped_column(Text)
 
     barber: Mapped["Barber"] = relationship(back_populates="time_off")
+
+
+class BarberService(Base):
+    """Vínculo N:N entre profissional e serviço que ele executa."""
+
+    __tablename__ = "barber_services"
+    __table_args__ = (Index("idx_barber_services_service", "service_id"),)
+
+    barber_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("barbers.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    service_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("services.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    barber: Mapped["Barber"] = relationship(back_populates="service_links")
+    service: Mapped["Service"] = relationship(back_populates="barber_links")

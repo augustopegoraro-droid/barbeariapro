@@ -27,6 +27,7 @@ class ServicoOut(BaseModel):
     default_duration_min: int
     price: float
     cost: float
+    has_variable_price: bool
     is_active: bool
 
     class Config:
@@ -39,6 +40,7 @@ class ServicoIn(BaseModel):
     default_duration_min: int = Field(..., gt=0)
     price: Decimal = Field(..., ge=Decimal("0"))
     cost: Decimal = Field(Decimal("0"), ge=Decimal("0"))
+    has_variable_price: bool = False
 
 
 class ServicoUpdate(BaseModel):
@@ -47,6 +49,7 @@ class ServicoUpdate(BaseModel):
     default_duration_min: Optional[int] = Field(None, gt=0)
     price: Optional[Decimal] = Field(None, ge=Decimal("0"))
     cost: Optional[Decimal] = Field(None, ge=Decimal("0"))
+    has_variable_price: Optional[bool] = None
 
 
 # ── Helper: resolve role from DB ───────────────────────────────────────────────
@@ -71,6 +74,7 @@ def _svc_out(s: Service) -> ServicoOut:
         default_duration_min=s.default_duration_min,
         price=float(s.price),
         cost=float(s.cost),
+        has_variable_price=s.has_variable_price,
         is_active=s.is_active,
     )
 
@@ -81,9 +85,9 @@ def _svc_out(s: Service) -> ServicoOut:
 async def listar_servicos(
     include_inactive: bool = Query(False),
     db: AsyncSession = Depends(get_tenant_db),
-    current_user: dict = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user["user_id"], current_user["org"])
+    role = await _resolve_role(db, current_user.id, current_user.organization_id)
     require_manager_access(role)
 
     stmt = select(Service).order_by(Service.name)
@@ -99,18 +103,19 @@ async def listar_servicos(
 async def criar_servico(
     body: ServicoIn,
     db: AsyncSession = Depends(get_tenant_db),
-    current_user: dict = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user["user_id"], current_user["org"])
+    role = await _resolve_role(db, current_user.id, current_user.organization_id)
     require_manager_access(role)
 
     svc = Service(
-        organization_id=current_user["org"],
+        organization_id=current_user.organization_id,
         name=body.name,
         category=body.category,
         default_duration_min=body.default_duration_min,
         price=body.price,
         cost=body.cost,
+        has_variable_price=body.has_variable_price,
     )
     db.add(svc)
     await db.flush()
@@ -127,9 +132,9 @@ async def atualizar_servico(
     body: ServicoUpdate,
     id: int = Path(..., gt=0),
     db: AsyncSession = Depends(get_tenant_db),
-    current_user: dict = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user["user_id"], current_user["org"])
+    role = await _resolve_role(db, current_user.id, current_user.organization_id)
     require_manager_access(role)
 
     result = await db.execute(select(Service).where(Service.id == id))
@@ -147,6 +152,8 @@ async def atualizar_servico(
         svc.price = body.price
     if body.cost is not None:
         svc.cost = body.cost
+    if body.has_variable_price is not None:
+        svc.has_variable_price = body.has_variable_price
 
     await db.flush()
     out = _svc_out(svc)
@@ -160,9 +167,9 @@ async def atualizar_servico(
 async def arquivar_servico(
     id: int = Path(..., gt=0),
     db: AsyncSession = Depends(get_tenant_db),
-    current_user: dict = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user["user_id"], current_user["org"])
+    role = await _resolve_role(db, current_user.id, current_user.organization_id)
     require_manager_access(role)
 
     result = await db.execute(select(Service).where(Service.id == id))
@@ -185,9 +192,9 @@ async def arquivar_servico(
 async def reativar_servico(
     id: int = Path(..., gt=0),
     db: AsyncSession = Depends(get_tenant_db),
-    current_user: dict = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user["user_id"], current_user["org"])
+    role = await _resolve_role(db, current_user.id, current_user.organization_id)
     require_manager_access(role)
 
     result = await db.execute(select(Service).where(Service.id == id))
