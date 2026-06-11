@@ -487,6 +487,111 @@ def test_cancel_tool_tem_phone_param():
     )
 
 
+# ═══════════════════════════════════════════════════════════════
+# FASE 1 — RBAC: MANAGER_ACCESS e criação de agendamentos
+# ═══════════════════════════════════════════════════════════════
+
+def test_fase1_manager_access_permite_owner():
+    from app.core.rbac import require_manager_access
+    # Deve passar sem exceção
+    require_manager_access("owner")
+
+
+def test_fase1_manager_access_permite_manager():
+    from app.core.rbac import require_manager_access
+    require_manager_access("manager")
+
+
+def test_fase1_manager_access_bloqueia_reception():
+    from app.core.rbac import require_manager_access
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        require_manager_access("reception")
+    assert exc.value.status_code == 403
+
+
+def test_fase1_manager_access_bloqueia_barber():
+    from app.core.rbac import require_manager_access
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as exc:
+        require_manager_access("barber")
+    assert exc.value.status_code == 403
+
+
+def test_fase1_full_access_ainda_inclui_reception():
+    """FULL_ACCESS deve continuar incluindo reception para operações de agenda."""
+    from app.core.rbac import FULL_ACCESS
+    assert "reception" in FULL_ACCESS
+    assert "owner" in FULL_ACCESS
+    assert "manager" in FULL_ACCESS
+    assert "barber" not in FULL_ACCESS
+
+
+def test_fase1_manager_access_nao_inclui_reception():
+    from app.core.rbac import MANAGER_ACCESS
+    assert "reception" not in MANAGER_ACCESS
+    assert "barber" not in MANAGER_ACCESS
+    assert "owner" in MANAGER_ACCESS
+    assert "manager" in MANAGER_ACCESS
+
+
+def test_fase1_require_full_access_reception_passa():
+    """Reception ainda deve ter FULL_ACCESS para operações de agenda."""
+    from app.core.rbac import require_full_access
+    require_full_access("reception")  # Não lança exceção
+
+
+def test_fase1_conflict_detection_sobreposicao():
+    """Detecta conflito quando novo slot sobrepõe existente."""
+    from datetime import datetime, timezone, timedelta
+    from app.api.bot import _overlaps
+
+    base = datetime(2026, 6, 10, 9, 0, tzinfo=timezone.utc)
+    # Agendamento existente: 09:00 → 10:00
+    s1, e1 = base, base + timedelta(hours=1)
+    # Novo agendamento: 09:30 → 10:30 — conflito
+    s2, e2 = base + timedelta(minutes=30), base + timedelta(hours=1, minutes=30)
+    assert _overlaps(s1, e1, s2, e2) is True
+
+
+def test_fase1_conflict_detection_sem_sobreposicao():
+    """Não detecta conflito quando slots são consecutivos."""
+    from datetime import datetime, timezone, timedelta
+    from app.api.bot import _overlaps
+
+    base = datetime(2026, 6, 10, 9, 0, tzinfo=timezone.utc)
+    s1, e1 = base, base + timedelta(hours=1)
+    # Começa exatamente quando o anterior termina → sem conflito
+    s2, e2 = base + timedelta(hours=1), base + timedelta(hours=2)
+    assert _overlaps(s1, e1, s2, e2) is False
+
+
+def test_fase1_agenda_criar_schema_valida_tz():
+    """Schema AgendaCriarIn deve exigir fuso horário em start_at."""
+    from datetime import datetime, timezone
+    from app.api.agenda import AgendaCriarIn
+
+    # Com tz → OK
+    body = AgendaCriarIn(
+        client_id=1,
+        start_at=datetime(2026, 6, 10, 9, 0, tzinfo=timezone.utc),
+        barber_id=1,
+        service_id=1,
+    )
+    assert body.start_at.tzinfo is not None
+
+
+def test_fase1_agenda_reagendar_schema():
+    """Schema AgendaReagendar aceita datetime com tz."""
+    from datetime import datetime, timezone
+    from app.api.agenda import AgendaReagendar
+
+    body = AgendaReagendar(
+        start_at=datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc)
+    )
+    assert body.start_at.tzinfo is not None
+
+
 if __name__ == "__main__":
     import subprocess
     subprocess.run([sys.executable, "-m", "pytest", __file__, "-v"])

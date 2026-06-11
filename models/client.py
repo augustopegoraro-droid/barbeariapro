@@ -27,6 +27,7 @@ from .enums import ConsentStatus, ContactChannel, pg_enum
 if TYPE_CHECKING:
     from .appointment import Appointment
     from .integration import MessageLog
+    from .loyalty import ClientLoyalty
     from .organization import Organization
 
 
@@ -67,6 +68,9 @@ class Client(Base):
     consents: Mapped[List["ClientConsent"]] = relationship(back_populates="client")
     appointments: Mapped[List["Appointment"]] = relationship(back_populates="client")
     messages: Mapped[List["MessageLog"]] = relationship(back_populates="client")
+    loyalty: Mapped[Optional["ClientLoyalty"]] = relationship(
+        back_populates="client", uselist=False
+    )
 
 
 class ClientConsent(Base):

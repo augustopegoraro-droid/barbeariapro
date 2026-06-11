@@ -16,6 +16,8 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    organization_id: int
+    role: str
 
 
 class TokenData(BaseModel):
@@ -30,5 +32,6 @@ class MeResponse(BaseModel):
     organization_id: int
     email: EmailStr
     is_active: bool
+    role: str
     # Prova de isolamento: sob RLS deve sempre ser 1 (apenas a própria org).
     organizations_visible: int

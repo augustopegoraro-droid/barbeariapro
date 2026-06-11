@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.deps import get_bot_db
+from app.services.loyalty import recalculate as _recalculate_loyalty
 from models import (
     Appointment,
     AppointmentItem,
@@ -933,6 +934,7 @@ async def complete_appointment(
         raise HTTPException(409, f"Só é possível concluir agendamentos com status 'agendado' (atual: {appt.status.value})")
 
     appt.status = AppointmentStatus.concluido
+    await _recalculate_loyalty(appt.client_id, settings.bot_organization_id, db)
 
     row = (
         await db.execute(

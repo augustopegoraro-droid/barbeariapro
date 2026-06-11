@@ -6,8 +6,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, bot, health
+from app.api import agenda, auth, barbeiro, bot, clientes, dashboard, equipe, financeiro, health, loyalty, servicos
 from app.db.session import engine
 
 
@@ -18,9 +19,27 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="BarbeariaPro API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(bot.router)
+app.include_router(loyalty.router)
+app.include_router(loyalty.internal_router)
+app.include_router(agenda.router)
+app.include_router(barbeiro.router)
+app.include_router(financeiro.router)
+app.include_router(equipe.router)
+app.include_router(clientes.router)
+app.include_router(dashboard.router)
+app.include_router(servicos.router)
 
 
 @app.get("/")

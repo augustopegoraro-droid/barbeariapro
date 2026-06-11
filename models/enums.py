@@ -100,3 +100,23 @@ class DeliveryStatus(str, enum.Enum):
     sent = "sent"
     delivered = "delivered"
     failed = "failed"
+
+
+class LoyaltyNivel(str, enum.Enum):
+    novo = "novo"
+    ativo = "ativo"
+    fiel = "fiel"
+    vip = "vip"
+
+
+class LoyaltyStatus(str, enum.Enum):
+    ativo = "ativo"
+    em_risco = "em_risco"
+    inativo = "inativo"
+
+
+class LoyaltyCategoria(str, enum.Enum):
+    bronze = "bronze"
+    prata = "prata"
+    ouro = "ouro"
+    diamante = "diamante"

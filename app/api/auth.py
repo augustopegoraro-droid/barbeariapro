@@ -9,11 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rbac import resolve_role
 from app.core.security import create_access_token, verify_password
 from app.db.session import get_db, set_current_org
 from app.deps import get_current_user, get_tenant_db
 from app.schemas.auth import LoginRequest, MeResponse, TokenResponse
-from models import Organization, User
+from models import Organization, User, UserUnit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,8 +38,16 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciais inválidas",
         )
+    unit_links = (
+        await db.execute(select(UserUnit).where(UserUnit.user_id == user.id))
+    ).scalars().all()
+    role = resolve_role(list(unit_links))
     token = create_access_token(user_id=user.id, organization_id=user.organization_id)
-    return TokenResponse(access_token=token)
+    return TokenResponse(
+        access_token=token,
+        organization_id=user.organization_id,
+        role=role,
+    )
 
 
 @router.get("/me", response_model=MeResponse)
@@ -50,10 +59,15 @@ async def me(
     visible = (
         await db.execute(select(func.count()).select_from(Organization))
     ).scalar_one()
+    me_unit_links = (
+        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
+    ).scalars().all()
+    me_role = resolve_role(list(me_unit_links))
     return MeResponse(
         user_id=current_user.id,
         organization_id=current_user.organization_id,
         email=current_user.email,
         is_active=current_user.is_active,
+        role=me_role,
         organizations_visible=int(visible),
     )

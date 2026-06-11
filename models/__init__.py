@@ -15,6 +15,9 @@ from .enums import (
     DeliveryStatus,
     IntegrationProvider,
     IntegrationStatus,
+    LoyaltyCategoria,
+    LoyaltyNivel,
+    LoyaltyStatus,
     MessageDirection,
     PaymentMethod,
     ServiceCategory,
@@ -31,6 +34,7 @@ from .service import Service
 from .appointment import Appointment, AppointmentItem
 from .payment import Expense, ExpenseCategory, Payment
 from .integration import CalendarSync, IntegrationAccount, MessageLog
+from .loyalty import ClientLoyalty
 
 __all__ = [
     "Base",
@@ -75,4 +79,9 @@ __all__ = [
     "IntegrationAccount",
     "CalendarSync",
     "MessageLog",
+    # fidelidade
+    "ClientLoyalty",
+    "LoyaltyNivel",
+    "LoyaltyStatus",
+    "LoyaltyCategoria",
 ]
