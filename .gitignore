@@ -1,5 +1,48 @@
+# ── Python ────────────────────────────────────────────────────────────────────
 .venv/
-.env
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── Sistema ───────────────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
+
+# ── Variáveis de ambiente ─────────────────────────────────────────────────────
+.env
+.env.*
+.env.local
+.env.*.local
+*.env
+
+# ── Credenciais e secrets ─────────────────────────────────────────────────────
+credentials.json
+*credentials*.json
+*credential*.json
+*secret*.json
+*secret*.yaml
+*secret*.yml
+service-account*.json
+google-credentials*.json
+firebase-adminsdk*.json
+*.key
+*.pem
+*.p12
+*.pfx
+
+# ── Backups e arquivos temporários ────────────────────────────────────────────
+backups/
+backup-*.json
+backup-*.tar.gz
+*-backup.json
+*-backup-*.json
+workflows-backup*.json
+*.tar.gz
+*.bak
+
+# ── n8n — exports de workflow (podem conter API keys e webhooks) ──────────────
+workflows.json
+workflows-*.json
+n8n-export*.json
