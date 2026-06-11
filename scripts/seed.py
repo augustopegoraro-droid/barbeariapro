@@ -85,7 +85,7 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
     (
         "Taylor",
         "Cabeleireira e Barbeira",
-        "0.40",
+        "0.48",
         UnitRole.owner,
         "taylor@barbeariapro.com",
         ["Corte Feminino", "Corte Masculino", "Corte Infantil", "Barba",
@@ -94,7 +94,7 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
     (
         "Thedy",
         "Cabeleireiro e Barbeiro",
-        "0.40",
+        "0.48",
         UnitRole.owner,
         "thedy@barbeariapro.com",
         ["Corte Feminino", "Corte Masculino", "Corte Infantil", "Barba",
@@ -103,7 +103,7 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
     (
         "Marciana",
         "Cabeleireira e Manicure",
-        "0.40",
+        "0.48",
         UnitRole.barber,
         "marciana@barbeariapro.com",
         ["Escova", "Selagem Feminina", "Selagem Masculina",
@@ -112,7 +112,7 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
     (
         "Sandra",
         "Cabeleireira e Designer de Sobrancelhas",
-        "0.40",
+        "0.48",
         UnitRole.barber,
         "sandra@barbeariapro.com",
         ["Corte Feminino", "Corte Masculino", "Escova", "Selagem Feminina",
@@ -122,7 +122,7 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
     (
         "Pablo",
         "Barbeiro",
-        "0.40",
+        "0.48",
         UnitRole.barber,
         "pablo@barbeariapro.com",
         ["Corte Masculino", "Corte Infantil", "Barba", "Coloração",
