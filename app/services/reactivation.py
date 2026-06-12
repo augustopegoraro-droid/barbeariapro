@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.services.loyalty import resolve_benefit
+from app.services.whatsapp import send_text
 from models import Barber, Client, DeliveryStatus, MessageDirection, MessageLog, Service
 from models.enums import LoyaltyStatus
 from models.loyalty import ClientLoyalty
@@ -103,7 +103,7 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
             benefit=resolve_benefit(loyalty.nivel, loyalty.categoria),
         )
 
-        success = await _send_whatsapp(phone=client.phone_e164, message=message)
+        success = await send_text(phone=client.phone_e164, message=message)
 
         session.add(
             MessageLog(
@@ -151,23 +151,3 @@ def _build_message(
         f"{days_part}. {barber_part}{service_part}{benefit_part}\n\n"
         f"Responda aqui para agendar. 🗓️"
     )
-
-
-async def _send_whatsapp(phone: str, message: str) -> bool:
-    if not settings.evolution_api_url or not settings.evolution_instance_name:
-        _logger.warning("Evolution API não configurada — mensagem não enviada para %s", phone)
-        return False
-
-    url = f"{settings.evolution_api_url}/message/sendText/{settings.evolution_instance_name}"
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                url,
-                json={"number": phone, "text": message},
-                headers={"apikey": settings.evolution_api_key},
-            )
-            resp.raise_for_status()
-            return True
-    except Exception as exc:
-        _logger.error("Falha ao enviar WhatsApp para %s: %s", phone, exc)
-        return False

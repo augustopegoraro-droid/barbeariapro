@@ -187,7 +187,12 @@ class _DebugSessionIn(BaseModel):
 
 @router.post("/debounce/debug-set-session", include_in_schema=False)
 async def debug_set_session(_auth: _BotAuth, body: _DebugSessionIn):
-    """DEBUG ONLY — simula sessão antiga para testar detecção de nova sessão."""
+    """DEBUG ONLY — simula sessão antiga para testar detecção de nova sessão.
+
+    Desabilitado por padrão; habilitar via ENABLE_DEBUG_ENDPOINTS=true (somente dev).
+    """
+    if not settings.enable_debug_endpoints:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     async with _debounce_lock:
         _debounce.pop(body.phone, None)
         _last_flush[body.phone] = _mono() - (body.minutes_ago * 60.0)

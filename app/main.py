@@ -8,7 +8,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agenda, auth, barbeiro, bot, clientes, dashboard, equipe, financeiro, health, loyalty, servicos
+from app.api import agenda, auth, barbeiro, bot, clientes, dashboard, equipe, financeiro, health, loyalty, reminders, servicos
+from app.core.config import settings
 from app.db.session import engine
 
 
@@ -22,7 +23,7 @@ app = FastAPI(title="BarbeariaPro API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,6 +34,7 @@ app.include_router(auth.router)
 app.include_router(bot.router)
 app.include_router(loyalty.router)
 app.include_router(loyalty.internal_router)
+app.include_router(reminders.internal_router)
 app.include_router(agenda.router)
 app.include_router(barbeiro.router)
 app.include_router(financeiro.router)

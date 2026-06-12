@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     # Driver async psycopg3: postgresql+psycopg://...
     database_url: str = Field(..., description="URL async da role do app.")
 
+    # Fuso horário de referência para agregações por dia (dashboard/financeiro/agenda)
+    app_timezone: str = "America/Sao_Paulo"
+
+    # CORS: origens permitidas, separadas por vírgula
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
+
+    # Endpoints de debug (ex.: /bot/debounce/debug-set-session) — manter False em produção
+    enable_debug_endpoints: bool = False
+
     # Bot / n8n chatbot
     bot_api_key: str = ""
     bot_organization_id: int = 0
@@ -34,6 +43,10 @@ class Settings(BaseSettings):
     # Reativação de clientes
     reactivation_trigger_days: int = 60
     reactivation_cooldown_days: int = 60
+
+    # Lembrete de agendamento (anti no-show)
+    reminder_lead_hours: int = 24   # antecedência do lembrete
+    reminder_window_hours: int = 2  # largura da janela (sobrepõe cron horário)
 
 
 settings = Settings()  # type: ignore[call-arg]
