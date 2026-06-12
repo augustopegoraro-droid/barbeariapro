@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.rbac import require_full_access, resolve_role
 from app.deps import get_current_user, get_tenant_db
 from models import Client, ClientLoyalty, User, UserUnit
-from models.enums import LoyaltyNivel, LoyaltyStatus
+from models.enums import ContactChannel, LoyaltyNivel, LoyaltyStatus
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
+
+_E164_RE = re.compile(r"^\+[1-9][0-9]{7,14}$")
 
 _NIVEL_ORDER = {
     LoyaltyNivel.vip: 4,
@@ -24,6 +28,17 @@ _NIVEL_ORDER = {
     LoyaltyNivel.ativo: 2,
     LoyaltyNivel.novo: 1,
 }
+
+
+def _validate_phone(phone: str) -> str:
+    """Normaliza e valida formato E.164."""
+    p = phone.strip().replace(" ", "")
+    if not p.startswith("+"):
+        digits = re.sub(r"\D", "", p)
+        p = "+55" + digits if not digits.startswith("55") else "+" + digits
+    if not _E164_RE.match(p):
+        raise ValueError(f"Telefone fora do formato E.164: {p!r}")
+    return p
 
 
 class LoyaltyOut(BaseModel):
@@ -46,7 +61,51 @@ class ClientOut(BaseModel):
 
 
 class ClientEditIn(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.strip():
+            raise ValueError("Nome não pode ser vazio")
+        return v.strip() if v else v
+
+    @field_validator("phone")
+    @classmethod
+    def phone_e164(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _validate_phone(v)
+
+
+class ClientCreateIn(BaseModel):
     name: str
+    phone: str
+    acquisition_channel: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Nome não pode ser vazio")
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def phone_e164(cls, v: str) -> str:
+        return _validate_phone(v)
+
+    @field_validator("acquisition_channel")
+    @classmethod
+    def valid_channel(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        valid = {e.value for e in ContactChannel}
+        if v not in valid:
+            raise ValueError(f"Canal inválido: {v!r}. Válidos: {sorted(valid)}")
+        return v
 
 
 class ClientesOut(BaseModel):
@@ -161,6 +220,49 @@ async def get_clientes(
     )
 
 
+@router.post("", response_model=ClientOut, status_code=http_status.HTTP_201_CREATED)
+async def create_cliente(
+    body: ClientCreateIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> ClientOut:
+    unit_links = (
+        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
+    ).scalars().all()
+    require_full_access(resolve_role(list(unit_links)))
+
+    acq = ContactChannel(body.acquisition_channel) if body.acquisition_channel else None
+
+    client = Client(
+        organization_id=current_user.organization_id,
+        name=body.name,
+        phone_e164=body.phone,
+        acquisition_channel=acq,
+        is_blocked=False,
+    )
+    db.add(client)
+    try:
+        await db.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail="Telefone já cadastrado nesta organização",
+        )
+
+    # Novo cliente nunca tem loyalty — construir resposta sem acessar relacionamento lazy
+    response = ClientOut(
+        id=client.id,
+        name=client.name,
+        phone=client.phone_e164,
+        acquisition_channel=acq.value if acq else None,
+        member_since=datetime.now(timezone.utc).date().isoformat(),
+        loyalty=None,
+        is_blocked=False,
+    )
+    await db.commit()
+    return response
+
+
 @router.patch("/{client_id}", response_model=ClientOut)
 async def edit_cliente(
     client_id: int,
@@ -183,7 +285,19 @@ async def edit_cliente(
     if client is None:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
 
-    client.name = body.name.strip()
+    if body.name is not None:
+        client.name = body.name
+    if body.phone is not None:
+        client.phone_e164 = body.phone
+
+    try:
+        await db.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail="Telefone já cadastrado nesta organização",
+        )
+
     response = _to_client_out(client)
     await db.commit()
     return response
