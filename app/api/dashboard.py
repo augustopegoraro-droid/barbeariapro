@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from pydantic import BaseModel
-from sqlalchemy import cast, func, select
-from sqlalchemy import Date as SADate
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dates import local_date, today_local
 from app.core.rbac import require_full_access, resolve_role
 from app.deps import get_current_user, get_tenant_db
 from models import (
@@ -33,7 +33,7 @@ Period = Literal["hoje", "7d", "30d", "mes"]
 
 
 def _period_range(period: Period) -> tuple[date, date]:
-    today = datetime.now(timezone.utc).date()
+    today = today_local()
     if period == "hoje":
         return today, today
     if period == "7d":
@@ -118,8 +118,8 @@ async def get_dashboard(
         await db.execute(
             select(Appointment.status, func.count(Appointment.id).label("cnt"))
             .where(
-                cast(Appointment.start_at, SADate) >= date_from,
-                cast(Appointment.start_at, SADate) <= date_to,
+                local_date(Appointment.start_at) >= date_from,
+                local_date(Appointment.start_at) <= date_to,
             )
             .group_by(Appointment.status)
         )
@@ -139,8 +139,8 @@ async def get_dashboard(
             .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
             .where(
                 Appointment.status == AppointmentStatus.concluido,
-                cast(Appointment.start_at, SADate) >= date_from,
-                cast(Appointment.start_at, SADate) <= date_to,
+                local_date(Appointment.start_at) >= date_from,
+                local_date(Appointment.start_at) <= date_to,
             )
         )
     ).one()
@@ -152,18 +152,18 @@ async def get_dashboard(
     daily_rows = (
         await db.execute(
             select(
-                cast(Appointment.start_at, SADate).label("day"),
+                local_date(Appointment.start_at).label("day"),
                 func.count(Appointment.id.distinct()).label("cnt"),
                 func.coalesce(func.sum(AppointmentItem.price_charged), 0).label("rev"),
             )
             .join(AppointmentItem, AppointmentItem.appointment_id == Appointment.id)
             .where(
                 Appointment.status == AppointmentStatus.concluido,
-                cast(Appointment.start_at, SADate) >= date_from,
-                cast(Appointment.start_at, SADate) <= date_to,
+                local_date(Appointment.start_at) >= date_from,
+                local_date(Appointment.start_at) <= date_to,
             )
-            .group_by(cast(Appointment.start_at, SADate))
-            .order_by(cast(Appointment.start_at, SADate))
+            .group_by(local_date(Appointment.start_at))
+            .order_by(local_date(Appointment.start_at))
         )
     ).all()
 
@@ -191,8 +191,8 @@ async def get_dashboard(
             .join(Barber, Barber.id == AppointmentItem.barber_id)
             .where(
                 Appointment.status == AppointmentStatus.concluido,
-                cast(Appointment.start_at, SADate) >= date_from,
-                cast(Appointment.start_at, SADate) <= date_to,
+                local_date(Appointment.start_at) >= date_from,
+                local_date(Appointment.start_at) <= date_to,
             )
             .group_by(Barber.id, Barber.name, Barber.commission_pct)
             .order_by(func.sum(AppointmentItem.price_charged).desc())
@@ -209,8 +209,8 @@ async def get_dashboard(
             )
             .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
             .where(
-                cast(Appointment.start_at, SADate) >= date_from,
-                cast(Appointment.start_at, SADate) <= date_to,
+                local_date(Appointment.start_at) >= date_from,
+                local_date(Appointment.start_at) <= date_to,
                 Appointment.status.in_([
                     AppointmentStatus.concluido,
                     AppointmentStatus.cancelado,
@@ -255,8 +255,8 @@ async def get_dashboard(
             .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
             .where(
                 Appointment.status == AppointmentStatus.concluido,
-                cast(Appointment.start_at, SADate) >= date_from,
-                cast(Appointment.start_at, SADate) <= date_to,
+                local_date(Appointment.start_at) >= date_from,
+                local_date(Appointment.start_at) <= date_to,
             )
             .group_by(Service.id, Service.name, Service.category)
             .order_by(func.count(AppointmentItem.id).desc())
@@ -281,8 +281,8 @@ async def get_dashboard(
             select(func.count(Client.id))
             .where(
                 Client.deleted_at.is_(None),
-                cast(Client.created_at, SADate) >= date_from,
-                cast(Client.created_at, SADate) <= date_to,
+                local_date(Client.created_at) >= date_from,
+                local_date(Client.created_at) <= date_to,
             )
         )
     ).scalar_one()

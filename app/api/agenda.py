@@ -7,11 +7,11 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status as http_status
 from pydantic import BaseModel
-from sqlalchemy import cast, func, select, text
-from sqlalchemy import Date as SADate
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.dates import local_date
 from app.core.rbac import FULL_ACCESS, require_full_access, resolve_role_with_barber
 from app.deps import get_current_user, get_tenant_db
 from models import (
@@ -102,7 +102,7 @@ async def get_agenda(
 
     result = await db.execute(
         select(Appointment)
-        .where(cast(Appointment.start_at, SADate) == date)
+        .where(local_date(Appointment.start_at) == date)
         .options(
             selectinload(Appointment.client),
             selectinload(Appointment.items).selectinload(AppointmentItem.barber),

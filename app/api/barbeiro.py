@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.rbac import check_appointment_ownership, resolve_role_with_barber
 from app.deps import get_current_user, get_tenant_db
+from app.services.loyalty import recalculate as _recalculate_loyalty
 from models import Appointment, AppointmentItem, Payment, User, UserUnit
 from models.enums import AppointmentStatus, PaymentMethod
 
@@ -95,6 +96,7 @@ async def concluir_atendimento(
     final_total = amount + (tip or Decimal("0"))
     appt.status = AppointmentStatus.concluido
     appt.total_amount = final_total
+    await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
     await db.commit()
 
     return AtendimentoOut(id=appt_id, status="concluido", total_amount=float(final_total))
