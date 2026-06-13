@@ -15,9 +15,17 @@ from zoneinfo import ZoneInfo
 
 def test_idempotency_key_por_agendamento():
     from app.services.reminders import idempotency_key
-    assert idempotency_key(42) == "reminder_24h_v1:42"
-    assert idempotency_key(42) == idempotency_key(42)
-    assert idempotency_key(1) != idempotency_key(2)
+    start = datetime(2026, 6, 13, 14, 0)
+    assert idempotency_key(42, start) == "reminder_24h_v1:42:20260613T1400"
+    assert idempotency_key(42, start) == idempotency_key(42, start)
+    assert idempotency_key(1, start) != idempotency_key(2, start)
+
+
+def test_idempotency_key_muda_apos_remarcacao():
+    from app.services.reminders import idempotency_key
+    original = datetime(2026, 6, 13, 14, 0)
+    remarcado = datetime(2026, 6, 19, 10, 30)
+    assert idempotency_key(42, original) != idempotency_key(42, remarcado)
 
 
 # ────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.core.dates import local_date
 from app.core.rbac import FULL_ACCESS, require_full_access, resolve_role_with_barber
 from app.deps import get_current_user, get_tenant_db
+from app.services.scheduling import barber_has_conflict
 from models import (
     Appointment,
     AppointmentItem,
@@ -278,20 +279,9 @@ async def criar_agendamento(
     start_utc = body.start_at.astimezone(timezone.utc)
     end_utc = start_utc + timedelta(minutes=svc.default_duration_min)
 
-    # Verificar conflito de barbeiro
-    conflict = (
-        await db.execute(
-            select(Appointment.id)
-            .join(AppointmentItem, AppointmentItem.appointment_id == Appointment.id)
-            .where(AppointmentItem.barber_id == body.barber_id)
-            .where(Appointment.status != AppointmentStatus.cancelado)
-            .where(Appointment.start_at < end_utc)
-            .where(Appointment.end_at > start_utc)
-            .limit(1)
-        )
-    ).first()
-    if conflict:
-        raise HTTPException(http_status.HTTP_409_CONFLICT, "Conflito de horário: barbeiro já tem agendamento neste período.")
+    # Verificar conflito de barbeiro (agendamento ativo ou folga)
+    if await barber_has_conflict(db, body.barber_id, start_utc, end_utc):
+        raise HTTPException(http_status.HTTP_409_CONFLICT, "Conflito de horário: barbeiro já tem agendamento ou folga neste período.")
 
     # Obter unidade padrão da organização
     unit = (
@@ -403,20 +393,10 @@ async def reagendar_agendamento(
     # Verificar conflito para o mesmo barbeiro no novo horário (excluindo o próprio)
     primary_item = next((i for i in sorted(appt.items, key=lambda x: x.position)), None)
     if primary_item:
-        conflict = (
-            await db.execute(
-                select(Appointment.id)
-                .join(AppointmentItem, AppointmentItem.appointment_id == Appointment.id)
-                .where(AppointmentItem.barber_id == primary_item.barber_id)
-                .where(Appointment.id != appt_id)
-                .where(Appointment.status != AppointmentStatus.cancelado)
-                .where(Appointment.start_at < end_utc)
-                .where(Appointment.end_at > start_utc)
-                .limit(1)
-            )
-        ).first()
-        if conflict:
-            raise HTTPException(http_status.HTTP_409_CONFLICT, "Conflito de horário: barbeiro já tem agendamento neste período.")
+        if await barber_has_conflict(
+            db, primary_item.barber_id, start_utc, end_utc, exclude_appointment_id=appt_id
+        ):
+            raise HTTPException(http_status.HTTP_409_CONFLICT, "Conflito de horário: barbeiro já tem agendamento ou folga neste período.")
 
     appt.start_at = start_utc
     appt.end_at = end_utc

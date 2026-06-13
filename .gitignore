@@ -43,6 +43,7 @@ workflows-backup*.json
 *.bak
 
 # ── n8n — exports de workflow (podem conter API keys e webhooks) ──────────────
-workflows.json
+# workflows.json é versionado de propósito (scripts patcham ele; credenciais já
+# usam $env.BOT_API_KEY). Apenas exports ad-hoc e backups ficam fora do git.
 workflows-*.json
 n8n-export*.json

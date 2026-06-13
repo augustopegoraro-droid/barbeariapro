@@ -39,8 +39,9 @@ _TEMPLATE = "reminder_24h_v1"
 _WEEKDAY_PT = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 
 
-def idempotency_key(appointment_id: int) -> str:
-    return f"{_TEMPLATE}:{appointment_id}"
+def idempotency_key(appointment_id: int, start_at: datetime) -> str:
+    # start_at na key: agendamento remarcado gera key nova e recebe novo lembrete
+    return f"{_TEMPLATE}:{appointment_id}:{start_at.strftime('%Y%m%dT%H%M')}"
 
 
 def build_message(
@@ -91,7 +92,7 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
     sent = skipped = 0
 
     for appt, client in rows:
-        key = idempotency_key(appt.id)
+        key = idempotency_key(appt.id, appt.start_at)
 
         already = (
             await session.execute(

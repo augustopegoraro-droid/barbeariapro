@@ -12,7 +12,7 @@ from starlette import status as http_status
 
 from app.core.rbac import require_manager_access, resolve_role
 from app.deps import get_current_user, get_tenant_db
-from models import Service, Unit, UserUnit
+from models import Barber, BarberService, Service, Unit, UserUnit
 
 router = APIRouter(tags=["servicos"])
 
@@ -119,6 +119,15 @@ async def criar_servico(
     )
     db.add(svc)
     await db.flush()
+
+    # Vincular o serviço novo a todos os barbeiros ativos — espelha criar_barbeiro,
+    # que vincula um barbeiro novo a todos os serviços. Sem isto o serviço fica
+    # inagendável (agenda exige BarberService). Política atual: "todos com todos".
+    barber_ids = (
+        await db.execute(select(Barber.id).where(Barber.deleted_at.is_(None)))
+    ).scalars().all()
+    for bid in barber_ids:
+        db.add(BarberService(barber_id=bid, service_id=svc.id))
 
     out = _svc_out(svc)
     await db.commit()

@@ -2,8 +2,10 @@
 Patch do workflow n8n — aplica todas as correções de hardening.
 Execução: python scripts/patch_workflow.py
 """
-import json, copy, sys
+import json, copy, os, sys
 from pathlib import Path
+
+BOT_API_KEY = os.environ.get("BOT_API_KEY", "")
 
 ROOT = Path(__file__).parent.parent
 SRC = ROOT / "workflows.json"
@@ -100,7 +102,7 @@ debounce_node["parameters"] = {
     "url": "http://host.docker.internal:8000/bot/debounce",
     "sendHeaders": True,
     "headerParameters": {"parameters": [
-        {"name": "X-Bot-Token", "value": "barbearia-bot-key-2026-mvp-seguro"},
+        {"name": "X-Bot-Token", "value": BOT_API_KEY},
         {"name": "Content-Type", "value": "application/json"},
     ]},
     "sendBody": True,
@@ -142,7 +144,7 @@ flush_node["parameters"] = {
     "url": "http://host.docker.internal:8000/bot/debounce/flush",
     "sendHeaders": True,
     "headerParameters": {"parameters": [
-        {"name": "X-Bot-Token", "value": "barbearia-bot-key-2026-mvp-seguro"},
+        {"name": "X-Bot-Token", "value": BOT_API_KEY},
         {"name": "Content-Type", "value": "application/json"},
     ]},
     "sendBody": True,

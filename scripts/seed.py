@@ -289,7 +289,8 @@ def seed_professionals(
             print(f"[barber] criado: '{bname}' id={barber.id}")
         else:
             barber.specialty = bspec
-            print(f"[barber] já existe: '{bname}' id={barber.id}")
+            barber.commission_pct = comm
+            print(f"[barber] já existe: '{bname}' id={barber.id} (specialty/comissão atualizados)")
 
         # ── barber_unit ────────────────────────────────────────────────────
         bu = session.execute(

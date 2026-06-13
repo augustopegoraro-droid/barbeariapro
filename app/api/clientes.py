@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from typing import Annotated, Optional
 
@@ -13,32 +12,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.phone import normalize_phone as _validate_phone
 from app.core.rbac import require_full_access, resolve_role
 from app.deps import get_current_user, get_tenant_db
 from models import Client, ClientLoyalty, User, UserUnit
 from models.enums import ContactChannel, LoyaltyNivel, LoyaltyStatus
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
-
-_E164_RE = re.compile(r"^\+[1-9][0-9]{7,14}$")
-
-_NIVEL_ORDER = {
-    LoyaltyNivel.vip: 4,
-    LoyaltyNivel.fiel: 3,
-    LoyaltyNivel.ativo: 2,
-    LoyaltyNivel.novo: 1,
-}
-
-
-def _validate_phone(phone: str) -> str:
-    """Normaliza e valida formato E.164."""
-    p = phone.strip().replace(" ", "")
-    if not p.startswith("+"):
-        digits = re.sub(r"\D", "", p)
-        p = "+55" + digits if not digits.startswith("55") else "+" + digits
-    if not _E164_RE.match(p):
-        raise ValueError(f"Telefone fora do formato E.164: {p!r}")
-    return p
 
 
 class LoyaltyOut(BaseModel):
@@ -158,6 +138,8 @@ async def get_clientes(
     count_rows = (
         await db.execute(
             select(ClientLoyalty.status, func.count(ClientLoyalty.id).label("cnt"))
+            .join(Client, Client.id == ClientLoyalty.client_id)
+            .where(Client.deleted_at.is_(None))
             .group_by(ClientLoyalty.status)
         )
     ).all()

@@ -15,13 +15,17 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.dates import local_tz
+from app.core.phone import normalize_phone
 from app.deps import get_bot_db
+from app.services.scheduling import barber_has_conflict
 from app.services.loyalty import recalculate as _recalculate_loyalty
 from models import (
     Appointment,
     AppointmentItem,
     AppointmentStatus,
     Barber,
+    BarberService,
     BarberUnit,
     BusinessHours,
     Client,
@@ -37,7 +41,6 @@ router = APIRouter(prefix="/bot", tags=["bot"])
 BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
 
 _SLOT_STEP = 30  # minutos entre slots
-_E164 = re.compile(r"^\+[1-9][0-9]{7,14}$")
 
 # ---------------------------------------------------------------------------
 # Debounce buffer — concorrência via asyncio.Lock por telefone
@@ -286,15 +289,13 @@ class AppointmentOut(BaseModel):
 
 
 def _normalize_phone(raw: str) -> str:
-    raw = raw.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-    if not raw.startswith("+"):
-        raw = "+" + raw
-    if not _E164.match(raw):
+    try:
+        return normalize_phone(raw)
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Telefone inválido: '{raw}'. Use formato E.164 (+5511999998888)",
         )
-    return raw
 
 
 def _overlaps(s1: datetime, e1: datetime, s2: datetime, e2: datetime) -> bool:
@@ -486,7 +487,7 @@ async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
     if last_appt:
         appt_utc = last_appt.start_at if last_appt.start_at.tzinfo else last_appt.start_at.replace(tzinfo=timezone.utc)
         days_since = (now_utc - appt_utc).days
-        last_date = last_appt.start_at.date().isoformat()
+        last_date = appt_utc.astimezone(local_tz()).date().isoformat()
 
         last_item_row = (
             await db.execute(
@@ -505,7 +506,11 @@ async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
     # Horário preferido: mode do hour dos agendamentos passados convertido para Palmas (UTC-3)
     times_result = (
         await db.execute(
-            select(func.extract("hour", Appointment.start_at).label("hour"))
+            select(
+                func.extract(
+                    "hour", func.timezone(settings.app_timezone, Appointment.start_at)
+                ).label("hour")
+            )
             .where(Appointment.client_id == client.id)
             .where(Appointment.status != AppointmentStatus.cancelado)
             .where(Appointment.start_at < now_utc)
@@ -513,7 +518,7 @@ async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
     ).all()
     preferred_time = None
     if times_result:
-        hours_local = [(int(r.hour) - 3) % 24 for r in times_result]
+        hours_local = [int(r.hour) for r in times_result]
         mode_hour = max(set(hours_local), key=hours_local.count)
         preferred_time = f"{mode_hour:02d}:00"
 
@@ -711,16 +716,28 @@ async def create_appointment(body: AppointmentCreateIn, db: BotDB) -> Appointmen
     unit_id = settings.bot_unit_id
 
     client = (await db.execute(select(Client).where(Client.id == body.client_id))).scalar_one_or_none()
-    if not client:
+    if not client or client.deleted_at is not None:
         raise HTTPException(404, "Cliente não encontrado")
+    if client.is_blocked:
+        raise HTTPException(403, "Cliente bloqueado — agendamento não permitido")
 
     barber = (await db.execute(select(Barber).where(Barber.id == body.barber_id))).scalar_one_or_none()
-    if not barber:
+    if not barber or barber.deleted_at is not None:
         raise HTTPException(404, "Barbeiro não encontrado")
 
     svc = (await db.execute(select(Service).where(Service.id == body.service_id))).scalar_one_or_none()
-    if not svc:
+    if not svc or not svc.is_active:
         raise HTTPException(404, "Serviço não encontrado")
+
+    bs_link = (
+        await db.execute(
+            select(BarberService)
+            .where(BarberService.barber_id == body.barber_id)
+            .where(BarberService.service_id == body.service_id)
+        )
+    ).scalar_one_or_none()
+    if not bs_link:
+        raise HTTPException(422, "Este profissional não realiza este serviço")
 
     if body.start_at.tzinfo is None:
         raise HTTPException(422, "start_at deve incluir fuso horário (ex: 2026-06-05T09:00:00-03:00)")
@@ -776,20 +793,8 @@ async def create_appointment(body: AppointmentCreateIn, db: BotDB) -> Appointmen
             f"{bh.open_time.strftime('%H:%M')} (ex: 09:00, 09:30, 10:00...)",
         )
 
-    conflict = (
-        await db.execute(
-            select(Appointment.id)
-            .join(AppointmentItem, AppointmentItem.appointment_id == Appointment.id)
-            .where(AppointmentItem.barber_id == body.barber_id)
-            .where(Appointment.status != AppointmentStatus.cancelado)
-            .where(Appointment.start_at < end_utc)
-            .where(Appointment.end_at > start_utc)
-            .limit(1)
-        )
-    ).first()
-
-    if conflict:
-        raise HTTPException(409, "Horário indisponível — conflito de agendamento")
+    if await barber_has_conflict(db, body.barber_id, start_utc, end_utc):
+        raise HTTPException(409, "Horário indisponível — conflito de agendamento ou folga")
 
     # display_number sequencial por unidade — advisory lock garante atomicidade
     # pg_advisory_xact_lock é liberado automaticamente ao fim da transação
@@ -939,6 +944,8 @@ async def complete_appointment(
         raise HTTPException(409, f"Só é possível concluir agendamentos com status 'agendado' (atual: {appt.status.value})")
 
     appt.status = AppointmentStatus.concluido
+    # autoflush=False: sem flush as agregações do recalculate não veem este atendimento
+    await db.flush()
     await _recalculate_loyalty(appt.client_id, settings.bot_organization_id, db)
 
     row = (

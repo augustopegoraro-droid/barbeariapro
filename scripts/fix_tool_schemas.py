@@ -8,6 +8,7 @@ Causa do erro "Received tool input did not match expected schema ✖ Required �
 - Todo tool call falha: campo "" obrigatório nunca é preenchido pelo LLM
 """
 import json
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -17,7 +18,7 @@ with open(ROOT / "workflows.json") as f:
 bot_wf = next(w for w in data if "BarbeariaPro Bot" in w.get("name", ""))
 nodes = {n["id"]: n for n in bot_wf["nodes"]}
 
-BOT_TOKEN = "barbearia-bot-key-2026-mvp-seguro"
+BOT_TOKEN = os.environ.get("BOT_API_KEY", "")
 
 # ─── HEADER ESTÁTICO (igual em todos os tools) ───────────────────────────────
 STATIC_HEADER = {

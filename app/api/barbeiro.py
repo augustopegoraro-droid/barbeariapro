@@ -93,12 +93,21 @@ async def concluir_atendimento(
     )
     db.add(payment)
 
-    final_total = amount + (tip or Decimal("0"))
+    # Receita de serviço (sem gorjeta) — alinha total_amount com
+    # AppointmentItem.price_charged (base de receita/comissão do financeiro) e com
+    # a fidelidade. A gorjeta fica só em Payment.tip_amount.
     appt.status = AppointmentStatus.concluido
-    appt.total_amount = final_total
+    appt.total_amount = amount
+    primary_item = min(appt.items, key=lambda i: i.position, default=None)
+    if primary_item is not None:
+        primary_item.price_charged = amount
+
+    # autoflush=False: sem flush as agregações do recalculate não veem este atendimento
+    await db.flush()
     await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
     await db.commit()
 
+    final_total = amount + (tip or Decimal("0"))
     return AtendimentoOut(id=appt_id, status="concluido", total_amount=float(final_total))
 
 

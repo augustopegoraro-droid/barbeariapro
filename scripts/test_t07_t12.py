@@ -7,7 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import requests, json, uuid
 
 BASE = "http://localhost:8000"
-TOKEN = "barbearia-bot-key-2026-mvp-seguro"
+TOKEN = os.environ.get("BOT_API_KEY")
+if not TOKEN:
+    sys.exit("Defina BOT_API_KEY no ambiente antes de rodar este script.")
 HDR = {"X-Bot-Token": TOKEN, "Content-Type": "application/json"}
 PHONE = "+5511900000099"
 

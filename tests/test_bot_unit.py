@@ -42,6 +42,34 @@ def test_normalize_phone_empty_raises():
 
 
 # ────────────────────────────────────────────────────────────
+# Convergência painel (clientes) × bot — mesma função canônica
+# ────────────────────────────────────────────────────────────
+
+def test_phone_painel_e_bot_convergem():
+    """Número BR sem código do país deve virar o MESMO E.164 nos dois caminhos."""
+    from app.core.phone import normalize_phone
+    from app.api.bot import _normalize_phone
+    bare = "63992287396"  # antes: bot virava +63... (Filipinas), painel +5563...
+    assert normalize_phone(bare) == "+5563992287396"
+    assert _normalize_phone(bare) == "+5563992287396"
+
+
+def test_phone_variantes_mesmo_numero():
+    from app.core.phone import normalize_phone
+    canonical = "+5563992287396"
+    assert normalize_phone("5563992287396") == canonical
+    assert normalize_phone("63992287396") == canonical
+    assert normalize_phone("+5563992287396") == canonical
+    assert normalize_phone("(63) 99228-7396") == canonical
+
+
+def test_phone_area_55_nao_duplica_prefixo():
+    """Celular de área 55 (RS) sem país: 11 dígitos → +55 + número, não +5555 espúrio."""
+    from app.core.phone import normalize_phone
+    assert normalize_phone("55999998888") == "+5555999998888"
+
+
+# ────────────────────────────────────────────────────────────
 # Testes de _overlaps
 # ────────────────────────────────────────────────────────────
 

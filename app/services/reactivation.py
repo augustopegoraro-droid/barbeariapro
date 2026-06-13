@@ -11,7 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.services.loyalty import resolve_benefit
 from app.services.whatsapp import send_text
-from models import Barber, Client, DeliveryStatus, MessageDirection, MessageLog, Service
+from models import (
+    Barber,
+    Client,
+    ClientConsent,
+    ConsentStatus,
+    ContactChannel,
+    DeliveryStatus,
+    MessageDirection,
+    MessageLog,
+    Service,
+)
 from models.enums import LoyaltyStatus
 from models.loyalty import ClientLoyalty
 
@@ -32,17 +42,20 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
 
     targets = (
         await session.execute(
-            select(ClientLoyalty)
+            select(ClientLoyalty, Client)
+            .join(Client, Client.id == ClientLoyalty.client_id)
             .where(ClientLoyalty.organization_id == org_id)
             .where(
                 ClientLoyalty.status.in_([LoyaltyStatus.em_risco, LoyaltyStatus.inativo])
             )
+            .where(Client.deleted_at.is_(None))
+            .where(Client.is_blocked.is_(False))
         )
-    ).scalars().all()
+    ).all()
 
     sent = skipped = 0
 
-    for loyalty in targets:
+    for loyalty, client in targets:
         # Cooldown: pula se já recebeu mensagem de reativação recentemente
         already_sent = (
             await session.execute(
@@ -59,10 +72,16 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
             skipped += 1
             continue
 
-        client = (
-            await session.execute(select(Client).where(Client.id == loyalty.client_id))
-        ).scalar_one_or_none()
-        if not client:
+        opted_out = (
+            await session.execute(
+                select(ClientConsent.id)
+                .where(ClientConsent.client_id == client.id)
+                .where(ClientConsent.channel == ContactChannel.whatsapp)
+                .where(ClientConsent.status == ConsentStatus.opt_out)
+                .limit(1)
+            )
+        ).first()
+        if opted_out:
             skipped += 1
             continue
 
