@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.phone import normalize_phone as _validate_phone
-from app.core.rbac import require_full_access, resolve_role
-from app.deps import get_current_user, get_tenant_db
-from models import Client, ClientLoyalty, User, UserUnit
+from app.core.rbac import require_full_access
+from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from models import Client, ClientLoyalty, User
 from models.enums import ContactChannel, LoyaltyNivel, LoyaltyStatus
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
@@ -130,10 +130,7 @@ async def get_clientes(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> ClientesOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role(list(unit_links)))
+    require_full_access(await resolve_current_role(db, current_user))
 
     count_rows = (
         await db.execute(
@@ -208,10 +205,7 @@ async def create_cliente(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> ClientOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role(list(unit_links)))
+    require_full_access(await resolve_current_role(db, current_user))
 
     acq = ContactChannel(body.acquisition_channel) if body.acquisition_channel else None
 
@@ -252,10 +246,7 @@ async def edit_cliente(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> ClientOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role(list(unit_links)))
+    require_full_access(await resolve_current_role(db, current_user))
 
     client = (
         await db.execute(
@@ -291,10 +282,7 @@ async def delete_cliente(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> None:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role(list(unit_links)))
+    require_full_access(await resolve_current_role(db, current_user))
 
     client = (
         await db.execute(
@@ -314,10 +302,7 @@ async def bloquear_cliente(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> ClientOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role(list(unit_links)))
+    require_full_access(await resolve_current_role(db, current_user))
 
     client = (
         await db.execute(

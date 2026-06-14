@@ -13,10 +13,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.rbac import resolve_role, resolve_role_with_barber
 from app.core.security import decode_access_token
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.schemas.auth import TokenData
-from models import User
+from models import Unit, User, UserUnit
 
 bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -89,3 +90,33 @@ async def get_current_user(
             detail="Usuário não encontrado no tenant atual",
         )
     return user
+
+
+async def _org_scoped_unit_links(db: AsyncSession, user: User) -> list[UserUnit]:
+    """Vínculos do usuário com unidades da SUA organização.
+
+    `user_units` não tem RLS própria (é tabela-filha). O join com `units`
+    — que tem RLS — garante o escopo de tenant: sem isto a query veria
+    vínculos de outras organizações e a role efetiva poderia ser elevada
+    entre tenants.
+    """
+    rows = (
+        await db.execute(
+            select(UserUnit)
+            .join(Unit, Unit.id == UserUnit.unit_id)
+            .where(UserUnit.user_id == user.id)
+        )
+    ).scalars().all()
+    return list(rows)
+
+
+async def resolve_current_role(db: AsyncSession, user: User) -> str:
+    """Role efetiva (maior prioridade) do usuário na org atual."""
+    return resolve_role(await _org_scoped_unit_links(db, user))
+
+
+async def resolve_current_role_with_barber(
+    db: AsyncSession, user: User
+) -> tuple[str, Optional[int]]:
+    """(role, barber_id) escopado à org atual; barber_id só quando role='barber'."""
+    return resolve_role_with_barber(await _org_scoped_unit_links(db, user))

@@ -11,10 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.rbac import check_appointment_ownership, resolve_role_with_barber
-from app.deps import get_current_user, get_tenant_db
+from app.core.rbac import check_appointment_ownership
+from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
 from app.services.loyalty import recalculate as _recalculate_loyalty
-from models import Appointment, AppointmentItem, Payment, User, UserUnit
+from models import Appointment, AppointmentItem, Payment, User
 from models.enums import AppointmentStatus, PaymentMethod
 
 router = APIRouter(prefix="/barbeiro", tags=["barbeiro"])
@@ -72,10 +72,7 @@ async def concluir_atendimento(
             detail=f"Método inválido. Use: {sorted(_VALID_METHODS)}",
         )
 
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    role, my_barber_id = resolve_role_with_barber(list(unit_links))
+    role, my_barber_id = await resolve_current_role_with_barber(db, current_user)
 
     appt = await _load_appointment(db, appt_id)
     check_appointment_ownership(appt, role, my_barber_id)
@@ -117,10 +114,7 @@ async def faltou_atendimento(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AtendimentoOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    role, my_barber_id = resolve_role_with_barber(list(unit_links))
+    role, my_barber_id = await resolve_current_role_with_barber(db, current_user)
 
     appt = await _load_appointment(db, appt_id)
     check_appointment_ownership(appt, role, my_barber_id)
@@ -139,10 +133,7 @@ async def cancelar_atendimento(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AtendimentoOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    role, my_barber_id = resolve_role_with_barber(list(unit_links))
+    role, my_barber_id = await resolve_current_role_with_barber(db, current_user)
 
     appt = await _load_appointment(db, appt_id)
     check_appointment_ownership(appt, role, my_barber_id)

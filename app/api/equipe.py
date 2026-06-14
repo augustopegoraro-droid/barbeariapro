@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_manager_access, resolve_role
-from app.deps import get_current_user, get_tenant_db
+from app.core.rbac import require_manager_access
+from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import (
     Appointment,
     AppointmentItem,
@@ -25,7 +25,6 @@ from models import (
     TimeOff,
     Unit,
     User,
-    UserUnit,
 )
 
 router = APIRouter(prefix="/equipe", tags=["equipe"])
@@ -67,10 +66,7 @@ async def get_equipe(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> EquipeOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_manager_access(resolve_role(list(unit_links)))
+    require_manager_access(await resolve_current_role(db, current_user))
 
     # Barbeiros ativos da organização
     barbers = (
@@ -225,10 +221,7 @@ class BarberSimpleOut(BaseModel):
 
 
 async def _require_manager(db: AsyncSession, user: User) -> None:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == user.id))
-    ).scalars().all()
-    require_manager_access(resolve_role(list(unit_links)))
+    require_manager_access(await resolve_current_role(db, user))
 
 
 async def _load_barber(db: AsyncSession, barber_id: int) -> Barber:

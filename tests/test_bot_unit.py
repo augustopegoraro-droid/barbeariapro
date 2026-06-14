@@ -103,6 +103,60 @@ def test_overlaps_contained():
 
 
 # ────────────────────────────────────────────────────────────
+# RBAC: resolução de role org-escopada (app/deps)
+# ────────────────────────────────────────────────────────────
+
+def _fake_link(role_value: str, barber_id=None):
+    """UserUnit fake com .role.value e .barber_id."""
+    link = MagicMock()
+    link.role.value = role_value
+    link.barber_id = barber_id
+    return link
+
+
+def _mock_db_returning(links):
+    """AsyncSession mock cujo execute().scalars().all() devolve `links`."""
+    db = MagicMock()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = links
+    db.execute = AsyncMock(return_value=result)
+    return db
+
+
+@pytest.mark.asyncio
+async def test_resolve_current_role_pega_maior_prioridade():
+    from app.deps import resolve_current_role
+    db = _mock_db_returning([_fake_link("barber"), _fake_link("manager")])
+    user = MagicMock(id=1)
+    assert await resolve_current_role(db, user) == "manager"
+
+
+@pytest.mark.asyncio
+async def test_resolve_current_role_sem_vinculo_eh_barber():
+    from app.deps import resolve_current_role
+    db = _mock_db_returning([])
+    assert await resolve_current_role(db, MagicMock(id=1)) == "barber"
+
+
+@pytest.mark.asyncio
+async def test_resolve_current_role_with_barber_id():
+    from app.deps import resolve_current_role_with_barber
+    db = _mock_db_returning([_fake_link("barber", barber_id=7)])
+    role, barber_id = await resolve_current_role_with_barber(db, MagicMock(id=1))
+    assert role == "barber" and barber_id == 7
+
+
+@pytest.mark.asyncio
+async def test_org_scoped_query_faz_join_com_units():
+    """A query DEVE juntar com `units` (RLS) — sem isto vazaria role de outra org."""
+    from app.deps import _org_scoped_unit_links
+    db = _mock_db_returning([])
+    await _org_scoped_unit_links(db, MagicMock(id=1))
+    stmt = db.execute.call_args.args[0]
+    assert "JOIN UNITS" in str(stmt).upper()
+
+
+# ────────────────────────────────────────────────────────────
 # Testes de debounce em memória (módulo isolado)
 # ────────────────────────────────────────────────────────────
 

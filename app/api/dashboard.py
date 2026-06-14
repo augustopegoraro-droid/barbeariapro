@@ -12,8 +12,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dates import local_date, today_local
-from app.core.rbac import require_full_access, resolve_role
-from app.deps import get_current_user, get_tenant_db
+from app.core.rbac import require_full_access
+from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import (
     Appointment,
     AppointmentItem,
@@ -23,7 +23,6 @@ from models import (
     ClientLoyalty,
     Service,
     User,
-    UserUnit,
 )
 from models.enums import LoyaltyNivel, LoyaltyStatus
 
@@ -106,10 +105,7 @@ async def get_dashboard(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     period: Period = Query("30d"),
 ) -> DashboardOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role(list(unit_links)))
+    require_full_access(await resolve_current_role(db, current_user))
 
     date_from, date_to = _period_range(period)
 

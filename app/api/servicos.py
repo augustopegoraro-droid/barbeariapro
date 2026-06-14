@@ -10,9 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status as http_status
 
-from app.core.rbac import require_manager_access, resolve_role
-from app.deps import get_current_user, get_tenant_db
-from models import Barber, BarberService, Service, Unit, UserUnit
+from app.core.rbac import require_manager_access
+from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from models import Barber, BarberService, Service
 
 router = APIRouter(tags=["servicos"])
 
@@ -52,19 +52,6 @@ class ServicoUpdate(BaseModel):
     has_variable_price: Optional[bool] = None
 
 
-# ── Helper: resolve role from DB ───────────────────────────────────────────────
-
-async def _resolve_role(db: AsyncSession, user_id: int, org_id: int) -> str:
-    result = await db.execute(
-        select(UserUnit)
-        .join(Unit, UserUnit.unit_id == Unit.id)
-        .where(
-            UserUnit.user_id == user_id,
-            Unit.organization_id == org_id,
-        )
-    )
-    return resolve_role(result.scalars().all())
-
 
 def _svc_out(s: Service) -> ServicoOut:
     return ServicoOut(
@@ -87,7 +74,7 @@ async def listar_servicos(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user.id, current_user.organization_id)
+    role = await resolve_current_role(db, current_user)
     require_manager_access(role)
 
     stmt = select(Service).order_by(Service.name)
@@ -105,7 +92,7 @@ async def criar_servico(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user.id, current_user.organization_id)
+    role = await resolve_current_role(db, current_user)
     require_manager_access(role)
 
     svc = Service(
@@ -143,7 +130,7 @@ async def atualizar_servico(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user.id, current_user.organization_id)
+    role = await resolve_current_role(db, current_user)
     require_manager_access(role)
 
     result = await db.execute(select(Service).where(Service.id == id))
@@ -178,7 +165,7 @@ async def arquivar_servico(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user.id, current_user.organization_id)
+    role = await resolve_current_role(db, current_user)
     require_manager_access(role)
 
     result = await db.execute(select(Service).where(Service.id == id))
@@ -203,7 +190,7 @@ async def reativar_servico(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await _resolve_role(db, current_user.id, current_user.organization_id)
+    role = await resolve_current_role(db, current_user)
     require_manager_access(role)
 
     result = await db.execute(select(Service).where(Service.id == id))

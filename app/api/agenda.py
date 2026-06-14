@@ -12,8 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.dates import local_date
-from app.core.rbac import FULL_ACCESS, require_full_access, resolve_role_with_barber
-from app.deps import get_current_user, get_tenant_db
+from app.core.rbac import FULL_ACCESS, require_full_access
+from app.deps import (
+    get_current_user,
+    get_tenant_db,
+    resolve_current_role,
+    resolve_current_role_with_barber,
+)
 from app.services.scheduling import barber_has_conflict
 from models import (
     Appointment,
@@ -25,7 +30,6 @@ from models import (
     Service,
     Unit,
     User,
-    UserUnit,
 )
 
 router = APIRouter(prefix="/agenda", tags=["agenda"])
@@ -96,10 +100,7 @@ async def get_agenda(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     date: date = Query(..., description="Data no formato YYYY-MM-DD"),
 ) -> list[AppointmentOut]:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    role, my_barber_id = resolve_role_with_barber(list(unit_links))
+    role, my_barber_id = await resolve_current_role_with_barber(db, current_user)
 
     result = await db.execute(
         select(Appointment)
@@ -165,10 +166,7 @@ async def list_barbers_for_agenda(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> list[BarberSimpleOut]:
     """Lista barbeiros ativos para seleção no modal de novo agendamento."""
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role_with_barber(list(unit_links))[0])
+    require_full_access(await resolve_current_role(db, current_user))
 
     barbers = (
         await db.execute(
@@ -190,10 +188,7 @@ async def list_services_for_agenda(
     barber_id: Optional[int] = Query(None, description="Filtrar por profissional"),
 ) -> list[ServiceSimpleOut]:
     """Lista serviços ativos. Com barber_id, retorna apenas os serviços do profissional."""
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role_with_barber(list(unit_links))[0])
+    require_full_access(await resolve_current_role(db, current_user))
 
     stmt = (
         select(Service)
@@ -228,10 +223,7 @@ async def criar_agendamento(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AppointmentOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role_with_barber(list(unit_links))[0])
+    require_full_access(await resolve_current_role(db, current_user))
 
     # Validar entidades
     client = (await db.execute(select(Client).where(Client.id == body.client_id))).scalar_one_or_none()
@@ -361,10 +353,7 @@ async def reagendar_agendamento(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AppointmentOut:
-    unit_links = (
-        await db.execute(select(UserUnit).where(UserUnit.user_id == current_user.id))
-    ).scalars().all()
-    require_full_access(resolve_role_with_barber(list(unit_links))[0])
+    require_full_access(await resolve_current_role(db, current_user))
 
     appt = (
         await db.execute(
