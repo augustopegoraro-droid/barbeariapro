@@ -22,7 +22,11 @@ Registro de evolução autônoma (dev sênior). Datas em fuso local (America/Ara
 - Removida a duplicação: 21 blocos inline + 2 helpers `_require_manager` + `_resolve_role` próprio do servicos → 1 implementação. Routers agora importam de rbac só os guards.
 - **Testes:** 4 novos (resolução por prioridade, sem vínculo→barber, barber_id, e assert de que a query faz JOIN units). **103 passando.** compileall limpo, app.main carrega.
 
+### Ciclo 5 — cobertura de testes da fidelidade (CRM)
+- `loyalty.py` tinha 5 funções puras de regra de negócio (nível, status, categoria, benefício, marco) com **zero testes**. Adicionado `tests/test_loyalty_unit.py` com 19 testes fixando todos os limites de faixa. **122 testes passando.**
+- N+1 dos crons AVALIADO e adiado conscientemente: reescrever a query exige validação contra DB real (sem harness de integração no projeto); o ganho só importa em escala que o MVP não tem. Risco > benefício agora.
+
 ### Próximos passos
-1. Otimizar N+1 dos crons (`reactivation.py`/`reminders.py`).
-2. e2e Playwright: corrigir drift de seed nos specs (precisa ambiente rodando).
-3. Avaliar próxima feature do roadmap (página pública de agendamento).
+1. e2e Playwright: corrigir drift de seed nos specs (precisa ambiente backend+DB+frontend rodando).
+2. Próxima feature do roadmap: página pública de agendamento (decisão de produto — requer alinhamento).
+3. N+1 dos crons quando houver harness de integração / escala real.
