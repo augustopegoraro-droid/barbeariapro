@@ -26,7 +26,14 @@ Registro de evolução autônoma (dev sênior). Datas em fuso local (America/Ara
 - `loyalty.py` tinha 5 funções puras de regra de negócio (nível, status, categoria, benefício, marco) com **zero testes**. Adicionado `tests/test_loyalty_unit.py` com 19 testes fixando todos os limites de faixa. **122 testes passando.**
 - N+1 dos crons AVALIADO e adiado conscientemente: reescrever a query exige validação contra DB real (sem harness de integração no projeto); o ganho só importa em escala que o MVP não tem. Risco > benefício agora.
 
+### Ciclo 6 — cobertura dos helpers de intervalo de datas (financeiro)
+- `financeiro._month_range` e `dashboard._period_range` definem o período dos relatórios financeiros e não tinham testes. Adicionado `tests/test_finance_dates_unit.py` (15 testes): mês comum, virada de ano (dez→31), fevereiro bissexto/comum, rejeição de formato inválido (422), e janelas relativas hoje/7d/30d/mês. Verificado que o regex `_MONTH_RE` já rejeita mês 13/00 com 422 (sem bug). **137 testes passando.**
+
 ### Próximos passos
 1. e2e Playwright: corrigir drift de seed nos specs (precisa ambiente backend+DB+frontend rodando).
 2. Próxima feature do roadmap: página pública de agendamento (decisão de produto — requer alinhamento).
 3. N+1 dos crons quando houver harness de integração / escala real.
+
+### Estado dos gargalos (fim do ciclo autônomo)
+- Bugs/segurança/tipos/build/lint/testes: **sem pendências conhecidas** no que é validável localmente.
+- Itens restantes ou exigem ambiente de integração (e2e, N+1) ou decisão de produto (features do roadmap).
