@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Date, cast, func
+from sqlalchemy import Date, cast, func, literal_column
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
@@ -26,5 +26,13 @@ def today_local() -> date:
 
 
 def local_date(col: ColumnElement) -> ColumnElement:
-    """Expressão SQL: data local (app_timezone) de um TIMESTAMPTZ."""
-    return cast(func.timezone(settings.app_timezone, col), Date)
+    """Expressão SQL: data local (app_timezone) de um TIMESTAMPTZ.
+
+    O timezone é embutido como literal SQL (não bind param) para que a expressão
+    renderize idêntica em SELECT e GROUP BY/ORDER BY — caso contrário o Postgres
+    trata os placeholders como expressões distintas e rejeita o agrupamento por dia.
+    Seguro: `app_timezone` vem da config (não de entrada do usuário); aspas simples
+    são escapadas por garantia.
+    """
+    tz = settings.app_timezone.replace("'", "''")
+    return cast(func.timezone(literal_column(f"'{tz}'"), col), Date)
