@@ -1,0 +1,42 @@
+# Contexto do build do BACKEND — mantém só o necessário (app/, models/, requirements.txt)
+# e exclui o frontend, venv, git e artefatos pesados/irrelevantes.
+
+# Frontend (build próprio, contexto próprio)
+barbearia-frontend/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Testes e migrations não são necessários em runtime
+tests/
+alembic/
+alembic.ini
+
+# Segredos e ambiente
+.env
+.env.*
+!.env.example
+
+# Git e metadados
+.git/
+.gitignore
+.DS_Store
+
+# Infra / docs / backups / dumps
+docker-compose*.yml
+Dockerfile
+backups/
+docs/
+scripts/
+*.json
+*.sql
+*.txt
+!requirements.txt
+*.md

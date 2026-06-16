@@ -1,0 +1,72 @@
+# BarbeariaPro — APP stack (backend FastAPI + frontend Next 16)
+#
+# Compose SEPARADO da infra (postgres/n8n/evolution continuam no docker-compose.yml).
+# Project name próprio (barbeariapro-app) → não colide com o project da infra.
+#
+# A infra (postgres :5432, evolution :8080) é alcançada pelos containers via
+# host.docker.internal, pois já está publicada no host. NÃO redefinimos nem
+# tocamos nesses serviços aqui.
+#
+# Uso:
+#   docker compose -f docker-compose.app.yml config        # validar sintaxe
+#   docker compose -f docker-compose.app.yml up -d --build  # subir só app
+#   docker compose -f docker-compose.app.yml down           # derrubar só app
+
+name: barbeariapro-app
+
+services:
+
+  # ──────────────────────────────────────────────────────────────
+  # Backend — FastAPI (uvicorn) :8000
+  # ──────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: barbeariapro-backend
+    container_name: barbeariapro-app-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env          # config base da app (SECRET_KEY, BOT_*, etc.)
+      - .env.docker   # overrides p/ container (DATABASE_URL → host.docker.internal)
+    extra_hosts:
+      # Resolve o host (onde postgres/evolution estão publicados)
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else sys.exit(1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ──────────────────────────────────────────────────────────────
+  # Frontend — Next 16 (next start) :3000
+  # ──────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./barbearia-frontend
+      dockerfile: Dockerfile
+      args:
+        # Inlinado no bundle do browser (browser roda no HOST → localhost:8000)
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_ORG_ID: "3"
+    image: barbeariapro-frontend
+    container_name: barbeariapro-app-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.docker   # API_URL_INTERNAL (SSR/next-auth), AUTH_SECRET, AUTH_TRUST_HOST
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
