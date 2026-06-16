@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     evolution_instance_name: str = ""
     evolution_api_key: str = ""
 
+    # Google Calendar (Fase 2 — OAuth2 + sync de eventos). Default vazio:
+    # sem credenciais, o módulo de integração fica inerte (não afeta produção).
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
+    google_calendar_scopes: str = "https://www.googleapis.com/auth/calendar.events"
+    # Chave Fernet (urlsafe-base64, 32 bytes) p/ cifrar tokens OAuth em repouso.
+    token_encryption_key: str = ""
+
     # Reativação de clientes
     reactivation_trigger_days: int = 60
     reactivation_cooldown_days: int = 60
