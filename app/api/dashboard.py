@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
 
@@ -11,7 +11,8 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dates import local_date, today_local
+from app.core.config import settings
+from app.core.dates import local_date, local_tz, today_local
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import (
@@ -19,12 +20,15 @@ from models import (
     AppointmentItem,
     AppointmentStatus,
     Barber,
+    BusinessHours,
     Client,
     ClientLoyalty,
+    Lead,
     Service,
+    Unit,
     User,
 )
-from models.enums import LoyaltyNivel, LoyaltyStatus
+from models.enums import LeadStage, LoyaltyNivel, LoyaltyStatus
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -333,4 +337,216 @@ async def get_dashboard(
         top_services=top_services,
         loyalty_nivel=loyalty_nivel,
         loyalty_status=loyalty_status,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Métricas operacionais (CRM/IA): leads, serviços realizados, picos de demanda
+# e fluxo comercial vs fora do horário comercial.
+# ═══════════════════════════════════════════════════════════════════════════
+
+_STAGE_ORDER: tuple[LeadStage, ...] = (
+    LeadStage.novo_contato,
+    LeadStage.conversando,
+    LeadStage.agendado,
+    LeadStage.concluido,
+    LeadStage.perdido,
+)
+
+
+class DailyCount(BaseModel):
+    date: str
+    count: int
+
+
+class StageCount(BaseModel):
+    stage: str
+    count: int
+
+
+class DemandHour(BaseModel):
+    hour: int
+    count: int
+
+
+class FluxoComercial(BaseModel):
+    """Volume de leads dentro vs fora do horário comercial (horas da unidade)."""
+
+    comercial: int
+    fora: int
+    comercial_pct: float
+    fora_pct: float
+
+
+class OperacionalOut(BaseModel):
+    period: str
+    date_from: str
+    date_to: str
+    leads_total: int
+    leads_por_dia: list[DailyCount]
+    leads_por_estagio: list[StageCount]
+    servicos_realizados: list[ServiceRank]
+    picos_demanda: list[DemandHour]
+    fluxo: FluxoComercial
+
+
+async def _business_hour_windows(db: AsyncSession) -> dict[int, list[tuple[time, time]]]:
+    """Janelas de horário comercial por dia da semana (0=dom..6=sáb).
+
+    Escopado ao tenant via join com `units` (que tem RLS); `business_hours` não
+    tem coluna de organização. Sem horários cadastrados, assume seg–sáb 9h–19h.
+    """
+    rows = (
+        await db.execute(
+            select(
+                BusinessHours.weekday,
+                BusinessHours.open_time,
+                BusinessHours.close_time,
+            )
+            .join(Unit, Unit.id == BusinessHours.unit_id)
+            .where(Unit.deleted_at.is_(None))
+        )
+    ).all()
+    windows: dict[int, list[tuple[time, time]]] = {}
+    for r in rows:
+        windows.setdefault(r.weekday, []).append((r.open_time, r.close_time))
+    if not windows:
+        windows = {wd: [(time(9, 0), time(19, 0))] for wd in range(1, 7)}
+    return windows
+
+
+@router.get("/operacional", response_model=OperacionalOut)
+async def get_operacional(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    period: Period = Query("30d"),
+) -> OperacionalOut:
+    require_full_access(await resolve_current_role(db, current_user))
+    date_from, date_to = _period_range(period)
+
+    # ── 1. Volume de leads por dia (criação) ──────────────────────────────────
+    lead_rows = (
+        await db.execute(
+            select(
+                local_date(Lead.created_at).label("day"),
+                func.count(Lead.id).label("cnt"),
+            )
+            .where(
+                local_date(Lead.created_at) >= date_from,
+                local_date(Lead.created_at) <= date_to,
+            )
+            .group_by(local_date(Lead.created_at))
+        )
+    ).all()
+    lead_map = {r.day: r.cnt for r in lead_rows}
+    leads_por_dia: list[DailyCount] = []
+    cursor = date_from
+    while cursor <= date_to:
+        leads_por_dia.append(
+            DailyCount(date=cursor.isoformat(), count=lead_map.get(cursor, 0))
+        )
+        cursor += timedelta(days=1)
+    leads_total = sum(lead_map.values())
+
+    # ── 2. Leads por estágio (snapshot atual do funil) ────────────────────────
+    stage_rows = (
+        await db.execute(
+            select(Lead.stage, func.count(Lead.id).label("cnt")).group_by(Lead.stage)
+        )
+    ).all()
+    stage_map = {r.stage: r.cnt for r in stage_rows}
+    leads_por_estagio = [
+        StageCount(stage=s.value, count=stage_map.get(s, 0)) for s in _STAGE_ORDER
+    ]
+
+    # ── 3. Serviços realizados (concluídos no período) — lista completa ───────
+    svc_rows = (
+        await db.execute(
+            select(
+                Service.id,
+                Service.name,
+                Service.category,
+                func.count(AppointmentItem.id).label("cnt"),
+                func.coalesce(func.sum(AppointmentItem.price_charged), 0).label("rev"),
+            )
+            .select_from(AppointmentItem)
+            .join(Service, Service.id == AppointmentItem.service_id)
+            .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
+            .where(
+                Appointment.status == AppointmentStatus.concluido,
+                local_date(Appointment.start_at) >= date_from,
+                local_date(Appointment.start_at) <= date_to,
+            )
+            .group_by(Service.id, Service.name, Service.category)
+            .order_by(func.count(AppointmentItem.id).desc())
+        )
+    ).all()
+    servicos_realizados = [
+        ServiceRank(
+            service_id=r.id,
+            name=r.name,
+            category=r.category.value,
+            count=r.cnt,
+            revenue=float(r.rev),
+        )
+        for r in svc_rows
+    ]
+
+    # ── 4. Picos de demanda (hora local dos agendamentos) ─────────────────────
+    hour_expr = func.extract(
+        "hour", func.timezone(settings.app_timezone, Appointment.start_at)
+    )
+    demand_rows = (
+        await db.execute(
+            select(hour_expr.label("h"), func.count(Appointment.id.distinct()).label("cnt"))
+            .where(
+                local_date(Appointment.start_at) >= date_from,
+                local_date(Appointment.start_at) <= date_to,
+            )
+            .group_by(hour_expr)
+            .order_by(hour_expr)
+        )
+    ).all()
+    picos_demanda = [DemandHour(hour=int(r.h), count=r.cnt) for r in demand_rows]
+
+    # ── 5. Fluxo comercial vs fora do horário comercial (leads do período) ────
+    windows = await _business_hour_windows(db)
+    lead_created_rows = (
+        await db.execute(
+            select(Lead.created_at).where(
+                local_date(Lead.created_at) >= date_from,
+                local_date(Lead.created_at) <= date_to,
+            )
+        )
+    ).scalars().all()
+    tz = local_tz()
+    comercial = 0
+    fora = 0
+    for created in lead_created_rows:
+        loc = created.astimezone(tz)
+        weekday = loc.isoweekday() % 7  # 0=dom..6=sáb (igual ao business_hours)
+        t = loc.time()
+        in_hours = any(o <= t < c for (o, c) in windows.get(weekday, []))
+        if in_hours:
+            comercial += 1
+        else:
+            fora += 1
+    total_fluxo = comercial + fora
+    fluxo = FluxoComercial(
+        comercial=comercial,
+        fora=fora,
+        comercial_pct=round(comercial / total_fluxo * 100, 1) if total_fluxo else 0.0,
+        fora_pct=round(fora / total_fluxo * 100, 1) if total_fluxo else 0.0,
+    )
+
+    return OperacionalOut(
+        period=period,
+        date_from=date_from.isoformat(),
+        date_to=date_to.isoformat(),
+        leads_total=leads_total,
+        leads_por_dia=leads_por_dia,
+        leads_por_estagio=leads_por_estagio,
+        servicos_realizados=servicos_realizados,
+        picos_demanda=picos_demanda,
+        fluxo=fluxo,
     )

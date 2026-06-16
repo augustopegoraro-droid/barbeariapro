@@ -35,6 +35,7 @@ from .appointment import Appointment, AppointmentItem
 from .payment import Expense, ExpenseCategory, Payment
 from .integration import CalendarSync, IntegrationAccount, MessageLog
 from .loyalty import ClientLoyalty
+from .lead import Lead, LeadEvent
 
 __all__ = [
     "Base",
@@ -86,4 +87,7 @@ __all__ = [
     "LoyaltyNivel",
     "LoyaltyStatus",
     "LoyaltyCategoria",
+    # CRM / funil
+    "Lead",
+    "LeadEvent",
 ]
