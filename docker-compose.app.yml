@@ -49,9 +49,10 @@ services:
       context: ./barbearia-frontend
       dockerfile: Dockerfile
       args:
-        # Inlinado no bundle do browser (browser roda no HOST → localhost:8000)
-        NEXT_PUBLIC_API_URL: http://localhost:8000
-        NEXT_PUBLIC_ORG_ID: "3"
+        # Inlinado no bundle do browser em tempo de build.
+        # Em produção: definir NEXT_PUBLIC_API_URL=https://api.taylorethedy.com.br no .env
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_ORG_ID: ${NEXT_PUBLIC_ORG_ID:-3}
     image: barbeariapro-frontend
     container_name: barbeariapro-app-frontend
     restart: unless-stopped

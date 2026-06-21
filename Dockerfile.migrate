@@ -1,0 +1,15 @@
+# Imagem de migrations — roda alembic upgrade head.
+# Não é a imagem de runtime; usada apenas por deploy/setup-vm.sh e deploy/update.sh.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY alembic/     ./alembic/
+COPY alembic.ini  .
+COPY models/      ./models/
+
+# DATABASE_URL é injetado em runtime (ADMIN_DATABASE_URL da .env de produção).
+CMD ["python", "-m", "alembic", "upgrade", "head"]

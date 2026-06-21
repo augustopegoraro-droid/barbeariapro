@@ -16,6 +16,10 @@ Thumbs.db
 .env.local
 .env.*.local
 *.env
+# Exemplos sem secrets — devem ser commitados
+!.env.example
+!.env.production.example
+!.env.docker.example
 
 # ── Credenciais e secrets ─────────────────────────────────────────────────────
 credentials.json
