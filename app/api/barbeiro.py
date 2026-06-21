@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status as http_status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, status as http_status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.rbac import check_appointment_ownership
 from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
+from app.services.calendar_sync import push_appointment
 from app.services.loyalty import recalculate as _recalculate_loyalty
 from models import Appointment, AppointmentItem, Payment, User
 from models.enums import AppointmentStatus, PaymentMethod
@@ -63,6 +64,7 @@ class AtendimentoOut(BaseModel):
 async def concluir_atendimento(
     appt_id: Annotated[int, Path(gt=0)],
     body: ConcluirRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AtendimentoOut:
@@ -105,12 +107,14 @@ async def concluir_atendimento(
     await db.commit()
 
     final_total = amount + (tip or Decimal("0"))
+    background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
     return AtendimentoOut(id=appt_id, status="concluido", total_amount=float(final_total))
 
 
 @router.patch("/atendimento/{appt_id}/faltou", response_model=AtendimentoOut)
 async def faltou_atendimento(
     appt_id: Annotated[int, Path(gt=0)],
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AtendimentoOut:
@@ -124,12 +128,14 @@ async def faltou_atendimento(
     appt.status = AppointmentStatus.faltou
     await db.commit()
 
+    background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "delete")
     return AtendimentoOut(id=appt_id, status="faltou", total_amount=orig_total)
 
 
 @router.patch("/atendimento/{appt_id}/cancelar", response_model=AtendimentoOut)
 async def cancelar_atendimento(
     appt_id: Annotated[int, Path(gt=0)],
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AtendimentoOut:
@@ -143,4 +149,5 @@ async def cancelar_atendimento(
     appt.status = AppointmentStatus.cancelado
     await db.commit()
 
+    background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "delete")
     return AtendimentoOut(id=appt_id, status="cancelado", total_amount=orig_total)
