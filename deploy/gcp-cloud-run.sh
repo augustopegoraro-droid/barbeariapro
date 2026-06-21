@@ -28,15 +28,16 @@ ZONE="${REGION}-a"
 VM_INSTANCE=barbeariapro
 VM_IP=34.95.199.134
 
-APP_DOMAIN=app.taylorethedy.com.br
-API_DOMAIN=api.taylorethedy.com.br
+APP_DOMAIN=taylorethedy.app          # frontend
+API_DOMAIN=api.taylorethedy.com      # backend
 
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/barbeariapro"
 SQL_INSTANCE=barbeariapro-db
 APP_DB=barbeariapro
 APP_USER=barber_app
 OWNER_USER=barber_owner
-DNS_ZONE=barbeariapro-zone
+DNS_ZONE_APP=taylorethedy-app-zone   # zona para taylorethedy.app
+DNS_ZONE_COM=taylorethedy-com-zone   # zona para taylorethedy.com (api.taylorethedy.com)
 SA_NAME=barbeariapro-run
 SA_EMAIL="${SA_NAME}@${PROJECT}.iam.gserviceaccount.com"
 BACKUP_BUCKET="${PROJECT}-backups"
@@ -325,15 +326,31 @@ FRONTEND_URL=$(gcloud run services describe barbeariapro-frontend \
   --format="value(status.url)")
 ok "Frontend: $FRONTEND_URL"
 
-# ── 10. Cloud DNS ─────────────────────────────────────────────────────────────
-log "10/11  Cloud DNS"
-gcloud dns managed-zones create "$DNS_ZONE" \
-  --dns-name="taylorethedy.com.br." \
-  --description="Zona DNS BarbeariaPro" \
+# ── 10. Cloud DNS — duas zonas separadas ─────────────────────────────────────
+log "10/11  Cloud DNS (taylorethedy.app + taylorethedy.com)"
+
+# Zona para taylorethedy.app (frontend)
+gcloud dns managed-zones create "$DNS_ZONE_APP" \
+  --dns-name="taylorethedy.app." \
+  --description="Frontend BarbeariaPro" \
   --project="$PROJECT" \
-  2>/dev/null && ok "Zona DNS criada." || ok "Zona DNS já existe."
+  2>/dev/null && ok "Zona taylorethedy.app criada." || ok "Zona taylorethedy.app já existe."
+
+# Zona para taylorethedy.com (API — api.taylorethedy.com)
+gcloud dns managed-zones create "$DNS_ZONE_COM" \
+  --dns-name="taylorethedy.com." \
+  --description="API BarbeariaPro" \
+  --project="$PROJECT" \
+  2>/dev/null && ok "Zona taylorethedy.com criada." || ok "Zona taylorethedy.com já existe."
 
 # Mapear domínios ao Cloud Run (Google gerencia SSL automaticamente)
+gcloud run domain-mappings create \
+  --service=barbeariapro-frontend \
+  --domain="$APP_DOMAIN" \
+  --region="$REGION" \
+  --project="$PROJECT" \
+  2>/dev/null || ok "Mapeamento frontend já existe."
+
 gcloud run domain-mappings create \
   --service=barbeariapro-backend \
   --domain="$API_DOMAIN" \
@@ -341,47 +358,35 @@ gcloud run domain-mappings create \
   --project="$PROJECT" \
   2>/dev/null || ok "Mapeamento api já existe."
 
-gcloud run domain-mappings create \
-  --service=barbeariapro-frontend \
-  --domain="$APP_DOMAIN" \
-  --region="$REGION" \
-  --project="$PROJECT" \
-  2>/dev/null || ok "Mapeamento app já existe."
-
-# Aguardar registros DNS dos domain-mappings e adicioná-los à zona Cloud DNS
+# Adicionar registros DNS gerados pelo Cloud Run nas suas respectivas zonas
 echo "  Coletando registros DNS do Cloud Run..."
 sleep 5
-for DOMAIN in "$API_DOMAIN" "$APP_DOMAIN"; do
-  RECORDS=$(gcloud run domain-mappings describe \
-    --domain="$DOMAIN" --region="$REGION" --project="$PROJECT" \
-    --format="value(status.resourceRecords)" 2>/dev/null || echo "")
 
-  if [ -n "$RECORDS" ]; then
-    # Processar cada registro retornado
-    gcloud run domain-mappings describe \
-      --domain="$DOMAIN" --region="$REGION" --project="$PROJECT" \
-      --format="json(status.resourceRecords)" 2>/dev/null \
-    | python3 -c "
+_add_dns_records() {
+  local domain="$1" zone="$2" root_fqdn="$3"
+  gcloud run domain-mappings describe \
+    --domain="$domain" --region="$REGION" --project="$PROJECT" \
+    --format="json(status.resourceRecords)" 2>/dev/null \
+  | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 records = data.get('status', {}).get('resourceRecords', [])
 for r in records:
-    print(r.get('type',''), r.get('name', '@'), r.get('rrdata',''))
+    print(r.get('type',''), r.get('name','@'), r.get('rrdata',''))
 " | while read -r rtype rname rdata; do
-      # Adicionar registro à zona Cloud DNS
-      FQDN="${rname}.taylorethedy.com.br."
-      [ "$rname" = "@" ] && FQDN="taylorethedy.com.br."
-      gcloud dns record-sets create "$FQDN" \
-        --zone="$DNS_ZONE" \
-        --type="$rtype" \
-        --ttl=300 \
-        --rrdatas="$rdata" \
-        --project="$PROJECT" \
-        2>/dev/null || true
-    done
-  fi
-done
-ok "Registros DNS configurados."
+    [ -z "$rtype" ] && continue
+    FQDN="${rname}.${root_fqdn}."
+    [ "$rname" = "@" ] && FQDN="${root_fqdn}."
+    gcloud dns record-sets create "$FQDN" \
+      --zone="$zone" --type="$rtype" --ttl=300 \
+      --rrdatas="$rdata" --project="$PROJECT" \
+      2>/dev/null || true
+  done
+}
+
+_add_dns_records "$APP_DOMAIN" "$DNS_ZONE_APP" "taylorethedy.app"
+_add_dns_records "$API_DOMAIN" "$DNS_ZONE_COM" "taylorethedy.com"
+ok "Registros DNS configurados nas duas zonas."
 
 # ── 11. VM — Evolution + n8n ──────────────────────────────────────────────────
 log "11/11  VM — Evolution API + n8n"
@@ -447,41 +452,50 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 ok "Evolution + n8n configurados na VM."
 
 # ── Resumo final ──────────────────────────────────────────────────────────────
-NS=$(gcloud dns managed-zones describe "$DNS_ZONE" \
-  --project="$PROJECT" \
-  --format="value(nameServers)" | tr ';' '\n' | sed 's/^/    /')
+NS_APP=$(gcloud dns managed-zones describe "$DNS_ZONE_APP" \
+  --project="$PROJECT" --format="value(nameServers)" | tr ';' '\n' | sed 's/^/    /')
+NS_COM=$(gcloud dns managed-zones describe "$DNS_ZONE_COM" \
+  --project="$PROJECT" --format="value(nameServers)" | tr ';' '\n' | sed 's/^/    /')
 
 cat <<SUMMARY
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅  DEPLOY CONCLUÍDO
 
-  Frontend (temporário):  $FRONTEND_URL
-  Backend  (temporário):  $BACKEND_URL
+  URLs já funcionam (certificado SSL leva ~15 min):
+    Frontend : $FRONTEND_URL
+    Backend  : $BACKEND_URL
 
-  Após configurar DNS, acesse:
+  URLs finais (após DNS propagar):
     https://$APP_DOMAIN
     https://$API_DOMAIN
 
-━━━  AÇÃO NECESSÁRIA: Atualizar Nameservers  ━━━━━━━━━━━━━━━━━━
+━━━  AÇÃO NECESSÁRIA 1/3: Nameservers de taylorethedy.app  ━━━━
 
-  No site onde você registrou taylorethedy.com.br (registro.br),
-  substitua os nameservers atuais por estes 4:
+  No site onde registrou taylorethedy.app (GoDaddy, Namecheap etc.),
+  substitua os nameservers por estes 4:
 
-$NS
+$NS_APP
 
-  Após salvar, aguarde ~30 minutos para o DNS propagar.
+━━━  AÇÃO NECESSÁRIA 2/3: Nameservers de taylorethedy.com  ━━━━
 
-━━━  AÇÃO NECESSÁRIA: Google Cloud Console (OAuth)  ━━━━━━━━━━━
+  No site onde registrou taylorethedy.com,
+  substitua os nameservers por estes 4:
 
-  Acesse: console.cloud.google.com → APIs → Credenciais → OAuth 2.0
-  Adicione esta URI de redirect autorizado:
+$NS_COM
+
+  Após salvar os dois, aguarde ~30 minutos para propagar.
+
+━━━  AÇÃO NECESSÁRIA 3/3: Google Cloud Console (OAuth)  ━━━━━━━
+
+  console.cloud.google.com → APIs → Credenciais → OAuth 2.0
+  Adicione URI de redirect autorizado:
     https://$API_DOMAIN/integracoes/google/calendar/callback
 
-━━━  n8n (importar workflow após DNS propagar)  ━━━━━━━━━━━━━━━
+━━━  n8n — importar workflow (após DNS propagar)  ━━━━━━━━━━━━━
 
-  Acesse http://$VM_IP:5678 e importe o arquivo workflows.json.
-  Depois feche a porta 5678 com:
+  Acesse http://$VM_IP:5678 e importe workflows.json.
+  Depois feche a porta 5678:
     gcloud compute firewall-rules delete allow-n8n --project=$PROJECT
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

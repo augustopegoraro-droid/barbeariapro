@@ -62,8 +62,8 @@ cat <<EOF
 ✅ Infraestrutura pronta — IP: $STATIC_IP
 
 Agora configure o DNS (no seu provedor de domínio):
-  app.taylorethedy.com.br  →  A  →  $STATIC_IP
-  api.taylorethedy.com.br  →  A  →  $STATIC_IP
+  taylorethedy.app     →  A  →  $STATIC_IP
+  api.taylorethedy.com →  A  →  $STATIC_IP
 
 Aguarde a propagação (~5–30 min) e então:
 

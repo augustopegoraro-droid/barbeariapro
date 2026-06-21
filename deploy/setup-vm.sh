@@ -38,18 +38,18 @@ systemctl reload nginx
 log "4/7  SSL — certbot"
 echo ""
 echo "  ⚠️  IMPORTANTE: verifique que os DNS já propagaram antes de continuar."
-echo "  app.taylorethedy.com.br e api.taylorethedy.com.br devem apontar para este IP."
-echo "  Teste: dig +short app.taylorethedy.com.br"
+echo "  taylorethedy.app e api.taylorethedy.com devem apontar para este IP."
+echo "  Teste: dig +short taylorethedy.app"
 echo ""
 read -rp "  DNS OK? [s/N] " dns_ok
 if [[ "${dns_ok,,}" != "s" ]]; then
   echo "  Configure o DNS e re-execute a partir deste passo:"
-  echo "    certbot --nginx -d app.taylorethedy.com.br -d api.taylorethedy.com.br --redirect --agree-tos --no-eff-email"
+  echo "    certbot --nginx -d taylorethedy.app -d api.taylorethedy.com --redirect --agree-tos --no-eff-email"
   echo "  Continuando sem SSL por enquanto..."
 else
   certbot --nginx \
-    -d app.taylorethedy.com.br \
-    -d api.taylorethedy.com.br \
+    -d taylorethedy.app \
+    -d api.taylorethedy.com \
     --redirect --agree-tos --no-eff-email
   # Renovação automática via cron já configurada pelo certbot
 fi
@@ -82,15 +82,15 @@ docker compose -f docker-compose.app.yml up -d --build
 echo ""
 echo "✅ Deploy concluído!"
 echo ""
-echo "  Frontend : https://app.taylorethedy.com.br"
-echo "  API      : https://api.taylorethedy.com.br"
-echo "  API Docs : https://api.taylorethedy.com.br/docs"
+echo "  Frontend : https://taylorethedy.app"
+echo "  API      : https://api.taylorethedy.com"
+echo "  API Docs : https://api.taylorethedy.com/docs"
 echo ""
 echo "  Logs:  docker compose -f docker-compose.app.yml logs -f"
 echo "  Status: docker compose -f docker-compose.app.yml ps"
 echo ""
 echo "⚠️  Lembrete pós-deploy:"
-echo "  1. Adicione https://api.taylorethedy.com.br/integracoes/google/calendar/callback"
+echo "  1. Adicione https://api.taylorethedy.com/integracoes/google/calendar/callback"
 echo "     no Google Cloud Console → OAuth 2.0 Client IDs."
 echo "  2. Importe os workflows n8n via:"
 echo "     docker compose cp workflows.json n8n:/tmp/"
