@@ -18,6 +18,7 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,15 @@ from models.enums import IntegrationProvider, IntegrationStatus
 from models.integration import IntegrationAccount
 
 router = APIRouter(prefix="/integracoes", tags=["integracoes"])
+
+
+class AuthorizeUrlOut(BaseModel):
+    url: str
+
+
+class CalendarStatusOut(BaseModel):
+    connected: bool
+
 
 _STATE_ALG = "HS256"
 _STATE_TTL_SECONDS = 300  # 5 minutos
@@ -166,7 +176,57 @@ async def google_calendar_callback(
                     )
                 )
 
+    success_url = settings.google_frontend_success_url
+    if success_url:
+        return RedirectResponse(url=f"{success_url}?calendar=connected", status_code=302)
     return JSONResponse(
         content={"status": "ok", "message": "Google Calendar conectado com sucesso"},
         status_code=200,
     )
+
+
+@router.get(
+    "/google/calendar/authorize-url",
+    response_model=AuthorizeUrlOut,
+    summary="Devolve a URL de consentimento OAuth (para o frontend redirecionar)",
+)
+async def authorize_url_json(
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AuthorizeUrlOut:
+    """Versão JSON de /authorize — o frontend chama com axios e faz window.location.href."""
+    role = await resolve_current_role(db, current_user)
+    if role not in ("owner", "manager"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas owner/manager pode conectar o Google Calendar",
+        )
+    state = _build_state(current_user.organization_id)
+    try:
+        url = gc.build_authorization_url(state=state)
+    except gc.GoogleCalendarError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+    return AuthorizeUrlOut(url=url)
+
+
+@router.get(
+    "/google/calendar/status",
+    response_model=CalendarStatusOut,
+    summary="Verifica se o Google Calendar está conectado na org",
+)
+async def calendar_status(
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> CalendarStatusOut:
+    connected = (
+        await db.execute(
+            select(IntegrationAccount.id)
+            .where(
+                IntegrationAccount.organization_id == current_user.organization_id,
+                IntegrationAccount.provider == IntegrationProvider.google_calendar,
+                IntegrationAccount.status == IntegrationStatus.active,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return CalendarStatusOut(connected=connected is not None)

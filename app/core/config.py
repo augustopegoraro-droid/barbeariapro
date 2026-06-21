@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     google_calendar_scopes: str = "https://www.googleapis.com/auth/calendar.events"
     # Chave Fernet (urlsafe-base64, 32 bytes) p/ cifrar tokens OAuth em repouso.
     token_encryption_key: str = ""
+    # URL do frontend para redirecionar após o callback OAuth (ex.: /admin/configuracoes).
+    # Se vazio, o callback devolve JSON (útil em testes de API diretos).
+    google_frontend_success_url: str = ""
 
     # Reativação de clientes
     reactivation_trigger_days: int = 60

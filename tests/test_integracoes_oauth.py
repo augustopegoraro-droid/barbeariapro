@@ -159,6 +159,7 @@ async def test_callback_persiste_integration_account(client, monkeypatch):
     monkeypatch.setattr(settings, "google_client_id", "cid.apps.googleusercontent.com")
     monkeypatch.setattr(settings, "google_client_secret", "secret")
     monkeypatch.setattr(settings, "google_redirect_uri", "http://localhost:8001/cb")
+    monkeypatch.setattr(settings, "google_frontend_success_url", "")  # força retorno JSON
     monkeypatch.setattr(settings, "token_encryption_key", Fernet.generate_key().decode())
     crypto._fernet_for.cache_clear()
 
@@ -168,7 +169,8 @@ async def test_callback_persiste_integration_account(client, monkeypatch):
     with patch("app.services.google_calendar.exchange_code", side_effect=fake_exchange):
         state = _build_state(org_id=seed_org)
         resp = await client.get(
-            f"/integracoes/google/calendar/callback?code=test-code&state={state}"
+            f"/integracoes/google/calendar/callback?code=test-code&state={state}",
+            follow_redirects=False,
         )
 
     assert resp.status_code == 200
