@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status as http_status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, status as http_status
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from app.deps import (
     resolve_current_role,
     resolve_current_role_with_barber,
 )
+from app.services.calendar_sync import push_appointment
 from app.services.scheduling import barber_has_conflict
 from models import (
     Appointment,
@@ -220,6 +221,7 @@ async def list_services_for_agenda(
 @router.post("", response_model=AppointmentOut, status_code=http_status.HTTP_201_CREATED)
 async def criar_agendamento(
     body: AgendaCriarIn,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AppointmentOut:
@@ -330,6 +332,7 @@ async def criar_agendamento(
     ))
     await db.commit()
 
+    background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
     return AppointmentOut(
         id=appt_id,
         public_id=public_id,
@@ -350,6 +353,7 @@ async def criar_agendamento(
 async def reagendar_agendamento(
     appt_id: Annotated[int, Path(gt=0)],
     body: AgendaReagendar,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AppointmentOut:
@@ -391,6 +395,7 @@ async def reagendar_agendamento(
     appt.end_at = end_utc
     await db.commit()
 
+    background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
     barber_name = primary_item.barber.name if primary_item else "—"
     service_name = primary_item.service.name if primary_item else None
     return _appt_out(appt, appt.client.name, barber_name, service_name)

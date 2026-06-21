@@ -120,3 +120,13 @@ class LoyaltyCategoria(str, enum.Enum):
     prata = "prata"
     ouro = "ouro"
     diamante = "diamante"
+
+
+class LeadStage(str, enum.Enum):
+    """Estágios do funil/Kanban do CRM."""
+
+    novo_contato = "novo_contato"
+    conversando = "conversando"
+    agendado = "agendado"
+    concluido = "concluido"
+    perdido = "perdido"
