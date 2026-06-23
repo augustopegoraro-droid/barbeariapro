@@ -1,37 +1,424 @@
 [
   {
-    "updatedAt": "2026-05-30T03:14:27.857Z",
-    "createdAt": "2026-05-29T13:22:39.910Z",
-    "id": "cVk4tdWH3JCqfL2r",
-    "name": "My workflow",
+    "updatedAt": "2026-06-23T17:14:47.000Z",
+    "createdAt": "2026-06-23T16:45:00.175Z",
+    "id": "CronReminder24h01",
+    "name": "BarbeariaPro Cron - Lembrete 24h",
     "description": null,
-    "active": false,
+    "active": true,
     "isArchived": false,
     "nodes": [
       {
-        "parameters": {},
-        "type": "n8n-nodes-base.manualTrigger",
-        "typeVersion": 1,
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "5 * * * *"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
         "position": [
           0,
           0
         ],
-        "id": "0dbd6036-09f3-4f97-9d39-4f18185b02c6",
-        "name": "When clicking 'Execute workflow'"
+        "id": "cron-reminder-001",
+        "name": "A Cada Hora"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:8000/internal/reminders/run",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Bot-Token",
+                "value": "={{ $env.BOT_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 120000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          220,
+          0
+        ],
+        "id": "http-reminder-001",
+        "name": "HTTP Run Reminders"
       }
     ],
-    "connections": {},
+    "connections": {
+      "A Cada Hora": {
+        "main": [
+          [
+            {
+              "node": "HTTP Run Reminders",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
     "settings": {
       "executionOrder": "v1"
     },
-    "staticData": null,
+    "staticData": {
+      "node:A Cada Hora": {
+        "recurrenceRules": []
+      }
+    },
     "meta": null,
-    "pinData": {},
-    "versionId": "6e73946f-e338-4318-a37d-6450ed48d377",
-    "tags": []
+    "nodeGroups": [],
+    "pinData": null,
+    "versionId": "6d39fcf5-2ffa-4227-bdc3-4984150569d7",
+    "activeVersionId": "6d39fcf5-2ffa-4227-bdc3-4984150569d7",
+    "versionCounter": 1,
+    "triggerCount": 1,
+    "sourceWorkflowId": null,
+    "shared": [
+      {
+        "updatedAt": "2026-06-23T16:45:00.177Z",
+        "createdAt": "2026-06-23T16:45:00.177Z",
+        "role": "workflow:owner",
+        "workflowId": "CronReminder24h01",
+        "projectId": "uRQKID33o2fa0ZoW",
+        "project": {
+          "updatedAt": "2026-06-23T17:12:03.239Z",
+          "createdAt": "2026-06-23T15:24:41.675Z",
+          "id": "uRQKID33o2fa0ZoW",
+          "name": "Augusto Pegoraro <augustopegoraro.apl@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "e968ead9-6769-4805-848b-8923675da960"
+        }
+      }
+    ],
+    "tags": [],
+    "parentFolder": null,
+    "activeVersion": {
+      "updatedAt": "2026-06-23T17:14:18.817Z",
+      "createdAt": "2026-06-23T17:14:18.817Z",
+      "versionId": "6d39fcf5-2ffa-4227-bdc3-4984150569d7",
+      "workflowId": "CronReminder24h01",
+      "nodes": [
+        {
+          "parameters": {
+            "rule": {
+              "interval": [
+                {
+                  "field": "cronExpression",
+                  "expression": "5 * * * *"
+                }
+              ]
+            }
+          },
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "typeVersion": 1.2,
+          "position": [
+            0,
+            0
+          ],
+          "id": "cron-reminder-001",
+          "name": "A Cada Hora"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8000/internal/reminders/run",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "X-Bot-Token",
+                  "value": "={{ $env.BOT_API_KEY }}"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "options": {
+              "timeout": 120000
+            }
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            220,
+            0
+          ],
+          "id": "http-reminder-001",
+          "name": "HTTP Run Reminders"
+        }
+      ],
+      "connections": {
+        "A Cada Hora": {
+          "main": [
+            [
+              {
+                "node": "HTTP Run Reminders",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      },
+      "nodeGroups": [],
+      "authors": "import",
+      "name": null,
+      "description": null,
+      "autosaved": false,
+      "workflowPublishHistory": []
+    },
+    "scopes": [
+      "execution:reveal",
+      "workflow:create",
+      "workflow:delete",
+      "workflow:disableRedaction",
+      "workflow:enableRedaction",
+      "workflow:execute",
+      "workflow:execute-chat",
+      "workflow:export",
+      "workflow:import",
+      "workflow:list",
+      "workflow:move",
+      "workflow:publish",
+      "workflow:read",
+      "workflow:share",
+      "workflow:unpublish",
+      "workflow:unshare",
+      "workflow:update"
+    ],
+    "checksum": "a95c5ce26a2d897aafb567ae7e39e3798846853fd5e04f72f94e0ac0622917a8"
   },
   {
-    "updatedAt": "2026-06-03T00:00:00.000Z",
+    "updatedAt": "2026-06-23T17:14:53.000Z",
+    "createdAt": "2026-06-23T16:45:00.180Z",
+    "id": "CronReactivation1",
+    "name": "BarbeariaPro Cron - Reativação Diária",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 11 * * *"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "id": "cron-react-001",
+        "name": "Diário 11h"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:8000/internal/loyalty/reactivation/run",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Bot-Token",
+                "value": "={{ $env.BOT_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 120000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          220,
+          0
+        ],
+        "id": "http-react-001",
+        "name": "HTTP Run Reactivation"
+      }
+    ],
+    "connections": {
+      "Diário 11h": {
+        "main": [
+          [
+            {
+              "node": "HTTP Run Reactivation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": {
+      "node:Diário 11h": {
+        "recurrenceRules": []
+      }
+    },
+    "meta": null,
+    "nodeGroups": [],
+    "pinData": null,
+    "versionId": "73c87dc6-9505-4b10-979a-63a4305574a4",
+    "activeVersionId": "73c87dc6-9505-4b10-979a-63a4305574a4",
+    "versionCounter": 1,
+    "triggerCount": 1,
+    "sourceWorkflowId": null,
+    "shared": [
+      {
+        "updatedAt": "2026-06-23T16:45:00.183Z",
+        "createdAt": "2026-06-23T16:45:00.183Z",
+        "role": "workflow:owner",
+        "workflowId": "CronReactivation1",
+        "projectId": "uRQKID33o2fa0ZoW",
+        "project": {
+          "updatedAt": "2026-06-23T17:12:03.239Z",
+          "createdAt": "2026-06-23T15:24:41.675Z",
+          "id": "uRQKID33o2fa0ZoW",
+          "name": "Augusto Pegoraro <augustopegoraro.apl@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "e968ead9-6769-4805-848b-8923675da960"
+        }
+      }
+    ],
+    "tags": [],
+    "parentFolder": null,
+    "activeVersion": {
+      "updatedAt": "2026-06-23T17:14:18.820Z",
+      "createdAt": "2026-06-23T17:14:18.820Z",
+      "versionId": "73c87dc6-9505-4b10-979a-63a4305574a4",
+      "workflowId": "CronReactivation1",
+      "nodes": [
+        {
+          "parameters": {
+            "rule": {
+              "interval": [
+                {
+                  "field": "cronExpression",
+                  "expression": "0 11 * * *"
+                }
+              ]
+            }
+          },
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "typeVersion": 1.2,
+          "position": [
+            0,
+            0
+          ],
+          "id": "cron-react-001",
+          "name": "Diário 11h"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8000/internal/loyalty/reactivation/run",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "X-Bot-Token",
+                  "value": "={{ $env.BOT_API_KEY }}"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "options": {
+              "timeout": 120000
+            }
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            220,
+            0
+          ],
+          "id": "http-react-001",
+          "name": "HTTP Run Reactivation"
+        }
+      ],
+      "connections": {
+        "Diário 11h": {
+          "main": [
+            [
+              {
+                "node": "HTTP Run Reactivation",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      },
+      "nodeGroups": [],
+      "authors": "import",
+      "name": null,
+      "description": null,
+      "autosaved": false,
+      "workflowPublishHistory": []
+    },
+    "scopes": [
+      "execution:reveal",
+      "workflow:create",
+      "workflow:delete",
+      "workflow:disableRedaction",
+      "workflow:enableRedaction",
+      "workflow:execute",
+      "workflow:execute-chat",
+      "workflow:export",
+      "workflow:import",
+      "workflow:list",
+      "workflow:move",
+      "workflow:publish",
+      "workflow:read",
+      "workflow:share",
+      "workflow:unpublish",
+      "workflow:unshare",
+      "workflow:update"
+    ],
+    "checksum": "eacbb859d0b97017dab3cf45c74b4b722a20cc0c90c837d8620889c5ee4d469a"
+  },
+  {
+    "updatedAt": "2026-06-23T23:22:23.350Z",
     "createdAt": "2026-05-30T11:46:53.458Z",
     "id": "25QZQ664N6hrIg59",
     "name": "BarbeariaPro Bot - WhatsApp Chatbot",
@@ -1292,6 +1679,70 @@
         ],
         "id": "if-paused-001",
         "name": "IF Bot Paused"
+      },
+      {
+        "id": "log-inbound-001",
+        "name": "Log Inbound Message",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1040,
+          220
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:8000/bot/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Bot-Token",
+                "value": "={{ $env.BOT_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({\"phone\": \"+\" + $('Set Phone').item.json.phone, \"direction\": \"inbound\", \"body\": $('HTTP Flush Buffer').item.json.message}) }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "log-outbound-001",
+        "name": "Log Outbound Message",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1480,
+          220
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:8000/bot/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Bot-Token",
+                "value": "={{ $env.BOT_API_KEY }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({\"phone\": \"+\" + $('Set Phone').item.json.phone, \"direction\": \"outbound\", \"body\": $('AI Agent').item.json.output}) }}",
+          "options": {}
+        }
       }
     ],
     "connections": {
@@ -1334,6 +1785,11 @@
           [
             {
               "node": "Send Response",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Log Outbound Message",
               "type": "main",
               "index": 0
             }
@@ -1518,6 +1974,11 @@
           [
             {
               "node": "Code Horário Comercial",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Log Inbound Message",
               "type": "main",
               "index": 0
             }
@@ -1758,169 +2219,1787 @@
     "meta": {
       "templateCredsSetupCompleted": true
     },
+    "nodeGroups": [],
     "pinData": {},
-    "versionId": "eeaf747f-9a4d-422f-ae01-0ed15d5f1b5c",
-    "activeVersionId": "b4f5d8b8-5a74-47e9-9d7d-e2fee7d6d543",
-    "versionCounter": 5,
+    "versionId": "3e56b468-d1bd-4946-84aa-4b27ad1dad5a",
+    "activeVersionId": "7519aa44-73e9-4604-8c3f-0dafec48b3ca",
+    "versionCounter": 11,
     "triggerCount": 1,
-    "tags": [],
+    "sourceWorkflowId": null,
     "shared": [
       {
+        "updatedAt": "2026-06-23T16:45:00.171Z",
+        "createdAt": "2026-06-23T16:45:00.171Z",
         "role": "workflow:owner",
         "workflowId": "25QZQ664N6hrIg59",
-        "projectId": "H2YqPFzdwCTqkwBP",
+        "projectId": "uRQKID33o2fa0ZoW",
         "project": {
-          "id": "H2YqPFzdwCTqkwBP",
+          "updatedAt": "2026-06-23T17:12:03.239Z",
+          "createdAt": "2026-06-23T15:24:41.675Z",
+          "id": "uRQKID33o2fa0ZoW",
           "name": "Augusto Pegoraro <augustopegoraro.apl@gmail.com>",
-          "type": "personal"
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "e968ead9-6769-4805-848b-8923675da960"
         }
       }
-    ]
-  },
-  {
-    "id": "CronReminder24h01",
-    "name": "BarbeariaPro Cron - Lembrete 24h",
-    "active": true,
-    "nodes": [
-      {
-        "parameters": {
-          "rule": {
-            "interval": [
-              {
-                "field": "cronExpression",
-                "expression": "5 * * * *"
-              }
-            ]
-          }
-        },
-        "type": "n8n-nodes-base.scheduleTrigger",
-        "typeVersion": 1.2,
-        "position": [
-          0,
-          0
-        ],
-        "id": "cron-reminder-001",
-        "name": "A Cada Hora"
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8000/internal/reminders/run",
-          "sendHeaders": true,
-          "headerParameters": {
-            "parameters": [
-              {
-                "name": "X-Bot-Token",
-                "value": "={{ $env.BOT_API_KEY }}"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          },
-          "options": {
-            "timeout": 120000
-          }
-        },
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.4,
-        "position": [
-          220,
-          0
-        ],
-        "id": "http-reminder-001",
-        "name": "HTTP Run Reminders"
-      }
     ],
-    "connections": {
-      "A Cada Hora": {
-        "main": [
-          [
-            {
-              "node": "HTTP Run Reminders",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      }
-    },
-    "settings": {
-      "executionOrder": "v1"
-    }
-  },
-  {
-    "id": "CronReactivation1",
-    "name": "BarbeariaPro Cron - Reativação Diária",
-    "active": true,
-    "nodes": [
-      {
-        "parameters": {
-          "rule": {
-            "interval": [
-              {
-                "field": "cronExpression",
-                "expression": "0 11 * * *"
-              }
-            ]
-          }
-        },
-        "type": "n8n-nodes-base.scheduleTrigger",
-        "typeVersion": 1.2,
-        "position": [
-          0,
-          0
-        ],
-        "id": "cron-react-001",
-        "name": "Diário 11h"
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8000/internal/loyalty/reactivation/run",
-          "sendHeaders": true,
-          "headerParameters": {
-            "parameters": [
-              {
-                "name": "X-Bot-Token",
-                "value": "={{ $env.BOT_API_KEY }}"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
+    "tags": [],
+    "parentFolder": null,
+    "activeVersion": {
+      "updatedAt": "2026-06-23T22:32:07.706Z",
+      "createdAt": "2026-06-23T22:32:07.706Z",
+      "versionId": "7519aa44-73e9-4604-8c3f-0dafec48b3ca",
+      "workflowId": "25QZQ664N6hrIg59",
+      "nodes": [
+        {
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "whatsapp",
+            "options": {}
           },
-          "options": {
-            "timeout": 120000
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2.1,
+          "position": [
+            -400,
+            0
+          ],
+          "id": "2ad06331-6c46-419e-bce8-a0feea6d3497",
+          "name": "Webhook",
+          "webhookId": "621b2e36-1301-4b16-98ed-e732ed81e34e"
+        },
+        {
+          "parameters": {
+            "assignments": {
+              "assignments": [
+                {
+                  "id": "sp1",
+                  "name": "phone",
+                  "value": "={{ $json.body.data.key.remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '') }}",
+                  "type": "string"
+                },
+                {
+                  "id": "sp2",
+                  "name": "fromMe",
+                  "value": "={{ $json.body.data.key.fromMe }}",
+                  "type": "boolean"
+                },
+                {
+                  "id": "sp3",
+                  "name": "remoteJid",
+                  "value": "={{ $json.body.data.key.remoteJid }}",
+                  "type": "string"
+                },
+                {
+                  "id": "sp4",
+                  "name": "message_id",
+                  "value": "={{ $json.body.data.key.id || '' }}",
+                  "type": "string"
+                },
+                {
+                  "id": "sp5",
+                  "name": "message",
+                  "value": "={{ $json.body.data.message.conversation || $json.body.data.message.extendedTextMessage?.text || $json.body.data.message.imageMessage?.caption || ($json.body.data.message.audioMessage ? '[Cliente enviou áudio — por favor, escreva sua mensagem]' : '') || ($json.body.data.message.documentMessage ? '[Cliente enviou documento]' : '') || '' }}",
+                  "type": "string"
+                },
+                {
+                  "id": "sp6",
+                  "name": "image_url",
+                  "value": "={{ $json.body.data.message.imageMessage?.url || '' }}",
+                  "type": "string"
+                },
+                {
+                  "id": "sp7",
+                  "name": "is_audio",
+                  "value": "={{ !!$json.body.data.message.audioMessage }}",
+                  "type": "boolean"
+                }
+              ]
+            },
+            "options": {}
+          },
+          "type": "n8n-nodes-base.set",
+          "typeVersion": 3.4,
+          "position": [
+            -200,
+            0
+          ],
+          "id": "setphone-001",
+          "name": "Set Phone"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8080/chat/sendPresence/Barbearia",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "apikey",
+                  "value": "={{ $env.EVOLUTION_API_KEY }}"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"number\": \"{{ $json.phone }}\",\n  \"presence\": \"composing\",\n  \"delay\": 2000\n}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            1440,
+            -120
+          ],
+          "id": "composing-001",
+          "name": "Send Composing"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "loose",
+                "version": 3
+              },
+              "conditions": [
+                {
+                  "id": "c1",
+                  "leftValue": "={{ $('Set Phone').item.json.remoteJid }}",
+                  "rightValue": "@s.whatsapp.net",
+                  "operator": {
+                    "type": "string",
+                    "operation": "endsWith"
+                  }
+                },
+                {
+                  "id": "c2",
+                  "leftValue": "={{ $('Set Phone').item.json.fromMe }}",
+                  "rightValue": false,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "false",
+                    "name": "filter.operator.false"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "looseTypeValidation": true,
+            "options": {}
+          },
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.3,
+          "position": [
+            200,
+            0
+          ],
+          "id": "if-001",
+          "name": "If Individual Message"
+        },
+        {
+          "parameters": {
+            "promptType": "define",
+            "text": "={{ '[WhatsApp: +' + $('Code Horário Comercial').item.json.phone + ']\\n[Data e hora: ' + $now.toISO() + ' (Palmas/TO, UTC-3)]\\n' + $('Code Horário Comercial').item.json.message }}",
+            "options": {
+              "systemMessage": "Você é Raquel, recepcionista da Barbearia Taylor & Thedy em Palmas-TO.\n\nVocê trabalha aqui há anos. Conhece o Taylor, o Thedy, cada cliente, a rotina da barbearia de ponta a ponta.\n\nVocê conversa pelo WhatsApp como uma funcionária de verdade. NUNCA mencione IA, chatbot, assistente virtual ou sistema. NUNCA use linguagem robótica.\n\n━━━ INÍCIO DE TODA CONVERSA ━━━\nAntes de responder qualquer mensagem, chame obter_perfil_cliente(phone=+NUMERO).\n\nSe a mensagem começar com [FORA_DO_HORARIO], avise o cliente que a barbearia está fechada neste momento, informe o horário de funcionamento (seg-sex 9h às 19h e sáb 9h às 17h), mas continue atendendo normalmente — responda perguntas e agende horários sem restrição. Seja natural:\n\"Estamos fora do horário agora, mas pode deixar! Funcionamos seg-sex das 9h às 19h e sáb das 9h às 17h. Me conta o que precisar 😊\"\nDepois disso, atenda normalmente como se estivesse dentro do horário.\n\nSe a mensagem começar com [NOVA_SESSAO], trate como início de conversa completamente nova — esqueça qualquer contexto de atendimento anterior (horários verificados, serviços discutidos, etc.) e comece do zero com uma saudação adequada.\n\nCom o perfil em mãos, você tem acesso a:\n• last_barber_name: barbeiro da última visita (pode ser diferente do favorito)\n• last_service_name: serviço da última visita\n• preferred_time: horário habitual ex '10:00'\n• has_photo_reference: cliente enviou foto de referência antes (true/false)\n• favorite_barber_name / favorite_service_name: mais frequentes no histórico\n\nComo abordar:\n\nCliente novo (found=false):\n\"Oi! Bem-vindo à Taylor & Thedy 😊 Como posso te ajudar?\"\n\nCliente recorrente (days_since_last_visit ≤ 45):\n→ Se tiver last_service_name e last_barber_name:\n\"Oi {nome}! {last_service_name} com o {last_barber_name} de novo? 😊\"\n\"Voltou rápido, {nome}! {last_service_name} com o {last_barber_name} de novo?\"\n→ Sem histórico específico:\n\"Bom te ver de novo, {nome}! Quer agendar?\"\n\nCliente inativo (days_since_last_visit > 45):\n\"Ei {nome}! Sumido hein 😄 Faz um tempão. Vamos deixar o visual em dia?\"\nNunca pressione. Nunca cobre.\n\n━━━ A BARBEARIA ━━━\nBarbearia Taylor & Thedy — Palmas/TO\nReferência em corte masculino na cidade. Fundada pelo Taylor e pelo Thedy.\n\n━━━ OS BARBEIROS ━━━\nTaylor (id=1): cortes clássicos e modernos. Detalhista, preciso. Acabamento impecável.\nThedy (id=2): barba, acabamento e coloração. Descontraído. Referência em pigmentação de barba na região.\n\nSugestão por serviço:\n- Corte → Taylor\n- Barba / coloração → Thedy\n- Corte + Barba (combo 75min) → Taylor ou Thedy (prefira o favorito do cliente)\n- Cliente com histórico → sugira o barbeiro favorito do perfil\n\n━━━ COMO VOCÊ FALA ━━━\nMensagens curtas — máximo 2-3 linhas por resposta.\nUse o nome do cliente sempre que souber.\nVarie as respostas. Nunca repita a mesma frase.\nEmojis moderados, como uma pessoa real usaria no WhatsApp.\nSem formalidade excessiva. Sem textão. Sem listas longas.\n\n✅ BOM:\n\"Deixa eu ver aqui... ele tem às 9h, 10h30 ou 14h. Qual prefere?\"\n\"Prontinho! Reservado com o Taylor na quinta às 9h 🙌 Te esperamos!\"\n\"Feito! Cancelei seu horário. Quando quiser remarcar é só chamar 😊\"\n\"Corte e barba? Fica ainda mais caprichado 😄\"\n\n❌ RUIM:\n\"Olá, como posso ajudá-lo hoje?\"\n\"Verificando disponibilidade no sistema.\"\n\"Agendamento realizado com sucesso.\"\n\"Por favor, informe a data desejada.\"\n\"Posso ajudá-lo com mais alguma coisa?\"\n\n━━━ FOTOS E ÁUDIOS ━━━\nFOTOS — quando a mensagem contiver [IMAGEM_REF: ...], você já sabe o que é a foto.\nUse essa informação de forma completamente natural, como alguém que recebeu a foto e entendeu:\n\"Esse degradê ficou muito bom 😍 Quer vir fazer igual?\"\n\"Barba bem alinhada! O Thedy faz exatamente assim.\"\n\"Recebi o comprovante 👍 Já confirmo aqui.\"\nNUNCA diga: \"analisei\", \"vi a imagem\", \"identifiquei\", \"processou\". Reaja como pessoa.\nSe has_photo_reference=true e last_photo_description disponível, use ao agendar: \"Vou deixar a referência anotada pro {barbeiro} 📸\"\n\nÁUDIOS — você recebe o texto transcrito como se fosse mensagem normal.\nNUNCA mencione áudio, transcrição, voz, gravação ou que ouviu algo.\nAja como se o cliente tivesse digitado normalmente.\nSe a transcrição chegar vazia ou mensagem for [AUDIO_NAO_TRANSCRITO]: \"Não entendi muito bem 😅 Pode repetir?\"\n\n━━━ USANDO O HISTÓRICO ━━━\n\"Igual da última vez\", \"o de sempre\", \"mesmo corte\" → use last_service_name + last_barber_name:\n\"Degradê com o Taylor de novo? Que dia você quer? 😊\"\n\"Corte e barba com o Thedy? Deixa eu ver os horários dele.\"\nSe last_service_name for null: \"Qual serviço você prefere?\"\n\nHorário habitual (preferred_time disponível):\nAo listar opções, coloque o horário mais próximo do preferred_time na frente:\n\"Ele tem às {preferred_time}, 10h30 e 14h — qual prefere?\"\nNunca diga que \"sabe\" o horário do cliente. Apenas priorize na listagem.\n\nFoto de referência (has_photo_reference = true):\nAo confirmar agendamento, mencione UMA VEZ:\n→ Se last_photo_description disponível: \"Vou deixar a referência ({last_photo_description}) anotada pro {barbeiro} 📸\"\n→ Sem descrição: \"Você mandou uma foto de referência antes 📸 Vou deixar anotado pro barbeiro.\"\nNunca tente reanalisar ou buscar a foto.\n\n━━━ CONTEXTO LOCAL ━━━\nSe o cliente mencionar calor de Palmas, chuva, Copa do Mundo 2026, Seleção, feriado ou evento local → comente brevemente com naturalidade, depois volte ao foco. NUNCA inicie esses assuntos. Um comentário curto, nada mais.\n\n━━━ VENDA CONSULTIVA ━━━\nUma vez por conversa, quando fizer sentido, sugira o combo Corte + Barba (serviço único, 75min):\n\"Se quiser aproveitar, temos o Corte + Barba — fica ainda mais caprichado 😄\"\n\"Esse horário dá tranquilo pra Corte + Barba também.\"\nQuando o cliente aceitar, use o serviço \"Corte + Barba\" (combo) — NÃO crie dois agendamentos separados.\nNunca insista. Uma sugestão só. Sem pressão.\n\n━━━ FLUXO PARA AGENDAR ━━━\n1. obter_perfil_cliente(phone=+NUMERO) — identifique quem é\n2. Descobrir serviço — use listar_servicos se precisar mostrar opções\n3. Descobrir barbeiro — sugira pelo histórico do perfil ou pelo tipo de serviço\n4. Descobrir a data — use a data atual do contexto para \"amanhã\", \"semana que vem\" etc.\n5. verificar_disponibilidade(barber_id, service_id, date=YYYY-MM-DD)\n6. Apresentar horários humanamente: \"Ele tem às 9h, 10h30 ou 14h. Qual prefere?\"\n7. Confirmar o horário escolhido com o cliente\n8. Perguntar o nome se ainda não souber\n9. cadastrar_cliente(phone=NUMERO_SEM_MAIS, name=NOME)\n   ⚠ NUMERO SEM o + (ex: 5563999368196)\n10. criar_agendamento(client_id, barber_id, service_id, start_at=ISO-03:00)\n    ⚠ Formato obrigatório: 2026-06-10T09:00:00-03:00\n    ⚠ SOMENTE use horários que vieram de verificar_disponibilidade NESTA conversa\n11. Confirmar com simpatia: \"Prontinho! Você tá reservado com o {barbeiro} na {dia} às {hora}. Te esperamos! 😊\"\n\nSe criar_agendamento retornar erro 409 (conflito): chame verificar_disponibilidade novamente\npara esse mesmo dia e barbeiro e ofereça os horários disponíveis atualizados. Não tente o mesmo horário.\n\nSe verificar_disponibilidade retornar lista vazia por 2 tentativas (datas/barbeiros diferentes):\ninforme que não há horários no período e sugira ligar para a barbearia.\n\n━━━ FLUXO PARA CONSULTAR ━━━\n→ consultar_agendamentos(phone=+NUMERO_COM_MAIS)\n→ Apresente naturalmente: \"Você tem horário com o Taylor na quarta às 14h 😊\"\n→ Se vazio: \"Você não tem nada marcado ainda. Quer agendar?\"\n\n━━━ FLUXO PARA CANCELAR ━━━\n1. consultar_agendamentos(phone=+NUMERO) — listar os horários ativos\n2. Mostrar o que encontrou de forma clara e humana\n3. OBRIGATÓRIO: Confirmar com o cliente qual horário ele quer cancelar\n   \"Tem certeza que quer cancelar seu horário com o {barbeiro} na {dia} às {hora}?\"\n4. Só após confirmação explícita do cliente:\n   cancelar_agendamento(appointment_id=ID, phone=+NUMERO_COM_MAIS)\n   ⚠ SEMPRE passe o phone — é obrigatório para segurança\n5. \"Feito! Cancelei seu horário. Quando quiser remarcar é só chamar 😊\"\n\n━━━ FLUXO PARA REMARCAR ━━━\n1. consultar_agendamentos → identificar agendamento atual\n2. verificar_disponibilidade na nova data/barbeiro desejado\n3. SE houver horário disponível: mostrar ao cliente e confirmar\n4. Só após confirmação: cancelar_agendamento (agendamento atual)\n5. criar_agendamento (novo horário)\n⚠ NUNCA cancele o agendamento atual ANTES de confirmar disponibilidade no novo horário.\n⚠ Se não houver horário na nova data, informe ANTES de cancelar qualquer coisa.\n\n━━━ REGRAS ABSOLUTAS ━━━\nNUNCA invente horários ou disponibilidade — sempre consulte os endpoints.\nNUNCA mencione IA, chatbot, sistema ou automação.\nNUNCA use frases que soam automatizadas ou robóticas.\nNUNCA chame criar_agendamento sem ter chamado verificar_disponibilidade NESTA conversa para o mesmo barbeiro/dia.\nNUNCA chame cancelar_agendamento sem antes confirmar explicitamente com o cliente qual horário será cancelado.\nNUNCA chame cancelar_agendamento sem passar o phone= do cliente.\nSEMPRE confirme os dados antes de criar um agendamento.\nSEMPRE chame obter_perfil_cliente no início de cada nova conversa.\nNUNCA diga 'Prontinho', 'Reservado', 'Agendado' ou qualquer confirmação de horário SEM ter recebido resposta com id de criar_agendamento NESTA mesma conversa. A frase de confirmação final só pode ser enviada DEPOIS que criar_agendamento retornar com sucesso.\n\n━━━ FAQ — DÚVIDAS GERAIS ━━━\nPara perguntas sobre endereço, pagamento, estacionamento, tempo de atendimento, Wi-Fi, produtos e preços: use base_conhecimento.\nNunca invente informações que não estão no FAQ. Se não souber, diga: \"Deixa eu confirmar isso pra você 😊\" e informe o que está disponível.\n\n━━━ TRATAMENTO DE ERROS ━━━\nSe qualquer ferramenta retornar erro: informe o cliente de forma natural e amigável.\n\"Ops, tive um probleminha aqui. Pode tentar de novo em instantes? 😊\"\nNão tente adivinhar resultados de chamadas que falharam. Não prossiga sem dados confirmados.\n",
+              "maxIterations": 8,
+              "returnIntermediateSteps": false,
+              "maxTokens": 1000
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.agent",
+          "typeVersion": 1.7,
+          "position": [
+            1240,
+            0
+          ],
+          "id": "agent-001",
+          "name": "AI Agent"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8080/message/sendText/Barbearia",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "apikey",
+                  "value": "={{ $env.EVOLUTION_API_KEY }}"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ JSON.stringify({\"number\": $('Set Phone').item.json.phone, \"text\": $json.output}) }}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            1480,
+            0
+          ],
+          "id": "sendresp-001",
+          "name": "Send Response"
+        },
+        {
+          "parameters": {
+            "model": {
+              "__rl": true,
+              "value": "gpt-4o",
+              "mode": "list",
+              "cachedResultName": "GPT-4O"
+            },
+            "options": {
+              "maxTokens": 1000,
+              "temperature": 0.3
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+          "typeVersion": 1.2,
+          "position": [
+            1100,
+            280
+          ],
+          "id": "llm-001",
+          "name": "OpenAI GPT-4o",
+          "credentials": {
+            "openAiApi": {
+              "id": "md1VzrcFUBhOFYfr",
+              "name": "OpenAI account"
+            }
           }
         },
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.4,
-        "position": [
-          220,
-          0
-        ],
-        "id": "http-react-001",
-        "name": "HTTP Run Reactivation"
-      }
-    ],
-    "connections": {
-      "Diário 11h": {
-        "main": [
-          [
-            {
-              "node": "HTTP Run Reactivation",
-              "type": "main",
-              "index": 0
+        {
+          "parameters": {
+            "sessionIdType": "customKey",
+            "sessionKey": "={{ $('Set Phone').item.json.phone }}",
+            "contextWindowLength": 30
+          },
+          "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+          "typeVersion": 1.3,
+          "position": [
+            1240,
+            280
+          ],
+          "id": "memory-001",
+          "name": "Memory"
+        },
+        {
+          "parameters": {
+            "name": "listar_servicos",
+            "description": "Lista servicos com ID, nome, preco e duracao.",
+            "method": "GET",
+            "url": "http://host.docker.internal:8000/bot/services",
+            "authentication": "none",
+            "sendHeaders": true,
+            "options": {},
+            "parametersHeaders": {
+              "values": [
+                {
+                  "name": "X-Bot-Token",
+                  "valueProvider": "fieldValue",
+                  "value": "barbearia-bot-key-2026-mvp-seguro"
+                }
+              ]
             }
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+          "typeVersion": 1.1,
+          "position": [
+            200,
+            400
+          ],
+          "id": "t-svc",
+          "name": "Tool: Listar Servicos"
+        },
+        {
+          "parameters": {
+            "name": "listar_barbeiros",
+            "description": "Lista barbeiros com ID, nome e especialidade.",
+            "method": "GET",
+            "url": "http://host.docker.internal:8000/bot/barbers",
+            "authentication": "none",
+            "sendHeaders": true,
+            "options": {},
+            "parametersHeaders": {
+              "values": [
+                {
+                  "name": "X-Bot-Token",
+                  "valueProvider": "fieldValue",
+                  "value": "barbearia-bot-key-2026-mvp-seguro"
+                }
+              ]
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+          "typeVersion": 1.1,
+          "position": [
+            400,
+            400
+          ],
+          "id": "t-brb",
+          "name": "Tool: Listar Barbeiros"
+        },
+        {
+          "parameters": {
+            "name": "verificar_disponibilidade",
+            "description": "Horarios livres do barbeiro em uma data especifica. OBRIGATORIO ter TODOS: barber_id(number) + service_id(number) + date(YYYY-MM-DD). NAO aceita phone. Pergunte ao cliente o servico, barbeiro e data ANTES de chamar esta tool.",
+            "method": "GET",
+            "url": "http://host.docker.internal:8000/bot/availability",
+            "authentication": "none",
+            "sendQuery": true,
+            "sendHeaders": true,
+            "options": {},
+            "parametersHeaders": {
+              "values": [
+                {
+                  "name": "X-Bot-Token",
+                  "valueProvider": "fieldValue",
+                  "value": "barbearia-bot-key-2026-mvp-seguro"
+                }
+              ]
+            },
+            "specifyQuery": "keypair",
+            "parametersQuery": {
+              "values": [
+                {
+                  "name": "barber_id",
+                  "valueProvider": "modelRequired"
+                },
+                {
+                  "name": "service_id",
+                  "valueProvider": "modelRequired"
+                },
+                {
+                  "name": "date",
+                  "valueProvider": "modelRequired"
+                }
+              ]
+            },
+            "placeholderDefinitions": {
+              "values": [
+                {
+                  "name": "barber_id",
+                  "description": "ID do barbeiro (number)",
+                  "type": "number"
+                },
+                {
+                  "name": "service_id",
+                  "description": "ID do servico (number)",
+                  "type": "number"
+                },
+                {
+                  "name": "date",
+                  "description": "Data YYYY-MM-DD",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+          "typeVersion": 1.1,
+          "position": [
+            600,
+            400
+          ],
+          "id": "t-avail",
+          "name": "Tool: Verificar Disponibilidade"
+        },
+        {
+          "parameters": {
+            "name": "cadastrar_cliente",
+            "description": "Cadastra cliente. phone=numero sem + (ex 5563999368196). Retorna client_id.",
+            "method": "POST",
+            "url": "http://host.docker.internal:8000/bot/clients",
+            "authentication": "none",
+            "sendHeaders": true,
+            "sendBody": true,
+            "specifyBody": "json",
+            "options": {},
+            "parametersHeaders": {
+              "values": [
+                {
+                  "name": "X-Bot-Token",
+                  "valueProvider": "fieldValue",
+                  "value": "barbearia-bot-key-2026-mvp-seguro"
+                },
+                {
+                  "name": "Content-Type",
+                  "valueProvider": "fieldValue",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "jsonBody": "{\n  \"phone\": \"{phone}\",\n  \"name\": \"{name}\"\n}",
+            "placeholderDefinitions": {
+              "values": [
+                {
+                  "name": "phone",
+                  "description": "Numero sem plus (ex 5563999368196)",
+                  "type": "string"
+                },
+                {
+                  "name": "name",
+                  "description": "Nome completo do cliente",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+          "typeVersion": 1.1,
+          "position": [
+            800,
+            400
+          ],
+          "id": "t-cli",
+          "name": "Tool: Cadastrar Cliente"
+        },
+        {
+          "parameters": {
+            "name": "criar_agendamento",
+            "description": "Cria agendamento. Params: client_id, barber_id, service_id, start_at (ISO-03:00 ex 2026-06-10T09:00:00-03:00).",
+            "method": "POST",
+            "url": "http://host.docker.internal:8000/bot/appointments",
+            "authentication": "none",
+            "sendHeaders": true,
+            "sendBody": true,
+            "specifyBody": "json",
+            "options": {},
+            "parametersHeaders": {
+              "values": [
+                {
+                  "name": "X-Bot-Token",
+                  "valueProvider": "fieldValue",
+                  "value": "barbearia-bot-key-2026-mvp-seguro"
+                },
+                {
+                  "name": "Content-Type",
+                  "valueProvider": "fieldValue",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "jsonBody": "{\n  \"client_id\": {client_id},\n  \"barber_id\": {barber_id},\n  \"service_id\": {service_id},\n  \"start_at\": \"{start_at}\"\n}",
+            "placeholderDefinitions": {
+              "values": [
+                {
+                  "name": "client_id",
+                  "description": "ID do cliente (number)",
+                  "type": "number"
+                },
+                {
+                  "name": "barber_id",
+                  "description": "ID do barbeiro (number)",
+                  "type": "number"
+                },
+                {
+                  "name": "service_id",
+                  "description": "ID do servico (number)",
+                  "type": "number"
+                },
+                {
+                  "name": "start_at",
+                  "description": "ISO8601 com fuso -03:00 ex 2026-06-10T09:00:00-03:00",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+          "typeVersion": 1.1,
+          "position": [
+            1000,
+            400
+          ],
+          "id": "t-appt",
+          "name": "Tool: Criar Agendamento"
+        },
+        {
+          "parameters": {
+            "name": "consultar_agendamentos",
+            "description": "Agendamentos ativos do cliente. phone=E.164 com + (ex +5563999368196).",
+            "method": "GET",
+            "url": "http://host.docker.internal:8000/bot/appointments",
+            "authentication": "none",
+            "sendQuery": true,
+            "sendHeaders": true,
+            "options": {},
+            "parametersHeaders": {
+              "values": [
+                {
+                  "name": "X-Bot-Token",
+                  "valueProvider": "fieldValue",
+                  "value": "barbearia-bot-key-2026-mvp-seguro"
+                }
+              ]
+            },
+            "specifyQuery": "keypair",
+            "parametersQuery": {
+              "values": [
+                {
+                  "name": "phone",
+                  "valueProvider": "modelRequired"
+                }
+              ]
+            },
+            "placeholderDefinitions": {
+              "values": [
+                {
+                  "name": "phone",
+                  "description": "Telefone E.164 com + (ex +5563999368196)",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+          "typeVersion": 1.1,
+          "position": [
+            1200,
+            400
+          ],
+          "id": "t-lstappt",
+          "name": "Tool: Consultar Agendamentos"
+        },
+        {
+          "parameters": {
+            "name": "cancelar_agendamento",
+            "description": "Cancela agendamento pelo ID numerico. OBRIGATORIO: appointment_id (number) E phone=telefone E.164 do cliente com + para verificacao de propriedade. NUNCA chame sem confirmar o horário com o cliente primeiro.",
+            "method": "PATCH",
+            "url": "http://host.docker.internal:8000/bot/appointments/{appointment_id}/cancel",
+            "authentication": "none",
+            "sendHeaders": true,
+            "options": {},
+            "sendQuery": true,
+            "parametersHeaders": {
+              "values": [
+                {
+                  "name": "X-Bot-Token",
+                  "valueProvider": "fieldValue",
+                  "value": "barbearia-bot-key-2026-mvp-seguro"
+                }
+              ]
+            },
+            "specifyQuery": "keypair",
+            "parametersQuery": {
+              "values": [
+                {
+                  "name": "phone",
+                  "valueProvider": "modelRequired"
+                }
+              ]
+            },
+            "placeholderDefinitions": {
+              "values": [
+                {
+                  "name": "appointment_id",
+                  "description": "ID numerico do agendamento (number)",
+                  "type": "number"
+                },
+                {
+                  "name": "phone",
+                  "description": "Telefone E.164 do cliente com + (ex +5563999368196)",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+          "typeVersion": 1.1,
+          "position": [
+            1400,
+            400
+          ],
+          "id": "t-cancel",
+          "name": "Tool: Cancelar Agendamento"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8000/bot/debounce",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "X-Bot-Token",
+                  "value": "={{ $env.BOT_API_KEY }}"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ JSON.stringify({\"phone\": \"+\" + $('Set Phone').item.json.phone, \"message\": $json.message, \"message_id\": $('Set Phone').item.json.message_id}) }}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            400,
+            0
+          ],
+          "id": "debounce-001",
+          "name": "HTTP Debounce"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict",
+                "version": 3
+              },
+              "conditions": [
+                {
+                  "id": "ctrl-c1",
+                  "leftValue": "={{ $json.proceed }}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "true",
+                    "name": "filter.operator.true"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.3,
+          "position": [
+            620,
+            0
+          ],
+          "id": "if-ctrl-001",
+          "name": "IF Controller"
+        },
+        {
+          "parameters": {
+            "amount": 5,
+            "unit": "seconds"
+          },
+          "type": "n8n-nodes-base.wait",
+          "typeVersion": 1.1,
+          "position": [
+            840,
+            0
+          ],
+          "id": "wait-debounce",
+          "name": "Wait 5s",
+          "webhookId": "debounce-wait-barbearia"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8000/bot/debounce/flush",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "X-Bot-Token",
+                  "value": "={{ $env.BOT_API_KEY }}"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"phone\": \"+{{ $('Set Phone').item.json.phone }}\"\n}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            1040,
+            0
+          ],
+          "id": "flush-001",
+          "name": "HTTP Flush Buffer"
+        },
+        {
+          "parameters": {
+            "name": "obter_perfil_cliente",
+            "description": "Busca perfil e histórico do cliente. Chame no início de cada nova conversa. Retorna: found, name, total_appointments, last_visit_date, days_since_last_visit (null=novo; >45=inativo), last_barber_name (barbeiro da última visita — diferente do favorito), last_service_name (serviço da última visita), preferred_time (horário habitual ex '10:00'), has_photo_reference (bool — cliente enviou foto de referência antes), favorite_barber_id, favorite_barber_name, favorite_service_name. phone=E.164 com + (ex +5563999368196).",
+            "method": "GET",
+            "url": "http://host.docker.internal:8000/bot/clients/profile",
+            "authentication": "none",
+            "sendQuery": true,
+            "sendHeaders": true,
+            "options": {},
+            "parametersHeaders": {
+              "values": [
+                {
+                  "name": "X-Bot-Token",
+                  "valueProvider": "fieldValue",
+                  "value": "barbearia-bot-key-2026-mvp-seguro"
+                }
+              ]
+            },
+            "specifyQuery": "keypair",
+            "parametersQuery": {
+              "values": [
+                {
+                  "name": "phone",
+                  "valueProvider": "modelRequired"
+                }
+              ]
+            },
+            "placeholderDefinitions": {
+              "values": [
+                {
+                  "name": "phone",
+                  "description": "Telefone E.164 com + (ex +5563999368196)",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+          "typeVersion": 1.1,
+          "position": [
+            0,
+            560
+          ],
+          "id": "t-profile",
+          "name": "Tool: Obter Perfil Cliente"
+        },
+        {
+          "parameters": {
+            "jsCode": "// Horário comercial: seg-sex 9h-19h | sáb 9h-17h | dom fechado\n// Palmas/TO = UTC-3 fixo (sem horário de verão)\nconst phone = $('Set Phone').item.json.phone;\nconst rawMessage = $json.message || '';\nconst isNewSession = $json.is_new_session === true;\n\nconst palmasMs = Date.now() + (-3 * 3600 * 1000);\nconst palmas = new Date(palmasMs);\nconst hour = palmas.getUTCHours();\nconst day = palmas.getUTCDay(); // 0=Dom, 1=Seg...6=Sáb\n\nlet isOpen = false;\nif (day >= 1 && day <= 5) isOpen = hour >= 9 && hour < 19;\nelse if (day === 6)        isOpen = hour >= 9 && hour < 17;\n\nlet prefix = '';\nif (isNewSession) prefix += '[NOVA_SESSAO] ';\nif (!isOpen)      prefix += '[FORA_DO_HORARIO] ';\n\nconst message = prefix + rawMessage;\n\nreturn [{ json: { phone, message, isOpen, isNewSession } }];"
+          },
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            1040,
+            -240
+          ],
+          "id": "hora-001",
+          "name": "Code Horário Comercial"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict",
+                "version": 3
+              },
+              "conditions": [
+                {
+                  "id": "open-c1",
+                  "leftValue": "={{ $json.isOpen }}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "true",
+                    "name": "filter.operator.true"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.3,
+          "position": [
+            1240,
+            -240
+          ],
+          "id": "if-open-001",
+          "name": "IF Horário Aberto"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8080/message/sendText/Barbearia",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "apikey",
+                  "value": "={{ $env.EVOLUTION_API_KEY }}"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"number\": \"{{ $json.phone }}\",\n  \"text\": \"Oi! A barbearia tá fechada agora 😊\\n\\nPode me mandar o que precisar que assim que abrir eu te respondo!\\n\\nFuncionamos de segunda a sexta das 9h às 19h e sábado das 9h às 17h.\"\n}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            1440,
+            -240
+          ],
+          "id": "offline-001",
+          "name": "Send Offline Message"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "loose",
+                "version": 3
+              },
+              "conditions": [
+                {
+                  "id": "bl-c1",
+                  "leftValue": "={{ $json.body.data.key.remoteJid }}",
+                  "rightValue": "5563992287396",
+                  "operator": {
+                    "type": "string",
+                    "operation": "notContains"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.3,
+          "position": [
+            -300,
+            0
+          ],
+          "id": "blocklist-001",
+          "name": "Block List"
+        },
+        {
+          "parameters": {
+            "amount": 1,
+            "unit": "seconds"
+          },
+          "type": "n8n-nodes-base.wait",
+          "typeVersion": 1.1,
+          "position": [
+            1640,
+            -120
+          ],
+          "id": "wait-typing-001",
+          "name": "Wait Typing Init",
+          "webhookId": "typing-init-wait-barbearia"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "loose",
+                "version": 3
+              },
+              "conditions": [
+                {
+                  "id": "img-c1",
+                  "leftValue": "={{ !!$('Webhook').item.json.body.data.message.imageMessage }}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "true",
+                    "name": "filter.operator.true"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.3,
+          "position": [
+            200,
+            -200
+          ],
+          "id": "if-has-image-001",
+          "name": "IF Has Image"
+        },
+        {
+          "parameters": {
+            "method": "PATCH",
+            "url": "http://host.docker.internal:8000/bot/clients/photo",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "X-Bot-Token",
+                  "value": "={{ $env.BOT_API_KEY }}"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ JSON.stringify({\"phone\": \"+\" + $('Set Phone').item.json.phone, \"photo_url\": $('Set Phone').item.json.image_url, \"description\": $json.vision_description || ''}) }}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            400,
+            -200
+          ],
+          "id": "http-save-photo-001",
+          "name": "HTTP Save Photo"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8080/chat/sendPresence/Barbearia",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "apikey",
+                  "value": "={{ $env.EVOLUTION_API_KEY }}"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"number\": \"{{ $('Set Phone').item.json.phone }}\",\n  \"presence\": \"composing\",\n  \"delay\": 30000\n}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            1840,
+            -120
+          ],
+          "id": "composing-active-001",
+          "name": "Send Composing Active"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict",
+                "version": 3
+              },
+              "conditions": [
+                {
+                  "id": "aud-c1",
+                  "leftValue": "={{ !!$('Webhook').item.json.body.data.message.audioMessage }}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "true",
+                    "name": "filter.operator.true"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {
+              "typeValidation": "loose"
+            }
+          },
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.3,
+          "position": [
+            0,
+            -400
+          ],
+          "id": "if-is-audio-001",
+          "name": "IF Is Audio"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8080/chat/getBase64FromMediaMessage/Barbearia",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "apikey",
+                  "value": "={{ $env.EVOLUTION_API_KEY }}"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ $json._evo_audio_request }}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            200,
+            -400
+          ],
+          "id": "http-get-audio-b64-001",
+          "name": "HTTP Get Audio B64",
+          "onError": "continueRegularOutput"
+        },
+        {
+          "parameters": {
+            "jsCode": "const base64 = $json.base64 || '';\nconst mimetype = ($json.mimetype || 'audio/ogg; codecs=opus').split(';')[0];\nconst ext = mimetype.includes('mp4') ? 'mp4' : 'ogg';\n\nif (!base64) {\n  // Evolution API não retornou áudio — Whisper vai falhar (continueOnFail)\n  // e Code Set Transcript vai lidar com $json.text vazio\n  return [{ json: { mimetype, _no_audio: true }, binary: {} }];\n}\n\nreturn [{\n  json: { mimetype },\n  binary: {\n    audio: {\n      data: base64,\n      mimeType: mimetype,\n      fileName: `audio.${ext}`,\n    }\n  }\n}];\n"
+          },
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            400,
+            -400
+          ],
+          "id": "code-audio-binary-001",
+          "name": "Code Audio Binary"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "https://api.openai.com/v1/audio/transcriptions",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "Authorization",
+                  "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+                }
+              ]
+            },
+            "sendBody": true,
+            "contentType": "multipart-form-data",
+            "bodyParameters": {
+              "parameters": [
+                {
+                  "name": "model",
+                  "value": "whisper-1"
+                },
+                {
+                  "name": "language",
+                  "value": "pt"
+                },
+                {
+                  "name": "response_format",
+                  "value": "json"
+                },
+                {
+                  "name": "file",
+                  "parameterType": "formBinaryData",
+                  "inputDataFieldName": "audio"
+                }
+              ]
+            },
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            600,
+            -400
+          ],
+          "id": "http-whisper-001",
+          "name": "HTTP Whisper",
+          "onError": "continueRegularOutput"
+        },
+        {
+          "parameters": {
+            "jsCode": "const transcript = ($json.text || '').trim();\nconst original = $('Set Phone').item.json;\n\n// Se Whisper falhou, injeta marcador para a Raquel pedir repetição naturalmente\nconst message = transcript || '[AUDIO_NAO_TRANSCRITO]';\n\nreturn [{\n  json: {\n    ...original,\n    message\n  }\n}];\n"
+          },
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            800,
+            -400
+          ],
+          "id": "code-set-transcript-001",
+          "name": "Code Set Transcript"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8080/chat/getBase64FromMediaMessage/Barbearia",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "apikey",
+                  "value": "={{ $env.EVOLUTION_API_KEY }}"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ $json._evo_image_request }}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            400,
+            -200
+          ],
+          "id": "http-get-image-b64-001",
+          "name": "HTTP Get Image B64",
+          "onError": "continueRegularOutput"
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "https://api.openai.com/v1/chat/completions",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "Authorization",
+                  "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={{ JSON.stringify({\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Você é assistente de recepção de barbearia. Analise esta imagem e responda EM UMA FRASE CURTA (máximo 10 palavras), descrevendo o estilo para o barbeiro. Se for referência de corte: descreva o estilo (ex: 'Degradê alto com fade nas laterais'). Se for barba: descreva (ex: 'Barba alinhada com contorno definido'). Se for comprovante: 'Comprovante de pagamento'. Qualquer outra coisa: descreva brevemente. APENAS a descrição, nada mais.\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:\" + $json.mimetype + \";base64,\" + $json.base64}}]}],\"max_tokens\":60}) }}",
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            600,
+            -200
+          ],
+          "id": "http-vision-call-001",
+          "name": "HTTP Vision Call",
+          "onError": "continueRegularOutput"
+        },
+        {
+          "parameters": {
+            "jsCode": "const visionResult = ($json.choices?.[0]?.message?.content || '').trim();\nconst original = $('Set Phone').item.json;\nconst caption = original.message || '';\n\n// Injeta a descrição como contexto invisível para a Raquel\n// O prefixo [IMAGEM_REF:] é interpretado pelo system prompt\nconst message = visionResult\n  ? `[IMAGEM_REF: ${visionResult}]${caption ? '\\n' + caption : ''}`\n  : caption;\n\nreturn [{\n  json: {\n    ...original,\n    message,\n    vision_description: visionResult\n  }\n}];\n"
+          },
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            800,
+            -200
+          ],
+          "id": "code-vision-context-001",
+          "name": "Code Vision Context"
+        },
+        {
+          "parameters": {
+            "name": "base_conhecimento",
+            "description": "FAQ da barbearia. Use quando o cliente perguntar sobre endereço, formas de pagamento, estacionamento, tempo de atendimento, Wi-Fi, produtos, agendamento sem horário definido, ou qualquer dúvida geral sobre a barbearia que não envolva consultar agenda ou criar agendamento.",
+            "jsCode": "const query = ($input.all()[0]?.json?.query || '').toLowerCase();\n\nconst faq = [\n  { k: ['endere','onde fica','como chegar','localiz'],\n    r: 'A Taylor & Thedy fica na 103 Sul, Rua SO 11, nº 60 — Plano Diretor Sul, Palmas/TO (CEP 77015-028). Pesquisa \"Taylor e Thedy Salão e Barbearia\" no Google Maps 📍' },\n  { k: ['pix','chave pix'],\n    r: 'Sim! Chave Pix: [CHAVE PIX — preencher]. Nome: Taylor & Thedy Barbearia.' },\n  { k: ['pagamento','paga','cartão','dinheiro','débito','crédito','forma'],\n    r: 'Aceitamos Pix, débito, crédito e dinheiro. Sem taxa de cartão.' },\n  { k: ['estacion','park','carro','moto'],\n    r: 'Tem estacionamento na rua na frente sem custo, e um estacionamento coberto a 50m.' },\n  { k: ['tempo','demora','quanto tempo','dura','duração','rápido','rapidez'],\n    r: 'Corte masculino: ~45min. Corte feminino: ~1h. Barba: ~30min. Manicure e pedicure: ~1h30. Química (coloração/selagem): 2h ou mais.' },\n  { k: ['wifi','wi-fi','internet','senha'],\n    r: 'Tem Wi-Fi! A senha fica na frente do espelho da cadeira.' },\n  { k: ['produto','pomada','cera','finalizador','óleo'],\n    r: 'Usamos produtos premium. Vendemos pomadas e finalizadores direto na barbearia.' },\n  { k: ['horário','abre','fecha','funciona','atende'],\n    r: 'Seg a sex: 9h às 19h. Sábado: 9h às 17h. Domingo fechado.' },\n  { k: ['criança','kid','moleque','filho'],\n    r: 'Atendemos a partir dos 8 anos. Crianças menores a combinar.' },\n  { k: ['preço','valor','quanto cust','tabela','cobr','caro','barato','serviço cust','quanto é','quanto fica'],\n    r: 'Principais valores: Corte Masc. R$90 | Corte Fem. R$190 | Corte Infantil R$80 | Barba R$50 | Escova R$90+ | Manicure+Pedicure R$75 | Sobrancelha R$50. Posso detalhar qualquer serviço aqui mesmo.' },\n];\n\nconst match = faq.find(f => f.k.some(k => query.includes(k)));\nreturn match ? match.r : 'Informação não encontrada. Posso ajudar com agendamentos, preços, serviços ou horários de funcionamento.';\n"
+          },
+          "type": "@n8n/n8n-nodes-langchain.toolCode",
+          "typeVersion": 1,
+          "position": [
+            1600,
+            400
+          ],
+          "id": "t-faq",
+          "name": "Tool: FAQ"
+        },
+        {
+          "parameters": {
+            "jsCode": "const data = $('Webhook').item.json.body.data;\nconst key = data.key;\nconst audioMsg = data.message.audioMessage;\n\n// Constrói body plaintext para evitar problema de proxy n8n em expressões HTTP\nreturn [{\n  json: {\n    _evo_audio_request: {\n      message: {\n        key: {\n          remoteJid: String(key.remoteJid || ''),\n          fromMe:    Boolean(key.fromMe),\n          id:        String(key.id || '')\n        },\n        message: {\n          audioMessage: JSON.parse(JSON.stringify(audioMsg))\n        }\n      },\n      convertToMp4: false\n    }\n  }\n}];"
+          },
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            0,
+            -400
+          ],
+          "id": "code-build-evo-audio-001",
+          "name": "Code Build Evo Audio Body"
+        },
+        {
+          "parameters": {
+            "jsCode": "const data = $('Webhook').item.json.body.data;\nconst key = data.key;\nconst imgMsg = data.message.imageMessage;\n\nreturn [{\n  json: {\n    _evo_image_request: {\n      message: {\n        key: {\n          remoteJid: String(key.remoteJid || ''),\n          fromMe:    Boolean(key.fromMe),\n          id:        String(key.id || '')\n        },\n        message: {\n          imageMessage: JSON.parse(JSON.stringify(imgMsg))\n        }\n      },\n      convertToMp4: false\n    }\n  }\n}];"
+          },
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [
+            200,
+            -200
+          ],
+          "id": "code-build-evo-image-001",
+          "name": "Code Build Evo Image Body"
+        },
+        {
+          "parameters": {
+            "method": "GET",
+            "url": "=http://host.docker.internal:8000/bot/clients/paused-status?phone=%2B{{ $('Set Phone').item.json.phone }}",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {
+                  "name": "X-Bot-Token",
+                  "value": "={{ $env.BOT_API_KEY }}"
+                }
+              ]
+            },
+            "options": {}
+          },
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.4,
+          "position": [
+            2040,
+            -120
+          ],
+          "id": "check-pause-001",
+          "name": "HTTP Check Bot Pause"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict"
+              },
+              "conditions": [
+                {
+                  "id": "pause-cond-001",
+                  "leftValue": "={{ $json.paused }}",
+                  "rightValue": true,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "equals"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "type": "n8n-nodes-base.if",
+          "typeVersion": 2.1,
+          "position": [
+            2240,
+            -120
+          ],
+          "id": "if-paused-001",
+          "name": "IF Bot Paused"
+        }
+      ],
+      "connections": {
+        "Webhook": {
+          "main": [
+            [
+              {
+                "node": "Block List",
+                "type": "main",
+                "index": 0
+              }
+            ]
           ]
-        ]
-      }
+        },
+        "Set Phone": {
+          "main": [
+            [
+              {
+                "node": "IF Is Audio",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "If Individual Message": {
+          "main": [
+            [
+              {
+                "node": "IF Has Image",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            []
+          ]
+        },
+        "AI Agent": {
+          "main": [
+            [
+              {
+                "node": "Send Response",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Memory": {
+          "ai_memory": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_memory",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: Listar Servicos": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: Listar Barbeiros": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: Verificar Disponibilidade": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: Cadastrar Cliente": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: Criar Agendamento": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: Consultar Agendamentos": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: Cancelar Agendamento": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "IF Controller": {
+          "main": [
+            [
+              {
+                "node": "Wait 5s",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            []
+          ]
+        },
+        "Wait 5s": {
+          "main": [
+            [
+              {
+                "node": "HTTP Flush Buffer",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: Obter Perfil Cliente": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Code Horário Comercial": {
+          "main": [
+            [
+              {
+                "node": "IF Horário Aberto",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "IF Horário Aberto": {
+          "main": [
+            [
+              {
+                "node": "Send Composing",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "Send Composing",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Send Composing": {
+          "main": [
+            [
+              {
+                "node": "Wait Typing Init",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "HTTP Debounce": {
+          "main": [
+            [
+              {
+                "node": "IF Controller",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "HTTP Flush Buffer": {
+          "main": [
+            [
+              {
+                "node": "Code Horário Comercial",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "IF Has Image": {
+          "main": [
+            [
+              {
+                "node": "Code Build Evo Image Body",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "HTTP Debounce",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "IF Is Audio": {
+          "main": [
+            [
+              {
+                "node": "Code Build Evo Audio Body",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            [
+              {
+                "node": "If Individual Message",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "HTTP Get Audio B64": {
+          "main": [
+            [
+              {
+                "node": "Code Audio Binary",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Code Audio Binary": {
+          "main": [
+            [
+              {
+                "node": "HTTP Whisper",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "HTTP Whisper": {
+          "main": [
+            [
+              {
+                "node": "Code Set Transcript",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Code Set Transcript": {
+          "main": [
+            [
+              {
+                "node": "If Individual Message",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "HTTP Get Image B64": {
+          "main": [
+            [
+              {
+                "node": "HTTP Vision Call",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "HTTP Vision Call": {
+          "main": [
+            [
+              {
+                "node": "Code Vision Context",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Code Vision Context": {
+          "main": [
+            [
+              {
+                "node": "HTTP Save Photo",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "HTTP Save Photo": {
+          "main": [
+            [
+              {
+                "node": "HTTP Debounce",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Tool: FAQ": {
+          "ai_tool": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_tool",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Block List": {
+          "main": [
+            [
+              {
+                "node": "Set Phone",
+                "type": "main",
+                "index": 0
+              }
+            ],
+            []
+          ]
+        },
+        "Wait Typing Init": {
+          "main": [
+            [
+              {
+                "node": "Send Composing Active",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Send Composing Active": {
+          "main": [
+            [
+              {
+                "node": "HTTP Check Bot Pause",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Code Build Evo Audio Body": {
+          "main": [
+            [
+              {
+                "node": "HTTP Get Audio B64",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "Code Build Evo Image Body": {
+          "main": [
+            [
+              {
+                "node": "HTTP Get Image B64",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "OpenAI GPT-4o": {
+          "ai_languageModel": [
+            [
+              {
+                "node": "AI Agent",
+                "type": "ai_languageModel",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "HTTP Check Bot Pause": {
+          "main": [
+            [
+              {
+                "node": "IF Bot Paused",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        },
+        "IF Bot Paused": {
+          "main": [
+            [],
+            [
+              {
+                "node": "AI Agent",
+                "type": "main",
+                "index": 0
+              }
+            ]
+          ]
+        }
+      },
+      "nodeGroups": [],
+      "authors": "Admin Barbearia",
+      "name": null,
+      "description": null,
+      "autosaved": false,
+      "workflowPublishHistory": [
+        {
+          "createdAt": "2026-06-23T22:32:08.064Z",
+          "id": 16,
+          "workflowId": "25QZQ664N6hrIg59",
+          "versionId": "7519aa44-73e9-4604-8c3f-0dafec48b3ca",
+          "event": "activated",
+          "userId": "e968ead9-6769-4805-848b-8923675da960"
+        }
+      ]
     },
-    "settings": {
-      "executionOrder": "v1"
-    }
+    "scopes": [
+      "execution:reveal",
+      "workflow:create",
+      "workflow:delete",
+      "workflow:disableRedaction",
+      "workflow:enableRedaction",
+      "workflow:execute",
+      "workflow:execute-chat",
+      "workflow:export",
+      "workflow:import",
+      "workflow:list",
+      "workflow:move",
+      "workflow:publish",
+      "workflow:read",
+      "workflow:share",
+      "workflow:unpublish",
+      "workflow:unshare",
+      "workflow:update"
+    ],
+    "checksum": "6c3030286637fe857a841f3a471a4952c5c2e3a155dee9bdf8f0aceb785a1dd4"
   }
 ]
