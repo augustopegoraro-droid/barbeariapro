@@ -28,6 +28,39 @@ A VM de produção foi encontrada **completamente zerada**. Toda a stack foi rec
 
 ---
 
+## ✅ Sessão 2026-06-23 — parte 3: funil completo + pausa do bot via CRM
+
+### Funil para clientes existentes + pausa do bot
+
+**Problema reportado:** clientes antigos que voltam a mandar mensagem não entravam
+no funil; equipe não tinha como pausar o bot para assumir o atendimento manualmente.
+
+**Correções (commit `4721316`):**
+
+- `bot.py — upsert_client`: clientes existentes sem lead ativo nos últimos 7 dias
+  também recebem um novo lead em `novo_contato` quando contatam via WhatsApp.
+- `bot.py — GET /bot/clients/paused-status?phone=X`: retorna `{"paused": bool}`;
+  usado pelo n8n antes de chamar o AI Agent.
+- `clientes.py — PATCH /clientes/{id}/bot-pause?paused=bool`: endpoint JWT para
+  staff pausar/retomar o bot por cliente.
+- `crm.py — GET /crm/board`: passa a incluir `bot_paused` do cliente vinculado
+  ao lead (join com `clients`).
+- `alembic/0008_client_bot_paused.py`: migration formal (coluna já existia em
+  produção por ALTER TABLE direto).
+- `workflows.json`: dois novos nós inseridos entre `Send Composing Active` e
+  `AI Agent` — `HTTP Check Bot Pause` → `IF Bot Paused`; se `paused=true` o bot
+  silencia e a conversa fica com a equipe.
+- Frontend `barbearia-frontend/app/admin/crm/page.tsx`: botão "Assumir atendimento"
+  / "Devolver ao bot" em cada card do Kanban (visível apenas para leads com cliente
+  vinculado). Commit `4d43144` no repo do frontend.
+
+**Deploy realizado:**
+- Backend reconstruído (`docker compose up --build backend`).
+- Workflow n8n atualizado via API REST (`versionId 7966507f`).
+- Endpoint testado: `GET /bot/clients/paused-status` retorna `{"paused":false,...}`.
+
+---
+
 ## ✅ Sessão 2026-06-23 — parte 2: funil CRM + serviço Corte+Barba
 
 ### Problema 1 — "Corte e Barba" não entrava no sistema
