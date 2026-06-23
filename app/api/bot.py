@@ -376,11 +376,54 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
         )
     ).scalar_one_or_none()
 
+    _active_lead_stages = {LeadStage.novo_contato, LeadStage.conversando}
+
     if existing:
         # Só atualiza se o novo nome for mais informativo (mais caracteres)
         if len(body.name) > len(existing.name or ""):
             existing.name = body.name
         client = existing
+
+        # Cliente existente: criar lead se não tiver um ativo recente (últimos 7 dias)
+        from datetime import timedelta
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        recent_lead = (
+            await db.execute(
+                select(Lead)
+                .where(Lead.client_id == client.id)
+                .where(Lead.organization_id == org_id)
+                .where(Lead.stage.in_(_active_lead_stages))
+                .where(Lead.created_at >= cutoff)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+        if recent_lead is None:
+            max_pos = (
+                await db.execute(
+                    select(func.max(Lead.position)).where(
+                        Lead.organization_id == org_id,
+                        Lead.stage == LeadStage.novo_contato,
+                    )
+                )
+            ).scalar_one_or_none()
+            lead = Lead(
+                organization_id=org_id,
+                client_id=client.id,
+                name=client.name,
+                phone_e164=phone,
+                source=ContactChannel.whatsapp,
+                stage=LeadStage.novo_contato,
+                position=(max_pos + 1) if max_pos is not None else 0,
+            )
+            db.add(lead)
+            await db.flush()
+            db.add(LeadEvent(
+                lead_id=lead.id,
+                organization_id=org_id,
+                event_type="created",
+                to_stage=LeadStage.novo_contato,
+            ))
     else:
         client = Client(
             organization_id=org_id,
@@ -408,7 +451,6 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
                 )
             )
         ).scalar_one_or_none()
-        lead_pos = (max_pos + 1) if max_pos is not None else 0
         lead = Lead(
             organization_id=org_id,
             client_id=client.id,
@@ -416,18 +458,16 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
             phone_e164=phone,
             source=ContactChannel.whatsapp,
             stage=LeadStage.novo_contato,
-            position=lead_pos,
+            position=(max_pos + 1) if max_pos is not None else 0,
         )
         db.add(lead)
         await db.flush()
-        db.add(
-            LeadEvent(
-                lead_id=lead.id,
-                organization_id=org_id,
-                event_type="created",
-                to_stage=LeadStage.novo_contato,
-            )
-        )
+        db.add(LeadEvent(
+            lead_id=lead.id,
+            organization_id=org_id,
+            event_type="created",
+            to_stage=LeadStage.novo_contato,
+        ))
 
     return ClientOut(id=client.id, name=client.name, phone_e164=client.phone_e164)
 
@@ -608,6 +648,20 @@ async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
         favorite_barber_name=fav_barber_name,
         favorite_service_name=fav_svc_name,
     )
+
+
+@router.get("/clients/paused-status")
+async def get_paused_status(phone: str, db: BotDB, _auth: _BotAuth = None):
+    phone = _normalize_phone(phone)
+    org_id = settings.bot_organization_id
+    client = (
+        await db.execute(
+            select(Client)
+            .where(Client.organization_id == org_id)
+            .where(Client.phone_e164 == phone)
+        )
+    ).scalar_one_or_none()
+    return {"paused": client.bot_paused if client else False, "phone": phone}
 
 
 # ---------------------------------------------------------------------------

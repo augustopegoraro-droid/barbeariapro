@@ -18,7 +18,7 @@ from sqlalchemy.orm import selectinload
 from app.core.phone import normalize_phone as _validate_phone
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
-from models import Lead, LeadEvent, User
+from models import Client, Lead, LeadEvent, User
 from models.enums import ContactChannel, LeadStage
 
 router = APIRouter(prefix="/crm", tags=["crm"])
@@ -56,6 +56,7 @@ class LeadOut(BaseModel):
     last_contact_at: Optional[str]
     created_at: str
     updated_at: str
+    bot_paused: Optional[bool] = None
 
 
 class LeadDetailOut(LeadOut):
@@ -163,7 +164,7 @@ def _iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat() if dt else None
 
 
-def _lead_out(lead: Lead) -> LeadOut:
+def _lead_out(lead: Lead, bot_paused: Optional[bool] = None) -> LeadOut:
     return LeadOut(
         id=lead.id,
         name=lead.name,
@@ -177,6 +178,7 @@ def _lead_out(lead: Lead) -> LeadOut:
         last_contact_at=_iso(lead.last_contact_at),
         created_at=_iso(lead.created_at),
         updated_at=_iso(lead.updated_at),
+        bot_paused=bot_paused,
     )
 
 
@@ -213,12 +215,16 @@ async def get_board(
     require_full_access(await resolve_current_role(db, current_user))
 
     rows = (
-        await db.execute(select(Lead).order_by(Lead.stage, Lead.position, Lead.id))
-    ).scalars().all()
+        await db.execute(
+            select(Lead, Client.bot_paused)
+            .outerjoin(Client, Client.id == Lead.client_id)
+            .order_by(Lead.stage, Lead.position, Lead.id)
+        )
+    ).all()
 
     by_stage: dict[LeadStage, list[LeadOut]] = {s: [] for s in STAGE_ORDER}
-    for lead in rows:
-        by_stage.setdefault(lead.stage, []).append(_lead_out(lead))
+    for lead, bot_paused in rows:
+        by_stage.setdefault(lead.stage, []).append(_lead_out(lead, bot_paused))
 
     columns = [
         BoardColumnOut(stage=s.value, count=len(by_stage[s]), leads=by_stage[s])

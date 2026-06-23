@@ -318,3 +318,26 @@ async def bloquear_cliente(
     response = _to_client_out(client)
     await db.commit()
     return response
+
+
+@router.patch("/{client_id}/bot-pause", response_model=ClientOut)
+async def toggle_bot_pause(
+    client_id: int,
+    paused: bool,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> ClientOut:
+    client = (
+        await db.execute(
+            select(Client)
+            .options(selectinload(Client.loyalty))
+            .where(Client.id == client_id, Client.deleted_at.is_(None))
+        )
+    ).scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+
+    client.bot_paused = paused
+    response = _to_client_out(client)
+    await db.commit()
+    return response

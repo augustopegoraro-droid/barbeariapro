@@ -64,6 +64,7 @@ class Client(Base):
     )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
     is_blocked: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    bot_paused: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
 
     organization: Mapped["Organization"] = relationship(back_populates="clients")
     consents: Mapped[List["ClientConsent"]] = relationship(back_populates="client")
