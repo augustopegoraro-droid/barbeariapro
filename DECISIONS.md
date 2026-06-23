@@ -130,11 +130,87 @@ roadmap comercial — foi feito de forma isolada sem tocar o bot.
 
 ---
 
+## Infraestrutura e produção (sessão 2026-06-23)
+
+### D-13 — Produção roda na VM via docker-compose, NÃO no Cloud Run
+**Data:** 2026-06-23
+**Decisão:** A produção real é a VM GCP `barbeariapro` (`34.95.199.134`, projeto
+`barberiapro-app`), com toda a stack em containers via `docker-compose.yml` +
+`docker-compose.app.yml`. O Cloud Run não é usado.
+**Motivo:** A Run Admin API nem está habilitada no projeto; `deploy/gcp-cloud-run.sh`
+nunca rodou com sucesso. O bot/Evolution precisa de estado persistente e webhooks
+estáveis, o que o VM com volumes Docker já entrega.
+**Consequência:** O acesso operacional é por SSH
+(`gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a`).
+O app vive em `/opt/barbeariapro` na VM. **Não há backup automatizado dos volumes** —
+a VM já foi encontrada zerada uma vez (perdeu pareamento WhatsApp + dados).
+
+### D-14 — n8n: SEMPRE via API REST, NUNCA editar o SQLite direto
+**Data:** 2026-06-23
+**Decisão:** Qualquer alteração de credencial ou workflow no n8n é feita pela API
+REST (`/rest/login`, `/rest/credentials`, `PATCH /rest/workflows/:id`,
+`POST /rest/workflows/:id/activate`), nunca por `UPDATE` no `database.sqlite`.
+**Motivo (aprendido na marra):** Várias horas foram perdidas tentando injetar a
+credencial OpenAI direto no SQLite. Problemas encontrados:
+- A criptografia do n8n v2.x é **formato OpenSSL** (`U2FsdGVkX1...`), não o JSON
+  `{iv, content}` que tentei gerar manualmente → erro "Credentials could not be decrypted".
+- **Apagar os arquivos `-wal`/`-shm`** após copiar o `.sqlite` descarta mudanças
+  não checkpointed → reverteu correções feitas via API.
+- O n8n v2.27.3 separa **`versionId`** (rascunho) de **`activeVersionId`** (versão
+  que os webhooks realmente executam, vinda de `workflow_history`). Editar só os
+  `nodes` do `workflow_entity` não muda o que o webhook roda.
+**Como fazer certo:**
+- Criar/atualizar credencial: `POST`/`PATCH /rest/credentials/:id` com
+  `{name, type, data:{apiKey:...}}` — o n8n cifra corretamente.
+- Ativar workflow: `POST /rest/workflows/:id/activate` com body
+  `{"versionId":"<uuid existente em workflow_history>"}` (o `versionId` é obrigatório).
+- Login n8n: `admin@barbeariapro.com` / `Barbearia2026`. Chave de cripto em
+  `/home/node/.n8n/config`. `N8N_SECURE_COOKIE=false` (acesso HTTP).
+
+### D-15 — Bot usa GPT-4o-mini + regra explícita de interpretação de slots
+**Data:** 2026-06-23
+**Decisão:** O bot roda em `gpt-4o-mini`. Foi adicionada uma seção
+"INTERPRETAÇÃO DE SLOTS" no system prompt do node `AI Agent` deixando explícito que
+os horários retornados por `verificar_disponibilidade` ESTÃO disponíveis.
+**Motivo:** O GPT-4o-mini alucinou dizendo que um horário livre (11h com o Thedy)
+"já estava reservado", embora a API tivesse retornado o slot como disponível.
+**Trade-off:** GPT-4o seria mais confiável em raciocínio com listas, mas ~10× mais
+caro por token. Optou-se por reforçar o prompt mantendo o mini.
+**Alternativa se reincidir:** trocar o node para `gpt-4o`.
+
+### D-16 — `toolHttpRequest` do n8n não avalia `$env` em `fieldValue`
+**Data:** 2026-06-23
+**Decisão:** Nos 8 nodes `toolHttpRequest`, o header `X-Bot-Token` recebe a
+`BOT_API_KEY` **hardcoded**, não `={{ $env.BOT_API_KEY }}`.
+**Motivo:** Com `valueProvider: "fieldValue"`, o n8n envia a string literal
+`={{ $env.BOT_API_KEY }}` em vez de avaliar a expressão → backend respondia 401.
+**Arquivo:** `workflows.json` (e versão ativa na VM via n8n).
+
+---
+
+## Correções de premissas dos docs antigos (2026-06-23)
+
+### D-17 — Produção é `organization_id = 1` (supersede a premissa de org 3)
+**Data:** 2026-06-23
+**Contexto:** Docs anteriores afirmavam "produção usa org_id=3".
+**Realidade verificada:** A VM foi re-semeada do zero e a única organização é
+`id=1` ("Barbearia Taylor e Thedy"). `BOT_ORGANIZATION_ID=1`, `BOT_UNIT_ID=1`,
+`NEXT_PUBLIC_ORG_ID=1`. Barbeiros: Taylor(1), Thedy(2), Marciana(3), Sandra(4), Pablo(5).
+**Consequência:** Os 2 testes hardcoded em `organization_id == 3` falham contra
+produção também (não só staging) — continuam sendo fails ambientais, não bugs.
+O item da dívida técnica sobre "`NEXT_PUBLIC_ORG_ID` mudou de 3 para 1" está
+**RESOLVIDO**: 1 é o valor correto para esta produção.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
 |---|---|---|---|
+| Sem backup dos volumes Docker da VM | infra VM | ⚠️ Alto | VM já foi zerada uma vez; perdeu pareamento WhatsApp e dados. |
 | Estado do bot em memória (debounce, dedup, sessões) | `app/api/bot.py:49-61` | Médio | Restart perde estado; impossibilita 2ª instância. Aguarda Redis. |
+| Portas abertas ao mundo na VM | firewall GCP | Médio | 5678/8000/3000/8080 públicas; fechar após HTTPS. |
+| 3 commits de deploy não pushados | git `main` | Médio | Clone novo da VM não teria `Dockerfile.migrate`/kit `deploy/`. |
+| `workflows.json` modificado e divergente da VM | `workflows.json` | Baixo | Versão ativa real está na VM (editada via API). |
 | N+1 nos crons de reativação e lembrete | `app/services/reactivation.py`, `reminders.py` | Baixo | 3-4 queries por alvo; aceitável no volume atual. |
-| 2 testes hardcoded na org 3 | `tests/test_clientes_integration.py`, `test_e2e_flow.py` | Baixo | Fail ambiental no staging; não são bugs. |
-| `NEXT_PUBLIC_ORG_ID` no docker-compose.app.yml mudou de 3 para 1 | `docker-compose.app.yml` | ⚠️ Verificar | Produção é org 3; se baked na imagem de prod, precisa reverter antes do próximo deploy. |
+| 2 testes hardcoded na org 3 | `tests/test_clientes_integration.py`, `test_e2e_flow.py` | Baixo | Fail ambiental; não são bugs (ver D-17). |
