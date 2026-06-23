@@ -28,6 +28,20 @@ A VM de produção foi encontrada **completamente zerada**. Toda a stack foi rec
 
 ---
 
+## ✅ Sessão 2026-06-23 — parte 4: bot responde fora do horário
+
+**Mudança:** bot passa a atender 24/7, mas avisa quando a barbearia está fechada.
+
+- `IF Horário Aberto`: ramo `false` agora vai para `Send Composing` (igual ao `true`)
+  — antes encerrava em `Send Offline Message`
+- `Code Horário Comercial`: adiciona prefixo `[FORA_DO_HORARIO]` na mensagem
+  quando fora do expediente; removido `BYPASS_HOURS` desnecessário
+- System prompt: Raquel informa horário de funcionamento (seg-sex 9h-19h, sáb 9h-17h)
+  quando detecta `[FORA_DO_HORARIO]`, mas continua agendando e respondendo perguntas
+- Commit `7464def`, workflow n8n atualizado (versionId `7519aa44`)
+
+---
+
 ## ✅ Sessão 2026-06-23 — parte 3: funil completo + pausa do bot via CRM
 
 ### Funil para clientes existentes + pausa do bot
