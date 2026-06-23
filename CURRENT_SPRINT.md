@@ -1,110 +1,128 @@
 # CURRENT_SPRINT.md
-> Estado do desenvolvimento em 2026-06-21. Atualizar a cada sessão.
+> Estado do desenvolvimento em **2026-06-23**. Atualizar a cada sessão.
 
 ---
 
 ## Branch ativo
 
-`feat/fase2-google-calendar` (backend)  
-PR: https://github.com/augustopegoraro-droid/barbeariapro/pull/1  
-Base: `main`
+`main` (backend) — em dia com `origin/main` (todos os commits pushados).
 
 ---
 
-## Fase 2 — Google Calendar (escopo fechado)
+## ✅ Sessão 2026-06-23 — parte 1: restauração da VM de produção
 
-**Objetivo:** OAuth + worker de sync `appointments → Google Calendar`.  
-**Restrição:** zero contato com n8n/Evolution/bot.
+A VM de produção foi encontrada **completamente zerada**. Toda a stack foi reconstruída do zero.
 
-### ✅ Concluído nesta fase
-
-| Entrega | Arquivos | Commit |
-|---|---|---|
-| Config Google OAuth + chave Fernet | `app/core/config.py` | `a973514` |
-| Criptografia Fernet de tokens | `app/core/crypto.py` | `a973514` |
-| Cliente HTTP Google Calendar (OAuth2 + CRUD eventos) | `app/services/google_calendar.py` | `a973514` |
-| Router OAuth (`/authorize`, `/callback`, `/authorize-url`, `/status`) | `app/api/integracoes.py` | `447cbb0` + `10be0ca` |
-| Worker de sync (`push_appointment`) com refresh automático | `app/services/calendar_sync.py` | `447cbb0` |
-| Hooks BackgroundTask em agenda e barbeiro | `app/api/agenda.py`, `app/api/barbeiro.py` | `447cbb0` |
-| Página `/admin/configuracoes` com botão "Conectar Google Calendar" | `barbearia-frontend/app/admin/configuracoes/page.tsx` | `205e43f` (frontend) |
-| Agenda do barbeiro otimizada para mobile | `barbearia-frontend/app/barbeiro/agenda/page.tsx` | `205e43f` (frontend) |
-| Testes (30 testes de Calendar + OAuth + worker) | `tests/test_calendar_crypto.py`, `test_google_calendar_client.py`, `test_integracoes_oauth.py`, `test_calendar_sync_worker.py` | vários |
-
-### Fluxo OAuth completo (como testar)
-
-```
-1. Iniciar staging (ver PROJECT_CONTEXT.md § 4)
-2. next dev na porta 3000
-3. Login: taylor@barbeariapro.com / senha123
-4. Navegar para /admin/configuracoes
-5. Clicar "Conectar Google Calendar"
-   → abre consentimento Google
-   → callback → /admin/configuracoes?calendar=connected (banner verde)
-6. Criar agendamento em /admin/agenda
-   → BackgroundTask chama push_appointment → insert_event no Google
-   → calendar_sync grava external_event_id + sync_status=synced
-```
-
-### O que a Fase 2 NÃO inclui (fora de escopo)
-
-- Integração com n8n (disponibilidade via Calendar)
-- Automação de status CRM via Calendar
-- Qualquer contato com bot/Evolution
-- Esses itens são Fase 3, bloqueada pela Regra de Ouro
+| Item | Detalhe |
+|---|---|
+| Docker instalado na VM | `curl -fsSL https://get.docker.com \| sudo sh` |
+| Stack infra remontada | postgres + n8n + evolution (api/postgres/redis) via `docker-compose.yml` |
+| Stack app remontada | backend `:8000` + frontend `:3000` via `docker-compose.app.yml` |
+| Banco recriado | role `barber_app` criado à mão, migrations (`0007_crm_leads`), seed org 1 |
+| WhatsApp pareado | número `5563920001734`, instância Evolution `Barbearia` |
+| Workflows n8n importados e ativos | bot + 2 crons |
+| **Bot funcionando end-to-end** | conversa + agendamento confirmados por teste real |
+| Login n8n restaurado | `admin@barbeariapro.com` / `Barbearia2026` (bcrypt resetado via Python) |
+| Credencial OpenAI corrigida | recriada via **API REST do n8n** (ver D-14) |
+| Fix bug de disponibilidade | GPT-4o-mini dizia "horário reservado" para slot livre → instrução nova no system prompt (ver D-15) |
 
 ---
 
-## Estado da Fase 1 (produção)
+## ✅ Sessão 2026-06-23 — parte 2: funil CRM + serviço Corte+Barba
 
-**Deployada em 2026-06-16.** Estável. Não mexer sem janela.
+### Problema 1 — "Corte e Barba" não entrava no sistema
 
-Entregues e no ar:
-- CRM/Kanban (`/admin/crm`, `app/api/crm.py`, models `Lead`/`LeadEvent`)
-- Dashboard operacional (`/dashboard/operacional`)
-- Fix timezone nos filtros de data
-- Fix loyalty no `/barbeiro/atendimento/concluir`
-- RBAC centralizado (`app/deps.resolve_current_role`)
-- Migration `0007_crm_leads` aplicada em produção
+**Causa raiz:** a tool `criar_agendamento` aceita um único `service_id`. Sem serviço
+combo no banco, a IA entrava em loop (4+ chamadas repetidas a `verificar_disponibilidade`)
+e não criava nenhum agendamento.
 
-Rollback disponível: imagens `barbeariapro-backend:pre-fase1` / `barbeariapro-frontend:pre-fase1`
+**Correção:**
+- Serviço `"Corte + Barba"` inserido direto no banco de produção: `id=15`, categoria
+  `combo`, 75 min, R$140. Vinculado a Taylor, Thedy e Pablo via `barber_services`.
+- System prompt da Raquel atualizado no n8n via API REST: ela agora sabe que o combo
+  existe e **não deve criar dois agendamentos separados**.
+- Workflow reativado (`versionId: fe68c6dd`).
+- `scripts/seed.py` atualizado com o serviço e os vínculos (para futuros reseeds).
+
+### Problema 2 — Funil CRM não alimentado pelo WhatsApp
+
+**Causa raiz:** o bot nunca tocava nas tabelas `leads`/`lead_events` — o CRM era
+100% manual.
+
+**Correção em `app/api/bot.py` (commit `ea97257`):**
+- `upsert_client`: quando um **novo cliente** chega pelo WhatsApp, cria `Lead` em
+  estágio `novo_contato` com `source=whatsapp`.
+- `create_appointment`: quando o bot confirma um horário, avança o lead do cliente
+  para `agendado` (se ainda estiver em `novo_contato` ou `conversando`).
+- Histórico registrado em `lead_events` a cada transição.
+- Clientes já cadastrados que retornam não geram novo lead.
+
+### Deploy realizado
+- `bot.py` copiado para a VM via SCP + `docker compose restart backend`.
+- Commit `ea97257` pushado para `origin/main`.
+- `workflows.json` local atualizado com o novo prompt (referência; versão ativa
+  está no n8n da VM).
+
+> ⚠️ **git pull na VM ainda quebra** por `dubious ownership`
+> (`/opt/barbeariapro` pertence a `root`, SSH entra como outro user).
+> Workaround atual: copiar arquivos via `/tmp` + `sudo cp`. Para corrigir de vez:
+> `sudo git config --global --add safe.directory /opt/barbeariapro` na VM.
 
 ---
 
-## Próximos passos (Fase 2 → merge → próxima feature)
+## Pendências imediatas (próxima sessão)
 
-### Imediato (antes do merge do PR #1)
-- [ ] Testar o fluxo OAuth completo no browser (ver "Como testar" acima)
-- [ ] Adicionar no Google Cloud Console a URI de staging:
-  `http://localhost:8001/integracoes/google/calendar/callback`
-- [ ] Verificar `docker-compose.app.yml`: `NEXT_PUBLIC_ORG_ID` está como `"1"` mas
-  produção usa org `3` — confirmar se foi intencional antes do próximo deploy
+- [ ] **Corrigir `git pull` na VM** — rodar `sudo git config --global --add safe.directory /opt/barbeariapro` para poder fazer pull normalmente.
+- [ ] **HTTPS + domínio** — env ativo usa IP `34.95.199.134`. Commit `876d841`
+  trocou para `taylorethedy.app` / `api.taylorethedy.com` no código, mas não foi
+  aplicado ao `.env`/Nginx da VM. `deploy/nginx.conf` + certbot prontos.
+- [ ] **Fechar portas** ao mundo após HTTPS (5678/8000/3000/8080 hoje abertas).
+- [ ] **Backup automatizado** dos volumes Docker da VM (zeramento mostrou que não há).
+- [ ] **Validar lembrete 24h** end-to-end (`CronReminder24h01` ativo, mas nunca testado com agendamento real).
 
-### Pós-merge (próximas features por ROI)
+---
 
-Ordem sugerida pelo `ROADMAP_IMPLEMENTACAO.md` (Fase 1 do roadmap comercial):
+## Estado da Fase 2 — Google Calendar (MERGEADA em `main`)
+
+OAuth + worker de sync `appointments → Google Calendar`, isolado do bot.
+Entregas (commits `a973514`, `447cbb0`, `10be0ca`, `1773b30`):
+- Config + cripto Fernet de token (`app/core/config.py`, `app/core/crypto.py`)
+- Cliente Google Calendar (`app/services/google_calendar.py`)
+- Router OAuth `/integracoes/google/calendar/*` (`app/api/integracoes.py`)
+- Worker `push_appointment` via BackgroundTask (`app/services/calendar_sync.py`),
+  hooks em `app/api/agenda.py` e `app/api/barbeiro.py`
+- Página `/admin/configuracoes` + agenda barbeiro mobile-first (frontend)
+- ~30 testes de Calendar/OAuth/worker
+
+> ⚠️ A conexão Google Calendar precisa ser refeita na produção restaurada
+> (tokens OAuth estavam no banco antigo, que foi perdido). Reconectar via
+> `/admin/configuracoes` → "Conectar Google Calendar".
+
+---
+
+## Próximas features por ROI (pós-deploy estável)
 
 | # | Feature | Esforço | Observação |
 |---|---|---|---|
-| 1 | **Lembrete 24h antes via WhatsApp** | Baixo | Infraestrutura 100% pronta; só falta o cron n8n + endpoint `/internal/reminders` |
-| 2 | **Cron de reativação** | Trivial | `POST /internal/loyalty/reactivation/run` já existe; zero código novo — 1 workflow n8n |
-| 3 | **Deploy VPS + HTTPS** | Médio | Pré-requisito para vender; CORS já por env var |
-| 4 | **Export CSV comissões/faturamento** | Baixo | Queries já existem no dashboard |
+| 1 | Lembrete 24h via WhatsApp | Baixo | `CronReminder24h01` ativo; validar end-to-end com agendamento real |
+| 2 | Cron de reativação | Trivial | `CronReactivation1` já ativo; `POST /internal/loyalty/reactivation/run` existe |
+| 3 | HTTPS + domínio | Médio | Pré-requisito para vender; scripts prontos em `deploy/` |
+| 4 | Export CSV comissões/faturamento | Baixo | Queries já no dashboard |
 
-### Fase 3 (BLOQUEADA — não iniciar sem aprovação explícita)
-Requer staging isolado de n8n/Evolution com chip de teste.
-Envolve: régua de follow-up 20min/24h/48h, gestão de objeções no prompt n8n,
-automação de status CRM via Calendar.
+### Fase 3 (BLOQUEADA — não iniciar sem aprovação)
+Régua de follow-up 20min/24h/48h, objeções no prompt n8n, status CRM via Calendar.
 Trava de segurança: `app/services/whatsapp.py:17` (dry-run nativo).
 
 ---
 
-## Containers em produção (estado em 2026-06-21)
+## Containers em produção (VM, 2026-06-23)
 
 ```
-barbeariapro-app-backend    Up 3 days (healthy)   :8000
-barbeariapro-app-frontend   Up 45 hours (healthy) :3000
-barbeariapro-postgres       Up 45 hours (healthy) :5432
-barbeariapro-staging-postgres  Up 32 hours        :5433  ← staging
+barbeariapro-app-backend    :8000   (healthy)
+barbeariapro-app-frontend   :3000   (healthy)
+barbeariapro-postgres       :5432   (healthy)
+evolution_api               :8080
+evolution_postgres          (interno)
+evolution_redis             (interno)
+n8n                         :5678
 ```
-
-n8n e Evolution (infra) UP mas não listados acima — verificar com `docker ps`.
