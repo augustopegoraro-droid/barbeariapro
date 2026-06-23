@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +18,7 @@ from sqlalchemy.orm import selectinload
 from app.core.phone import normalize_phone as _validate_phone
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
-from models import Client, Lead, LeadEvent, User
+from models import Client, Lead, LeadEvent, MessageLog, User
 from models.enums import ContactChannel, LeadStage
 
 router = APIRouter(prefix="/crm", tags=["crm"])
@@ -145,6 +145,13 @@ class LeadEditIn(BaseModel):
         if v not in {e.value for e in ContactChannel}:
             raise ValueError(f"Canal inválido: {v!r}")
         return v
+
+
+class ConversationMessageOut(BaseModel):
+    id: int
+    direction: str          # "inbound" | "outbound"
+    body: str
+    created_at: str
 
 
 class LeadMoveIn(BaseModel):
@@ -384,3 +391,38 @@ async def delete_lead(
     lead = await _get_lead(db, lead_id)
     await db.delete(lead)
     await db.commit()
+
+
+@router.get("/leads/{lead_id}/messages", response_model=List[ConversationMessageOut])
+async def get_lead_messages(
+    lead_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    limit: int = Query(100, ge=1, le=500),
+) -> List[ConversationMessageOut]:
+    """Histórico de conversa WhatsApp vinculado ao lead (via client_id)."""
+    require_full_access(await resolve_current_role(db, current_user))
+    lead = await _get_lead(db, lead_id)
+
+    if not lead.client_id:
+        return []
+
+    rows = (
+        await db.execute(
+            select(MessageLog)
+            .where(MessageLog.client_id == lead.client_id)
+            .where(MessageLog.body_text.isnot(None))
+            .order_by(MessageLog.created_at.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    return [
+        ConversationMessageOut(
+            id=m.id,
+            direction=m.direction.value,
+            body=m.body_text,
+            created_at=_iso(m.created_at),
+        )
+        for m in reversed(rows)
+    ]

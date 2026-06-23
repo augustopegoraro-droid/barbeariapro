@@ -34,11 +34,12 @@ from models import (
     ContactChannel,
     Lead,
     LeadEvent,
+    MessageLog,
     Service,
     TimeOff,
     Unit,
 )
-from models.enums import LeadStage
+from models.enums import DeliveryStatus, LeadStage, MessageDirection
 
 router = APIRouter(prefix="/bot", tags=["bot"])
 BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
@@ -203,6 +204,118 @@ async def debug_set_session(_auth: _BotAuth, body: _DebugSessionIn):
         _debounce.pop(body.phone, None)
         _last_flush[body.phone] = _mono() - (body.minutes_ago * 60.0)
     return {"ok": True, "simulated_minutes_ago": body.minutes_ago}
+
+
+# ---------------------------------------------------------------------------
+# Schemas de saída/entrada
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Log de mensagens (conversa WhatsApp)
+# ---------------------------------------------------------------------------
+
+
+class _MessageLogIn(BaseModel):
+    phone: str
+    direction: str          # "inbound" | "outbound"
+    body: str
+    whatsapp_message_id: Optional[str] = None
+
+
+@router.post("/messages", status_code=200)
+async def log_message(body: _MessageLogIn, db: BotDB, _auth: _BotAuth = None):
+    """Grava mensagem recebida ou enviada no histórico de conversa.
+
+    Chamado pelo n8n após debounce/flush (inbound) e após resposta do AI Agent
+    (outbound). Seguro para re-entrega: idempotente via whatsapp_message_id.
+    """
+    phone = _normalize_phone(body.phone)
+    org_id = settings.bot_organization_id
+    direction = MessageDirection(body.direction)
+    now = datetime.now(timezone.utc)
+
+    _logger.info(
+        "conversation_log direction=%s phone=%s wamid=%s body_len=%d",
+        direction.value, phone, body.whatsapp_message_id or "none", len(body.body),
+    )
+
+    # Deduplicação: se o wamid já foi gravado, ignorar silenciosamente.
+    if body.whatsapp_message_id:
+        dup = (
+            await db.execute(
+                select(MessageLog).where(
+                    MessageLog.idempotency_key == body.whatsapp_message_id
+                )
+            )
+        ).scalar_one_or_none()
+        if dup is not None:
+            _logger.info("conversation_log duplicate wamid=%s skipped", body.whatsapp_message_id)
+            return {"ok": True, "duplicate": True}
+
+    client = (
+        await db.execute(
+            select(Client)
+            .where(Client.organization_id == org_id)
+            .where(Client.phone_e164 == phone)
+        )
+    ).scalar_one_or_none()
+
+    if not client:
+        _logger.warning("conversation_log client_not_found phone=%s", phone)
+        return {"ok": False, "reason": "client_not_found"}
+
+    db.add(
+        MessageLog(
+            organization_id=org_id,
+            client_id=client.id,
+            direction=direction,
+            body_text=body.body,
+            idempotency_key=body.whatsapp_message_id,
+            delivery_status=(
+                DeliveryStatus.sent
+                if direction == MessageDirection.outbound
+                else DeliveryStatus.delivered
+            ),
+            attempt_count=0,
+        )
+    )
+
+    # Mensagem inbound → atualiza last_contact_at e avança lead para 'conversando'.
+    if direction == MessageDirection.inbound:
+        lead = (
+            await db.execute(
+                select(Lead)
+                .where(Lead.client_id == client.id)
+                .where(Lead.organization_id == org_id)
+                .where(Lead.stage.in_({LeadStage.novo_contato, LeadStage.conversando}))
+                .order_by(Lead.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+        if lead is not None:
+            lead.last_contact_at = now
+            lead.updated_at = now
+            if lead.stage == LeadStage.novo_contato:
+                old_stage = lead.stage
+                lead.stage = LeadStage.conversando
+                db.add(
+                    LeadEvent(
+                        lead_id=lead.id,
+                        organization_id=org_id,
+                        event_type="stage_changed",
+                        from_stage=old_stage,
+                        to_stage=LeadStage.conversando,
+                    )
+                )
+                _logger.info(
+                    "conversation_log lead_id=%d stage novo_contato→conversando", lead.id
+                )
+
+    await db.commit()
+    _logger.info("conversation_log saved direction=%s phone=%s", direction.value, phone)
+    return {"ok": True, "duplicate": False}
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +528,7 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
                 source=ContactChannel.whatsapp,
                 stage=LeadStage.novo_contato,
                 position=(max_pos + 1) if max_pos is not None else 0,
+                last_contact_at=datetime.now(timezone.utc),
             )
             db.add(lead)
             await db.flush()
@@ -424,6 +538,10 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
                 event_type="created",
                 to_stage=LeadStage.novo_contato,
             ))
+        else:
+            # Lead ativo já existe: atualizar timestamp de contato.
+            recent_lead.last_contact_at = datetime.now(timezone.utc)
+            recent_lead.updated_at = datetime.now(timezone.utc)
     else:
         client = Client(
             organization_id=org_id,

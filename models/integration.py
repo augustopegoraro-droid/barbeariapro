@@ -160,6 +160,7 @@ class MessageLog(Base):
     )
     idempotency_key: Mapped[Optional[str]] = mapped_column(Text, unique=True)
     template: Mapped[Optional[str]] = mapped_column(Text)
+    body_text: Mapped[Optional[str]] = mapped_column(Text)
     delivery_status: Mapped[DeliveryStatus] = mapped_column(
         pg_enum(DeliveryStatus, "delivery_status"),
         nullable=False,
