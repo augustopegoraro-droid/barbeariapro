@@ -32,10 +32,13 @@ from models import (
     ClientConsent,
     ConsentStatus,
     ContactChannel,
+    Lead,
+    LeadEvent,
     Service,
     TimeOff,
     Unit,
 )
+from models.enums import LeadStage
 
 router = APIRouter(prefix="/bot", tags=["bot"])
 BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
@@ -393,6 +396,36 @@ async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
                 channel=ContactChannel.whatsapp,
                 status=ConsentStatus.opt_in,
                 source="chatbot_first_contact",
+            )
+        )
+
+        # Novo contato via WhatsApp → criar lead no funil
+        max_pos = (
+            await db.execute(
+                select(func.max(Lead.position)).where(
+                    Lead.organization_id == org_id,
+                    Lead.stage == LeadStage.novo_contato,
+                )
+            )
+        ).scalar_one_or_none()
+        lead_pos = (max_pos + 1) if max_pos is not None else 0
+        lead = Lead(
+            organization_id=org_id,
+            client_id=client.id,
+            name=client.name,
+            phone_e164=phone,
+            source=ContactChannel.whatsapp,
+            stage=LeadStage.novo_contato,
+            position=lead_pos,
+        )
+        db.add(lead)
+        await db.flush()
+        db.add(
+            LeadEvent(
+                lead_id=lead.id,
+                organization_id=org_id,
+                event_type="created",
+                to_stage=LeadStage.novo_contato,
             )
         )
 
@@ -829,6 +862,31 @@ async def create_appointment(body: AppointmentCreateIn, db: BotDB) -> Appointmen
             duration_minutes=svc.default_duration_min,
         )
     )
+
+    # Avançar lead no funil para 'agendado' (se existir e ainda estiver em estágio ativo)
+    _active_stages = {LeadStage.novo_contato, LeadStage.conversando}
+    lead_row = (
+        await db.execute(
+            select(Lead)
+            .where(Lead.client_id == body.client_id)
+            .where(Lead.organization_id == org_id)
+            .where(Lead.stage.in_(_active_stages))
+            .order_by(Lead.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if lead_row is not None:
+        old_stage = lead_row.stage
+        lead_row.stage = LeadStage.agendado
+        db.add(
+            LeadEvent(
+                lead_id=lead_row.id,
+                organization_id=org_id,
+                event_type="stage_changed",
+                from_stage=old_stage,
+                to_stage=LeadStage.agendado,
+            )
+        )
 
     return _appt_out(appt, barber.name, svc.name)
 

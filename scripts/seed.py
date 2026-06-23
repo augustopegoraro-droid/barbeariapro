@@ -67,6 +67,7 @@ SERVICES_CATALOG: list[tuple[str, ServiceCategory, int, str, bool]] = [
     ("Corte Masculino",          ServiceCategory.cabelo,   45,   "90.00", False),
     ("Corte Infantil",           ServiceCategory.cabelo,   30,   "80.00", False),
     ("Barba",                    ServiceCategory.barba,    30,   "50.00", False),
+    ("Corte + Barba",            ServiceCategory.combo,    75,  "140.00", False),
     ("Escova",                   ServiceCategory.cabelo,   60,   "90.00", True),
     ("Manicure e Pedicure",      ServiceCategory.estetica, 90,   "75.00", False),
     ("Hidratação",               ServiceCategory.quimica,  60,   "90.00", True),
@@ -88,7 +89,7 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
         "0.48",
         UnitRole.owner,
         "taylor@barbeariapro.com",
-        ["Corte Feminino", "Corte Masculino", "Corte Infantil", "Barba",
+        ["Corte Feminino", "Corte Masculino", "Corte Infantil", "Barba", "Corte + Barba",
          "Escova", "Mechas", "Coloração", "Selagem Masculina", "Selagem Feminina"],
     ),
     (
@@ -97,7 +98,7 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
         "0.48",
         UnitRole.owner,
         "thedy@barbeariapro.com",
-        ["Corte Feminino", "Corte Masculino", "Corte Infantil", "Barba",
+        ["Corte Feminino", "Corte Masculino", "Corte Infantil", "Barba", "Corte + Barba",
          "Escova", "Mechas", "Coloração", "Selagem Masculina", "Selagem Feminina"],
     ),
     (
@@ -125,7 +126,7 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
         "0.48",
         UnitRole.barber,
         "pablo@barbeariapro.com",
-        ["Corte Masculino", "Corte Infantil", "Barba", "Coloração",
+        ["Corte Masculino", "Corte Infantil", "Barba", "Corte + Barba", "Coloração",
          "Selagem Masculina", "Hidratação", "Depilação de Nariz e Orelha"],
     ),
 ]
