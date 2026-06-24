@@ -137,7 +137,8 @@ async def evolution_webhook(
     """
     payload: dict = await request.json()
     event: str = payload.get("event", "")
-    _logger.info("wa_webhook received event=%s instance=%s", event, payload.get("instance", ""))
+    data_keys = list(payload.get("data", {}).keys())
+    print(f"[WA_WEBHOOK] event={event!r} instance={payload.get('instance')} data_keys={data_keys}", flush=True)
 
     # Não encaminha send.message ao n8n para evitar loop (bot responde, n8n recebe, gera outra resposta...)
     if event != "send.message":
