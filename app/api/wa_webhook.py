@@ -146,11 +146,9 @@ async def evolution_webhook(
 
     data: dict = payload.get("data", {})
     key: dict = data.get("key", {})
+    from_me: bool = key.get("fromMe", False)
 
-    # Só mensagens recebidas de contatos individuais
-    if key.get("fromMe", False):
-        return {"ok": True, "skipped": True, "reason": "fromMe=true"}
-
+    # Filtra apenas mensagens de contatos individuais (inbound e outbound do bot)
     phone = _extract_phone(key.get("remoteJid", ""))
     if phone is None:
         return {"ok": True, "skipped": True, "reason": "not_individual"}
@@ -160,6 +158,10 @@ async def evolution_webhook(
     if settings.evolution_instance_name and instance != settings.evolution_instance_name:
         _logger.warning("wa_webhook instance inesperada: got=%r expected=%r", instance, settings.evolution_instance_name)
         return {"ok": True, "skipped": True, "reason": "instance_mismatch"}
+
+    # fromMe=true → resposta do bot enviada via Evolution
+    # fromMe=false → mensagem do cliente
+    sender_type = MessageSenderType.bot if from_me else MessageSenderType.client
 
     wa_message_id: Optional[str] = key.get("id")
     msg_type_raw: str = data.get("messageType", "conversation")
@@ -172,7 +174,7 @@ async def evolution_webhook(
             db,
             org_id=settings.bot_organization_id,
             phone=phone,
-            sender_type=MessageSenderType.client,
+            sender_type=sender_type,
             body=body,
             message_type=crm_msg_type,
             wa_message_id=wa_message_id,
