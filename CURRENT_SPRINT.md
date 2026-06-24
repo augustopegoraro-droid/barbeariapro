@@ -1,212 +1,169 @@
 # CURRENT_SPRINT.md
-> Estado do desenvolvimento em **2026-06-23**. Atualizar a cada sessão.
+> Estado do desenvolvimento em **2026-06-24**. Atualizar a cada sessão.
 
 ---
 
 ## Branch ativo
 
-`main` (backend) — pushado até `4d4ed5e`. VM está em `a11e0be` (ver abaixo).
+`main` — local e VM em **`f72cd59`** (em sync total).
+
+---
+
+## ✅ Sessão 2026-06-24 — CRM Conversacional Fases 2–5
+
+### Objetivo
+Evoluir o CRM de polling de `message_log` para um inbox em tempo real com histórico
+estruturado, persistência de todos os tipos de mensagem e atualização via SSE.
+
+### Fase 2 — Persistência unificada de conversa (commit `f87f579`)
+
+**Migration `0010_conversations`** (aplicada na VM como superuser postgres):
+- Tabelas: `conversations`, `messages`, `attachments`
+- ENUMs: `conversation_status`, `message_sender_type`, `message_type`, `attachment_media_type`
+- Índice GIN pg_trgm em `messages.body_text`
+- Índice parcial de idempotência `(conversation_id, wa_message_id, sender_type) WHERE wa_message_id IS NOT NULL`
+- Backfill de `message_log.body_text` → `messages` (ON CONFLICT DO NOTHING)
+- RLS aplicado nas 3 tabelas
+
+**Novos arquivos:**
+- `alembic/versions/0010_conversations.py`
+- `models/conversation.py` — `Conversation`, `Message`, `Attachment` (SQLAlchemy 2.0)
+- `app/services/conversation.py` — porta única de escrita (`get_or_create_conversation`, `record_message`)
+- `app/services/sse_broker.py` — broker SSE em memória (asyncio Queues por org)
+
+**Arquivos modificados:**
+- `models/enums.py` — 4 novos ENUMs
+- `models/__init__.py` — exports dos novos models
+- `app/api/bot.py:log_message` — delegado para `conversation_service`; grava sem cliente (1º contato)
+- `app/api/crm.py:get_lead_messages` — repontado de `message_log` para `messages`
+- `app/services/reminders.py` e `reactivation.py` — chamam `record_message(sender_type=system)`
+- `app/main.py` — include_router conversations
+
+**Invariantes mantidas:**
+- `message_log` intocado — continua para reminders/reativação com template/retry
+- Avanço de estágio do funil em bot.py não foi alterado
+- `get_bot_db` e `get_tenant_db` não foram tocados
+
+### Fase 3 — APIs de leitura (commit `7ee6cbf`)
+
+Novo router em `app/api/conversations.py` (prefixo `/crm`):
+- `GET /crm/conversations` — lista paginada por cursor `base64({ts,id})`
+- `GET /crm/conversations/search?q=` — ILIKE com índice GIN
+- `GET /crm/conversations/{id}` — detalhe
+- `GET /crm/conversations/{id}/messages` — scroll por `?before=<id>`
+- `PATCH /crm/conversations/{id}/read` — zera unread_count
+
+**Fix de SyntaxError:** parâmetros com `Depends(...)` (sem default) devem vir antes de
+parâmetros com default no FastAPI — parâmetro `q: str = Query(...)` reordenado.
+
+### Fase 4 — UI Inbox 3 painéis (commit `effdd77` + deploy via SCP)
+
+Adições em `barbearia-frontend/app/admin/crm/page.tsx`:
+- Toggle **Kanban ⇄ Inbox** no header da página
+- Novos componentes: `ConvListItem`, `MsgBubble`, `ConvMessagePanel`, `InboxView`
+- `MsgBubble`: cores por sender_type; áudio (transcript), imagem, documento
+- `ConvMessagePanel`: scroll infinito, poll 10 s, `PATCH /read` ao abrir
+- `InboxView`: lista com cursor pagination, poll 15 s, layout responsivo
+
+Novos tipos em `barbearia-frontend/types/index.ts`:
+`MessageAttachment`, `ConversationMsg`, `MessagePageData`, `ConversationItem`, `ConversationListData`
+
+### Fase 5 — SSE em tempo real (commits `effdd77` + `f72cd59`)
+
+**Backend:**
+- `GET /crm/stream?token=<jwt>` em `app/api/conversations.py:387`
+- Token via query param (browser `EventSource` não suporta headers)
+- Valida JWT → `org_id` → subscreve fila no `sse_broker`
+- Envia `{"type":"connected"}` imediatamente; keepalive `: keepalive\n\n` a cada 25 s
+- Desregistra do broker no `finally` (disconnect seguro)
+- `headers: Cache-Control: no-cache, X-Accel-Buffering: no`
+- `_publish` em `conversation.py` chamado após `flush()` (msg.id garantido), antes do `commit()`
+
+**Frontend (InboxView):**
+- Abre `EventSource` no `useEffect` do mount; fecha no cleanup
+- Evento `new_message` → atualiza preview/unread na lista; propaga `sseMsg` para painel ativo via `selectedRef`
+- `setSseMsg(null)` ao trocar de conversa (evita append em conversa errada)
+
+**Frontend (ConvMessagePanel):**
+- Aceita `sseMsg?: ConversationMsg | null` via prop
+- `useEffect` em `sseMsg` → append com deduplicação por `id`
+- Polling 10 s permanece como fallback
+
+### Deploy desta sessão
+
+| Etapa | Comando | Resultado |
+|---|---|---|
+| Commits backend | `git add ... && git commit && git push` | 5 commits em main |
+| Pull VM + rebuild backend | `sudo git -C /opt/barbeariapro pull && docker compose -f docker-compose.app.yml up -d --build backend` | ✅ healthy |
+| SCP frontend | `gcloud compute scp ... && sudo cp ... && docker compose up -d --build frontend` | ✅ healthy |
+| Migration 0010 | `docker exec -e DATABASE_URL=...postgres... python -m alembic upgrade head` | ✅ aplicada |
+
+**Erro encontrado e corrigido:** `sse_broker.py` e `_publish` em `conversation.py` não foram
+incluídos no commit da Fase 2 — commitados separadamente em `f72cd59`. Causa: arquivo novo
+não rastreado (`git status` mostrava `??`) e modificação local não staged.
 
 ---
 
 ## ✅ Sessão 2026-06-23 — parte 5: sincronização WhatsApp↔CRM em tempo real
 
-### Problema
-Bot respondia no WhatsApp mas o CRM não atualizava: sem polling, sem armazenamento
-de mensagens, sem progressão automática de estágio, sem `last_contact_at`.
+**Backend (commit `a11e0be`):**
+- `0009_conversation_log`: `body_text TEXT` em `message_log`
+- `POST /bot/messages`: grava inbound/outbound; idempotente por `whatsapp_message_id`;
+  atualiza `last_contact_at`; move lead `novo_contato→conversando` no inbound
+- `GET /crm/leads/{id}/messages`: histórico via `client_id` (via `message_log.body_text`)
 
-### O que foi implementado
-
-**Backend (commit `a11e0be`, no ar na VM):**
-- `alembic/versions/0009_conversation_log.py` — adiciona `body_text TEXT` a `message_log`
-- `models/integration.py` — campo `body_text` em `MessageLog`
-- `app/api/bot.py`:
-  - `POST /bot/messages` — grava mensagem inbound/outbound; idempotente por `whatsapp_message_id`; atualiza `last_contact_at`; move lead `novo_contato→conversando` em inbound; retorna `{"ok":false}` silenciosamente se cliente não existe
-  - `upsert_client` — atualiza `last_contact_at` no lead ativo quando cliente já existe
-- `app/api/crm.py` — `GET /crm/leads/{id}/messages` (histórico de conversa via `client_id`)
-- Migration 0009 aplicada na VM como postgres superuser (não via alembic CLI)
-
-**Frontend (commit `c550740` no repo do frontend, deploy via SCP+rebuild às 23:04):**
-- `types/index.ts` — interface `ConversationMessage`
-- `app/admin/crm/page.tsx` — reescrita completa:
-  - Kanban faz polling a cada 30s (`POLL_INTERVAL = 30_000`)
-  - `ConversationDrawer`: abre ao clicar no card, polling de 10s nas mensagens, balões de chat (inbound=esquerda/zinc-800, outbound=direita/green-800/50), separadores de data
-  - Botão pausa/retoma bot por card (parte 3, mantido)
-  - Rodapé "Atualiza automaticamente a cada 10 s"
-
-**n8n workflow (atualizado via API REST, NÃO via git):**
-- **2 novos nós:** `Log Inbound Message` e `Log Outbound Message`
-- **Posição EM SÉRIE** (não paralelo — ver D-18):
-  - `HTTP Flush Buffer → Log Inbound → Code Horário Comercial → ...`
-  - `... → AI Agent → Send Response → Log Outbound`
-- `Code Horário Comercial` atualizado para usar `$('HTTP Flush Buffer').first().json.*` (refs explícitas, necessário porque Log Inbound agora é o nó anterior)
-- Workflow: 43 nós, ativo, versionId `97604086-8181-4695-a056-d86d40220d91`
-
-### Diagnóstico crítico descoberto (D-18)
-**n8n v2.27.3 não executa nós em fanout paralelo**: conexões `[nodeA, nodeB]` no
-mesmo `main[0]` resultam apenas em `nodeA` executando; `nodeB` nunca aparece no
-`runData` e nunca é chamado. Verificado em 9+ execuções consecutivas. Solução: série.
-
-### Estado do DB após sessão
-- Migration HEAD: `0009_conversation_log`
-- Clientes: Augusto Pegoraro (`+556399368196`, id=1), Reinaldo Viterbo (id=5)
-- Leads: id=1 "Cliente Teste Funil" (agendado, sem client_id), id=4 "Augusto Pegoraro" (novo_contato, client_id=1) — **id=4 criado manualmente** porque o AI Agent criou o cliente antes do código de lead existir
-- `message_log`: 2 linhas (inbound + outbound, do teste curl, client_id=1)
-
-### Estado git ao final
-- Local: `4d4ed5e` (n8n log nodes — `workflows.json` com conexões PARALELAS originais)
-- VM: `a11e0be` (workflow real na VM tem conexões SÉRIES aplicadas por API)
-- `workflows.json` local **DIVERGE** da VM — não usar como referência
-- **`git pull` na VM agora funciona**: `sudo git config --global --add safe.directory /opt/barbeariapro` rodado nesta sessão
-
-### Pendente de confirmação
-- [ ] **Teste ao vivo**: usuário enviar mensagem WhatsApp → verificar que `POST /bot/messages` é chamado nos logs → lead move para `conversando` → mensagens aparecem no drawer do CRM. Ainda não foi possível confirmar (sessão encerrada antes do teste).
-
----
-
-## ✅ Sessão 2026-06-23 — parte 1: restauração da VM de produção
-
-A VM de produção foi encontrada **completamente zerada**. Toda a stack foi reconstruída do zero.
-
-| Item | Detalhe |
-|---|---|
-| Docker instalado na VM | `curl -fsSL https://get.docker.com \| sudo sh` |
-| Stack infra remontada | postgres + n8n + evolution (api/postgres/redis) via `docker-compose.yml` |
-| Stack app remontada | backend `:8000` + frontend `:3000` via `docker-compose.app.yml` |
-| Banco recriado | role `barber_app` criado à mão, migrations (`0007_crm_leads`), seed org 1 |
-| WhatsApp pareado | número `5563920001734`, instância Evolution `Barbearia` |
-| Workflows n8n importados e ativos | bot + 2 crons |
-| **Bot funcionando end-to-end** | conversa + agendamento confirmados por teste real |
-| Login n8n restaurado | `admin@barbeariapro.com` / `Barbearia2026` (bcrypt resetado via Python) |
-| Credencial OpenAI corrigida | recriada via **API REST do n8n** (ver D-14) |
-| Fix bug de disponibilidade | GPT-4o-mini dizia "horário reservado" para slot livre → instrução nova no system prompt (ver D-15) |
+**n8n (via API REST — não git):** 2 nós Log Inbound/Outbound em série (ver D-18).
 
 ---
 
 ## ✅ Sessão 2026-06-23 — parte 4: bot responde fora do horário
 
-**Mudança:** bot passa a atender 24/7, mas avisa quando a barbearia está fechada.
-
-- `IF Horário Aberto`: ramo `false` agora vai para `Send Composing` (igual ao `true`)
-  — antes encerrava em `Send Offline Message`
-- `Code Horário Comercial`: adiciona prefixo `[FORA_DO_HORARIO]` na mensagem
-  quando fora do expediente; removido `BYPASS_HOURS` desnecessário
-- System prompt: Raquel informa horário de funcionamento (seg-sex 9h-19h, sáb 9h-17h)
-  quando detecta `[FORA_DO_HORARIO]`, mas continua agendando e respondendo perguntas
-- Commit `7464def`, workflow n8n atualizado (versionId `7519aa44`)
+Bot atende 24/7 com prefixo `[FORA_DO_HORARIO]` fora do expediente.
+Commit `7464def`, workflow n8n atualizado (versionId `7519aa44`).
 
 ---
 
 ## ✅ Sessão 2026-06-23 — parte 3: funil completo + pausa do bot via CRM
 
-### Funil para clientes existentes + pausa do bot
-
-**Problema reportado:** clientes antigos que voltam a mandar mensagem não entravam
-no funil; equipe não tinha como pausar o bot para assumir o atendimento manualmente.
-
-**Correções (commit `4721316`):**
-
-- `bot.py — upsert_client`: clientes existentes sem lead ativo nos últimos 7 dias
-  também recebem um novo lead em `novo_contato` quando contatam via WhatsApp.
-- `bot.py — GET /bot/clients/paused-status?phone=X`: retorna `{"paused": bool}`;
-  usado pelo n8n antes de chamar o AI Agent.
-- `clientes.py — PATCH /clientes/{id}/bot-pause?paused=bool`: endpoint JWT para
-  staff pausar/retomar o bot por cliente.
-- `crm.py — GET /crm/board`: passa a incluir `bot_paused` do cliente vinculado
-  ao lead (join com `clients`).
-- `alembic/0008_client_bot_paused.py`: migration formal (coluna já existia em
-  produção por ALTER TABLE direto).
-- `workflows.json`: dois novos nós inseridos entre `Send Composing Active` e
-  `AI Agent` — `HTTP Check Bot Pause` → `IF Bot Paused`; se `paused=true` o bot
-  silencia e a conversa fica com a equipe.
-- Frontend `barbearia-frontend/app/admin/crm/page.tsx`: botão "Assumir atendimento"
-  / "Devolver ao bot" em cada card do Kanban (visível apenas para leads com cliente
-  vinculado). Commit `4d43144` no repo do frontend.
-
-**Deploy realizado:**
-- Backend reconstruído (`docker compose up --build backend`).
-- Workflow n8n atualizado via API REST (`versionId 7966507f`).
-- Endpoint testado: `GET /bot/clients/paused-status` retorna `{"paused":false,...}`.
+- `upsert_client`: clientes antigos sem lead ativo recebem novo lead em `novo_contato`
+- `GET /bot/clients/paused-status`, `PATCH /clientes/{id}/bot-pause`
+- Migration `0008_client_bot_paused` (formal — coluna já existia por ALTER TABLE)
+- Frontend: botão "Assumir / Devolver bot" nos cards do Kanban
+Commit `4721316`, workflow n8n atualizado (`versionId 7966507f`).
 
 ---
 
 ## ✅ Sessão 2026-06-23 — parte 2: funil CRM + serviço Corte+Barba
 
-### Problema 1 — "Corte e Barba" não entrava no sistema
+- Serviço `"Corte + Barba"` (id=15, 75min, R$140) inserido no banco
+- `upsert_client`: novo cliente → Lead `novo_contato`; bot confirma agendamento → `agendado`
+- Commit `ea97257`
 
-**Causa raiz:** a tool `criar_agendamento` aceita um único `service_id`. Sem serviço
-combo no banco, a IA entrava em loop (4+ chamadas repetidas a `verificar_disponibilidade`)
-e não criava nenhum agendamento.
+---
 
-**Correção:**
-- Serviço `"Corte + Barba"` inserido direto no banco de produção: `id=15`, categoria
-  `combo`, 75 min, R$140. Vinculado a Taylor, Thedy e Pablo via `barber_services`.
-- System prompt da Raquel atualizado no n8n via API REST: ela agora sabe que o combo
-  existe e **não deve criar dois agendamentos separados**.
-- Workflow reativado (`versionId: fe68c6dd`).
-- `scripts/seed.py` atualizado com o serviço e os vínculos (para futuros reseeds).
+## ✅ Sessão 2026-06-23 — parte 1: restauração da VM de produção
 
-### Problema 2 — Funil CRM não alimentado pelo WhatsApp
-
-**Causa raiz:** o bot nunca tocava nas tabelas `leads`/`lead_events` — o CRM era
-100% manual.
-
-**Correção em `app/api/bot.py` (commit `ea97257`):**
-- `upsert_client`: quando um **novo cliente** chega pelo WhatsApp, cria `Lead` em
-  estágio `novo_contato` com `source=whatsapp`.
-- `create_appointment`: quando o bot confirma um horário, avança o lead do cliente
-  para `agendado` (se ainda estiver em `novo_contato` ou `conversando`).
-- Histórico registrado em `lead_events` a cada transição.
-- Clientes já cadastrados que retornam não geram novo lead.
-
-### Deploy realizado
-- `bot.py` copiado para a VM via SCP + `docker compose restart backend`.
-- Commit `ea97257` pushado para `origin/main`.
-- `workflows.json` local atualizado com o novo prompt (referência; versão ativa
-  está no n8n da VM).
-
-> ⚠️ **git pull na VM ainda quebra** por `dubious ownership`
-> (`/opt/barbeariapro` pertence a `root`, SSH entra como outro user).
-> Workaround atual: copiar arquivos via `/tmp` + `sudo cp`. Para corrigir de vez:
-> `sudo git config --global --add safe.directory /opt/barbeariapro` na VM.
+VM encontrada zerada. Stack inteira reconstruída do zero.
+Bot WhatsApp funcionando end-to-end (conversa + agendamento).
 
 ---
 
 ## Pendências imediatas (próxima sessão)
 
-- [ ] **[CRÍTICO] Confirmar sincronização CRM ao vivo**: mandar mensagem WhatsApp → checar `docker logs barbeariapro-app-backend` por `POST /bot/messages 200 OK` → confirmar lead em `conversando` → mensagem no drawer. Os nós de log nunca foram testados em execução real com as conexões em série.
-- [ ] **Sincronizar `workflows.json`** — o arquivo local tem as conexões PARALELAS originais. Exportar da VM e commitar:
+- [ ] **[CRÍTICO] Confirmar SSE e Inbox ao vivo**: abrir `/admin/crm` → Inbox → mandar
+  mensagem WhatsApp → verificar que preview atualiza em tempo real e mensagem aparece
+  no painel sem reload. Primeira confirmação ao vivo do sistema completo.
+- [ ] **Sincronizar `workflows.json`** — arquivo local tem conexões PARALELAS; VM tem SÉRIE.
+  Exportar da VM antes de qualquer edição:
   ```bash
   gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a \
-    --command="python3 -c \"import json,urllib.request; cookies={}; [cookies.update({p[5]:p[6]}) for line in open('/tmp/n8n.cookies') for p in [line.strip().split('\t')] if len(p)>=7]; r=urllib.request.urlopen(urllib.request.Request('http://localhost:5678/rest/workflows/25QZQ664N6hrIg59',headers={'Cookie':'; '.join(f\\\"{k}={v}\\\" for k,v in cookies.items())})); print(r.read().decode())\""  > workflows.json
-  ```
-- [ ] **Sincronizar VM com git** (1 commit atrás):
-  ```bash
-  gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a \
-    --command="sudo git -C /opt/barbeariapro pull && cd /opt/barbeariapro && sudo docker compose -f docker-compose.app.yml up --build -d"
+    --command="curl -s -b 'n8n-auth=<cookie>' http://localhost:5678/rest/workflows/25QZQ664N6hrIg59" \
+    > workflows.json
   ```
 - [ ] **HTTPS + domínio** — env ativo usa IP `34.95.199.134`. `deploy/nginx.conf` + certbot prontos.
 - [ ] **Fechar portas** ao mundo após HTTPS (5678/8000/3000/8080 hoje abertas).
-- [ ] **Backup automatizado** dos volumes Docker da VM.
+- [ ] **Backup automatizado** dos volumes Docker da VM (VM já foi zerada uma vez).
 - [ ] **Validar lembrete 24h** end-to-end (`CronReminder24h01` ativo, nunca testado).
-
----
-
-## Estado da Fase 2 — Google Calendar (MERGEADA em `main`)
-
-OAuth + worker de sync `appointments → Google Calendar`, isolado do bot.
-Entregas (commits `a973514`, `447cbb0`, `10be0ca`, `1773b30`):
-- Config + cripto Fernet de token (`app/core/config.py`, `app/core/crypto.py`)
-- Cliente Google Calendar (`app/services/google_calendar.py`)
-- Router OAuth `/integracoes/google/calendar/*` (`app/api/integracoes.py`)
-- Worker `push_appointment` via BackgroundTask (`app/services/calendar_sync.py`),
-  hooks em `app/api/agenda.py` e `app/api/barbeiro.py`
-- Página `/admin/configuracoes` + agenda barbeiro mobile-first (frontend)
-- ~30 testes de Calendar/OAuth/worker
-
-> ⚠️ A conexão Google Calendar precisa ser refeita na produção restaurada
-> (tokens OAuth estavam no banco antigo, que foi perdido). Reconectar via
-> `/admin/configuracoes` → "Conectar Google Calendar".
 
 ---
 
@@ -214,25 +171,12 @@ Entregas (commits `a973514`, `447cbb0`, `10be0ca`, `1773b30`):
 
 | # | Feature | Esforço | Observação |
 |---|---|---|---|
-| 1 | Lembrete 24h via WhatsApp | Baixo | `CronReminder24h01` ativo; validar end-to-end com agendamento real |
-| 2 | Cron de reativação | Trivial | `CronReactivation1` já ativo; `POST /internal/loyalty/reactivation/run` existe |
+| 1 | Lembrete 24h via WhatsApp | Baixo | `CronReminder24h01` ativo; validar end-to-end |
+| 2 | Cron de reativação | Trivial | `CronReactivation1` ativo; `POST /internal/loyalty/reactivation/run` existe |
 | 3 | HTTPS + domínio | Médio | Pré-requisito para vender; scripts prontos em `deploy/` |
-| 4 | Export CSV comissões/faturamento | Baixo | Queries já no dashboard |
+| 4 | Envio de mensagem pelo CRM (painel Inbox) | Médio | Evolution API disponível; falta endpoint + UI |
+| 5 | Export CSV comissões/faturamento | Baixo | Queries já no dashboard |
 
-### Fase 3 (BLOQUEADA — não iniciar sem aprovação)
+### Fase 3 do roadmap original (BLOQUEADA — não iniciar sem aprovação)
 Régua de follow-up 20min/24h/48h, objeções no prompt n8n, status CRM via Calendar.
 Trava de segurança: `app/services/whatsapp.py:17` (dry-run nativo).
-
----
-
-## Containers em produção (VM, 2026-06-23)
-
-```
-barbeariapro-app-backend    :8000   (healthy)
-barbeariapro-app-frontend   :3000   (healthy)
-barbeariapro-postgres       :5432   (healthy)
-evolution_api               :8080
-evolution_postgres          (interno)
-evolution_redis             (interno)
-n8n                         :5678
-```

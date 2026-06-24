@@ -60,7 +60,7 @@ migrar para fila.
 **Arquivo:** `app/services/calendar_sync.py`. Hooks em `app/api/agenda.py` e
 `app/api/barbeiro.py`.
 
-### D-06 — Sem migration nova para a Fase 2
+### D-06 — Sem migration nova para a Fase 2 (Google Calendar)
 **Data:** 2026-06-21  
 **Decisão:** Tabelas `integration_accounts` e `calendar_sync` já existiam desde
 `0001_initial`. A Fase 2 apenas as utiliza — sem ALTER TABLE, sem nova migration.  
@@ -86,7 +86,10 @@ exibe banner verde quando detecta `?calendar=connected` na URL.
 **Decisão:** `barbearia-frontend/` tem seu próprio `.git`. Commits de frontend
 e backend são feitos em repos separados.  
 **Consequência prática:** Sempre fazer `git -C barbearia-frontend/ add/commit`
-para mudanças de frontend. O `.gitignore` do backend ignora o diretório inteiro.
+para mudanças de frontend. O repo externo agora registra `barbearia-frontend`
+como gitlink (modo 160000) — isso é inofensivo para o deploy mas deve-se evitar
+commitar a referência do submodule pelo repo externo inadvertidamente.
+**Deploy:** via `gcloud compute scp` + `sudo cp` + `docker compose up --build frontend` (não git pull).
 
 ### D-09 — Agenda do barbeiro mobile-first
 **Data:** 2026-06-21  
@@ -133,23 +136,23 @@ roadmap comercial — foi feito de forma isolada sem tocar o bot.
 ## Infraestrutura e produção (sessão 2026-06-23)
 
 ### D-13 — Produção roda na VM via docker-compose, NÃO no Cloud Run
-**Data:** 2026-06-23
+**Data:** 2026-06-23  
 **Decisão:** A produção real é a VM GCP `barbeariapro` (`34.95.199.134`, projeto
 `barberiapro-app`), com toda a stack em containers via `docker-compose.yml` +
-`docker-compose.app.yml`. O Cloud Run não é usado.
+`docker-compose.app.yml`. O Cloud Run não é usado.  
 **Motivo:** A Run Admin API nem está habilitada no projeto; `deploy/gcp-cloud-run.sh`
 nunca rodou com sucesso. O bot/Evolution precisa de estado persistente e webhooks
-estáveis, o que o VM com volumes Docker já entrega.
+estáveis, o que o VM com volumes Docker já entrega.  
 **Consequência:** O acesso operacional é por SSH
 (`gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a`).
 O app vive em `/opt/barbeariapro` na VM. **Não há backup automatizado dos volumes** —
 a VM já foi encontrada zerada uma vez (perdeu pareamento WhatsApp + dados).
 
 ### D-14 — n8n: SEMPRE via API REST, NUNCA editar o SQLite direto
-**Data:** 2026-06-23
+**Data:** 2026-06-23  
 **Decisão:** Qualquer alteração de credencial ou workflow no n8n é feita pela API
 REST (`/rest/login`, `/rest/credentials`, `PATCH /rest/workflows/:id`,
-`POST /rest/workflows/:id/activate`), nunca por `UPDATE` no `database.sqlite`.
+`POST /rest/workflows/:id/activate`), nunca por `UPDATE` no `database.sqlite`.  
 **Motivo (aprendido na marra):** Várias horas foram perdidas tentando injetar a
 credencial OpenAI direto no SQLite. Problemas encontrados:
 - A criptografia do n8n v2.x é **formato OpenSSL** (`U2FsdGVkX1...`), não o JSON
@@ -158,7 +161,7 @@ credencial OpenAI direto no SQLite. Problemas encontrados:
   não checkpointed → reverteu correções feitas via API.
 - O n8n v2.27.3 separa **`versionId`** (rascunho) de **`activeVersionId`** (versão
   que os webhooks realmente executam, vinda de `workflow_history`). Editar só os
-  `nodes` do `workflow_entity` não muda o que o webhook roda.
+  `nodes` do `workflow_entity` não muda o que o webhook roda.  
 **Como fazer certo:**
 - Criar/atualizar credencial: `POST`/`PATCH /rest/credentials/:id` com
   `{name, type, data:{apiKey:...}}` — o n8n cifra corretamente.
@@ -168,22 +171,22 @@ credencial OpenAI direto no SQLite. Problemas encontrados:
   `/home/node/.n8n/config`. `N8N_SECURE_COOKIE=false` (acesso HTTP).
 
 ### D-15 — Bot usa GPT-4o-mini + regra explícita de interpretação de slots
-**Data:** 2026-06-23
+**Data:** 2026-06-23  
 **Decisão:** O bot roda em `gpt-4o-mini`. Foi adicionada uma seção
 "INTERPRETAÇÃO DE SLOTS" no system prompt do node `AI Agent` deixando explícito que
-os horários retornados por `verificar_disponibilidade` ESTÃO disponíveis.
+os horários retornados por `verificar_disponibilidade` ESTÃO disponíveis.  
 **Motivo:** O GPT-4o-mini alucinou dizendo que um horário livre (11h com o Thedy)
-"já estava reservado", embora a API tivesse retornado o slot como disponível.
+"já estava reservado", embora a API tivesse retornado o slot como disponível.  
 **Trade-off:** GPT-4o seria mais confiável em raciocínio com listas, mas ~10× mais
-caro por token. Optou-se por reforçar o prompt mantendo o mini.
+caro por token. Optou-se por reforçar o prompt mantendo o mini.  
 **Alternativa se reincidir:** trocar o node para `gpt-4o`.
 
 ### D-16 — `toolHttpRequest` do n8n não avalia `$env` em `fieldValue`
-**Data:** 2026-06-23
+**Data:** 2026-06-23  
 **Decisão:** Nos 8 nodes `toolHttpRequest`, o header `X-Bot-Token` recebe a
-`BOT_API_KEY` **hardcoded**, não `={{ $env.BOT_API_KEY }}`.
+`BOT_API_KEY` **hardcoded**, não `={{ $env.BOT_API_KEY }}`.  
 **Motivo:** Com `valueProvider: "fieldValue"`, o n8n envia a string literal
-`={{ $env.BOT_API_KEY }}` em vez de avaliar a expressão → backend respondia 401.
+`={{ $env.BOT_API_KEY }}` em vez de avaliar a expressão → backend respondia 401.  
 **Arquivo:** `workflows.json` (e versão ativa na VM via n8n).
 
 ---
@@ -191,27 +194,25 @@ caro por token. Optou-se por reforçar o prompt mantendo o mini.
 ## Correções de premissas dos docs antigos (2026-06-23)
 
 ### D-17 — Produção é `organization_id = 1` (supersede a premissa de org 3)
-**Data:** 2026-06-23
-**Contexto:** Docs anteriores afirmavam "produção usa org_id=3".
+**Data:** 2026-06-23  
+**Contexto:** Docs anteriores afirmavam "produção usa org_id=3".  
 **Realidade verificada:** A VM foi re-semeada do zero e a única organização é
 `id=1` ("Barbearia Taylor e Thedy"). `BOT_ORGANIZATION_ID=1`, `BOT_UNIT_ID=1`,
-`NEXT_PUBLIC_ORG_ID=1`. Barbeiros: Taylor(1), Thedy(2), Marciana(3), Sandra(4), Pablo(5).
+`NEXT_PUBLIC_ORG_ID=1`. Barbeiros: Taylor(1), Thedy(2), Marciana(3), Sandra(4), Pablo(5).  
 **Consequência:** Os 2 testes hardcoded em `organization_id == 3` falham contra
 produção também (não só staging) — continuam sendo fails ambientais, não bugs.
-O item da dívida técnica sobre "`NEXT_PUBLIC_ORG_ID` mudou de 3 para 1" está
-**RESOLVIDO**: 1 é o valor correto para esta produção.
 
 ---
 
 ### D-18 — n8n v2.27.3: fanout paralelo não executa os nós secundários
-**Data:** 2026-06-23 (parte 5)
+**Data:** 2026-06-23 (parte 5)  
 **Decisão:** Qualquer nó de log/efeito-colateral no workflow n8n DEVE ser conectado
-em SÉRIE, nunca em paralelo (fanout `main[0]: [nodeA, nodeB]`).
+em SÉRIE, nunca em paralelo (fanout `main[0]: [nodeA, nodeB]`).  
 **Motivo (verificado empiricamente em 9 execuções):** Quando um nó conecta à saída
 de outro em paralelo com outros nós, apenas o primeiro nó da lista (`nodeA`) é
 executado. O segundo (`nodeB`) nunca aparece no `runData` e nunca é chamado.
 Não há erro visível — o workflow termina como `success` e silenciosamente ignora
-o nó secundário. Suspeita: bug ou limitação do n8n v2.27.3 com fanout.
+o nó secundário. Suspeita: bug ou limitação do n8n v2.27.3 com fanout.  
 **Solução aplicada para os nós de log:**
 ```
 ANTES (paralelo — não funciona):
@@ -224,35 +225,103 @@ DEPOIS (série — funciona):
 ```
 **Consequência para Code Horário Comercial:** como agora recebe a saída do Log Inbound
 (não do Flush Buffer), foi atualizado para referenciar o Flush Buffer explicitamente:
-`$('HTTP Flush Buffer').first().json.message` em vez de `$json.message`.
+`$('HTTP Flush Buffer').first().json.message` em vez de `$json.message`.  
 **Atenção:** ao adicionar novos nós ao workflow, NUNCA conectar em paralelo —
 sempre encadear em série ou usar sub-workflows.
 
 ### D-19 — jsonBody de HTTP Request n8n: usar expressão de objeto, não JSON.stringify
-**Data:** 2026-06-23 (parte 5)
+**Data:** 2026-06-23 (parte 5)  
 **Decisão:** Com `specifyBody: "json"`, o campo `jsonBody` deve conter uma expressão
 n8n que retorna um **objeto JavaScript**, no formato `={{ {chave: valor, ...} }}`.
 Não usar `JSON.stringify({...})` — retorna string, não objeto, e pode causar
-comportamento imprevisível dependendo da versão do nó.
+comportamento imprevisível dependendo da versão do nó.  
 **Exemplo correto:**
 ```json
 "jsonBody": "={{ {\"phone\": \"+\" + $('Set Phone').item.json.phone, \"direction\": \"inbound\", \"body\": $('HTTP Flush Buffer').item.json.message} }}"
 ```
-**Comparação:** o nó `HTTP Flush Buffer` (que funciona) usa formato diferente:
-`={\n  \"phone\": \"+{{ ... }}\"\n}` — template literal com `{{ }}` dentro.
-Ambos funcionam; o formato `={{ {} }}` é mais flexível para valores que contêm
-caracteres especiais (não quebra o JSON ao interpolar strings com aspas).
 
-### D-20 — `POST /bot/messages` não cria cliente: silencia se cliente não existe
-**Data:** 2026-06-23 (parte 5)
-**Decisão:** Se o cliente não existe no DB, `POST /bot/messages` retorna
-`{"ok": false, "reason": "client_not_found"}` sem criar o cliente nem o lead.
-**Motivo:** Separação de responsabilidades. Criação de cliente/lead é responsabilidade
-do AI Agent via `cadastrar_cliente`. Log de mensagem é secundário.
-**Consequência prática:** A primeira mensagem de um **novo** número não é gravada no
-histórico de conversa — apenas a partir da segunda (após o AI Agent criar o cliente).
-**Futura melhoria (não urgente):** `log_message` poderia criar o cliente automaticamente
-se não existir, ou o `Log Inbound Message` poderia chamar `POST /bot/clients` primeiro.
+---
+
+## CRM Conversacional (sessão 2026-06-24)
+
+### D-20 — `POST /bot/messages` agora grava sem cliente (supersede versão anterior)
+**Data original:** 2026-06-23 (parte 5) — primeiro contato não era gravado.  
+**Supersedida em:** 2026-06-24 (Fase 2 CRM Conversacional).  
+**Estado atual:** `log_message` em `bot.py` chama `record_message(client_id=None)`.
+`record_message` cria a conversa sem `client_id` e grava a mensagem. Quando o AI Agent
+cadastra o cliente (`POST /bot/clients`), `upsert_client` retorna o `client_id` e na
+próxima chamada de `record_message` o `client_id` e `lead_id` são backfillados na conversa.
+**Consequência:** A primeira mensagem de um número novo AGORA É gravada em `messages`.
+A linha `return {"ok": False, "reason": "client_not_found"}` que ainda existe em `bot.py`
+pertence ao endpoint `PATCH /bot/clients/photo` (linha 628), não ao `log_message`.
+
+### D-21 — SSE usa query param para autenticação
+**Data:** 2026-06-24 (Fase 5)  
+**Decisão:** `GET /crm/stream` aceita o JWT como `?token=<jwt>` (não como header
+`Authorization: Bearer`).  
+**Motivo:** O browser `EventSource` não suporta headers customizados — a API da
+interface não permite setar headers em conexões SSE nativas. Alternativas (SSE via
+`fetch` com `ReadableStream`, ou WebSocket) foram descartadas por complexidade
+desnecessária no MVP.  
+**Risco:** Token JWT visível nos logs de servidor (query string logada). Aceitável
+para MVP interno. Se for exposto publicamente, migrar para token de curta duração
+(exchange endpoint) ou WebSocket com header de upgrade.  
+**Arquivo:** `app/api/conversations.py:387` (`sse_stream`).
+
+### D-22 — Idempotência de mensagem é namespaced por conversa (não global)
+**Data:** 2026-06-24 (Fase 2)  
+**Decisão:** O índice de idempotência em `messages` é:
+`UNIQUE(conversation_id, wa_message_id, sender_type) WHERE wa_message_id IS NOT NULL` (parcial).  
+**Motivo:** O antigo `message_log.idempotency_key` era globalmente único — uma mesma
+`wamid` não poderia aparecer como inbound E outbound. O índice namespaced por
+`(conversation, wamid, sender)` permite que a mesma `wamid` exista para `client` e
+`bot` em contextos distintos, o que é semanticamente correto (Evolution pode ecoar
+IDs).  
+**Arquivo:** `alembic/versions/0010_conversations.py`.
+
+### D-23 — `_publish` chamado após `flush()`, antes do `commit()`
+**Data:** 2026-06-24 (Fase 5)  
+**Decisão:** O SSE broker é notificado com o payload completo da mensagem logo após
+`db.flush()` (que garante que `msg.id` está preenchido pelo PostgreSQL), mas antes
+de `db.commit()`.  
+**Motivo:** Chamar após commit garante consistência mas cria uma janela de tempo
+onde o frontend recebe o evento antes que a mensagem esteja visível em GET —
+condição de corrida. Chamar com payload completo no evento elimina a necessidade de
+um GET de follow-up, tornando a race condition irrelevante.  
+**Consequência:** Se a transaction for revertida após o flush, o evento SSE já foi
+emitido com uma mensagem que não persiste. Na prática isso é raro e imperceptível
+(o GET de fallback do poll 10 s não trará a mensagem, mas o usuário não verá
+duplicata).  
+**Arquivo:** `app/services/conversation.py:_publish`.
+
+### D-24 — `message_log` é intocado pelo CRM Conversacional
+**Data:** 2026-06-24 (Fase 2)  
+**Decisão:** A tabela `message_log` continua sendo escrita exclusivamente por
+`reminders.py` e `reactivation.py` para mensagens programáticas com `template`,
+`delivery_status` e lógica de retry.  
+**Motivo:** Separação de responsabilidades. `message_log` é o store transacional de
+mensagens de campanha com auditoria de entrega. `messages` é o store canônico de
+conversa com histórico por thread. Misturar os dois introduziria complexidade sem
+benefício.  
+**O que foi adicionado:** `reminders.py` e `reactivation.py` também chamam
+`record_message(sender_type=system)` *além* de seu write no `message_log` — para
+que mensagens automáticas apareçam no Inbox do CRM. O `message_log_id` é passado
+como FK cruzada para rastreabilidade.  
+**Invariante:** nunca escrever `message_log` de dentro de `conversation_service`.
+Nunca substituir `message_log` por `messages` nos crons — eles precisam de
+`delivery_status` e retry.
+
+### D-25 — `Dockerfile.migrate.dockerignore` para builds de migration
+**Data:** 2026-06-24 (fix deploy)  
+**Decisão:** Arquivo `Dockerfile.migrate.dockerignore` criado na raiz do repo.
+Docker 29 suporta arquivos `.dockerignore` específicos por Dockerfile:
+`<Dockerfile>.dockerignore` tem precedência sobre o `.dockerignore` global.  
+**Motivo:** O `.dockerignore` principal exclui `alembic/` e `alembic.ini`
+(comentário no arquivo: "migrations not needed at runtime") — correto para o
+container de runtime. Mas o build de migration precisa desses arquivos. Sem o
+arquivo específico, o contexto enviado ao Docker não continha as migrations e o
+`alembic upgrade head` falhava com `No such file or directory: 'alembic.ini'`.  
+**Arquivo:** `Dockerfile.migrate.dockerignore`.
 
 ---
 
@@ -264,7 +333,8 @@ se não existir, ou o `Log Inbound Message` poderia chamar `POST /bot/clients` p
 | Estado do bot em memória (debounce, dedup, sessões) | `app/api/bot.py:49-61` | Médio | Restart perde estado; impossibilita 2ª instância. Aguarda Redis. |
 | Portas abertas ao mundo na VM | firewall GCP | Médio | 5678/8000/3000/8080 públicas; fechar após HTTPS. |
 | `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | VM tem série; local tem paralelo. Exportar da VM antes de qualquer edição. |
-| VM 1 commit atrás do main local | git VM | Médio | VM em `a11e0be`; local em `4d4ed5e`. `git pull` agora funciona na VM. |
-| Primeira mensagem de novo número não é logada | `app/api/bot.py:264` | Baixo | `client_not_found` silencia. Ver D-20. |
+| SSE single-process: sse_broker em memória | `app/services/sse_broker.py` | Baixo | Não funciona com múltiplos workers. Para escalar: PostgreSQL LISTEN/NOTIFY. |
+| Token JWT visível em query string do SSE | `GET /crm/stream?token=` | Baixo | Aceitável para MVP interno. Ver D-21 para mitigações. |
 | N+1 nos crons de reativação e lembrete | `app/services/reactivation.py`, `reminders.py` | Baixo | 3-4 queries por alvo; aceitável no volume atual. |
 | 2 testes hardcoded na org 3 | `tests/test_clientes_integration.py`, `test_e2e_flow.py` | Baixo | Fail ambiental; não são bugs (ver D-17). |
+| `barbearia-frontend` registrado como gitlink no repo externo | `git ls-files --stage` | Info | Inofensivo; deploy via SCP não usa git. Não adicionar como submodule formal sem discussão. |

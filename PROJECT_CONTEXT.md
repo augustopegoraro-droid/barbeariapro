@@ -1,24 +1,22 @@
 # PROJECT_CONTEXT.md
 > Fonte de verdade para novas sessões de desenvolvimento.
-> Verificado contra o código E contra a VM de produção em **2026-06-23** (última atualização: sessão parte 5).
+> Verificado contra o código E contra a VM de produção em **2026-06-24** (última atualização: sessão CRM Conversacional Fases 2-5).
 
 ---
 
-## 0. LEIA PRIMEIRO — o que mudou em 2026-06-23
+## 0. LEIA PRIMEIRO — o que mudou em 2026-06-24
 
-1. **A VM de produção foi encontrada ZERADA e reconstruída do zero nesta data.**
-   Todos os containers, volumes e o pareamento WhatsApp anterior foram perdidos.
-   A stack inteira foi remontada manualmente na VM (ver §4).
-2. **A Fase 2 (Google Calendar) já foi mergeada em `main`** (commit `1773b30`).
-   O branch `feat/fase2-google-calendar` não é mais o ativo — estamos em `main`.
-3. **Produção roda no próprio VM via docker-compose, NÃO no Cloud Run.**
-   O `deploy/gcp-cloud-run.sh` existe mas nunca rodou com sucesso (ver D-13).
-4. **A produção restaurada usa `organization_id = 1`** (não org 3, como diziam os
-   docs antigos). Banco re-semeado do zero. Ver §9.
-5. **O bot WhatsApp está funcionando end-to-end** (conversa + agendamento). Ver §12.
-6. **Sincronização WhatsApp↔CRM implementada (parte 5)** — mensagens do bot agora
-   aparecem no CRM em tempo real; CRM faz polling automático; nós de log no n8n
-   gravados em série (ver §12, §8 e D-18). Pendente: teste de confirmação ao vivo.
+1. **CRM Conversacional (Fases 2–5) implementado e deployado.**
+   Tabelas `conversations`/`messages`/`attachments` no ar (migration `0010_conversations`).
+   Bot grava toda mensagem em `messages`. Inbox com SSE em tempo real no frontend.
+   Ver detalhes em §6, §8, §12 e §13.
+2. **VM e repositório estão em sincronização total** — ambos em `f72cd59`.
+   `git pull` na VM funciona normalmente desde a sessão parte 5.
+3. **A Fase 2 (Google Calendar) já foi mergeada em `main`** (commit `1773b30`).
+4. **Produção roda no próprio VM via docker-compose, NÃO no Cloud Run** (ver D-13).
+5. **A produção usa `organization_id = 1`** — banco re-semeado do zero em 2026-06-23.
+6. **D-20 superado:** a primeira mensagem de um novo número AGORA É gravada —
+   `record_message` cria a conversa sem `client_id`; backfill ocorre na chegada do cliente.
 
 ---
 
@@ -39,19 +37,34 @@ Objetivo comercial: vender para mais barbearias; concorre com Trinks
 | `/Users/apleandro/dev/barbeariapro/barbearia-frontend` | `main` | Frontend Next.js (repo git **separado** dentro do diretório) |
 
 > **Atenção:** `barbearia-frontend/` é um sub-repositório git independente.
-> Commits de backend e frontend são feitos separadamente
-> (`git -C barbearia-frontend/ ...`). Ver D-08.
+> Commits de backend e frontend são feitos separadamente.
+> O repo externo agora registra `barbearia-frontend` como gitlink (modo 160000) —
+> isso é inofensivo para o deploy (feito via SCP + docker rebuild), mas commits do
+> frontend devem continuar sendo feitos dentro do sub-repo (`git -C barbearia-frontend/ ...`).
+> Ver D-08.
 
-**Estado git do backend (2026-06-23, após sessão parte 5):**
-- Branch `main`, commits pushados até `4d4ed5e`.
-- **VM está em `a11e0be`** (1 commit atrás): o commit `4d4ed5e` (n8n log nodes)
-  não foi feito via git pull — o workflow foi atualizado diretamente pela API REST.
-- `workflows.json` local **diverge da VM**: a versão local registra as conexões
-  paralelas originais; a VM tem as conexões em SÉRIE (ver D-18, §12).
-  Para sincronizar: exportar o workflow da VM via `GET /rest/workflows/25QZQ664N6hrIg59`
-  e salvar como `workflows.json`.
-- **`git pull` na VM agora funciona**: `safe.directory` configurado na sessão parte 5.
-  Procedimento: `sudo git -C /opt/barbeariapro pull && docker compose -f docker-compose.app.yml up --build -d backend`
+**Estado git (2026-06-24):**
+- Branch `main`, commit `f72cd59` — **local E VM estão em sync**.
+- Commits desta sessão: `f87f579` (Fase 2) → `70fd7e0` (fix dockerignore) →
+  `7ee6cbf` (Fase 3) → `effdd77` (Fase 4 + SSE endpoint) → `f72cd59` (sse_broker + _publish).
+- `workflows.json` local **diverge da VM** (tem conexões paralelas originais; VM tem série).
+  Não usar como referência. Exportar da VM antes de editar. Ver D-18.
+
+**Procedimento de deploy backend:**
+```bash
+gcloud compute ssh ubuntu@barbeariapro --project=barberiapro-app --zone=southamerica-east1-a \
+  --command="sudo git -C /opt/barbeariapro pull origin main && \
+  cd /opt/barbeariapro && sudo docker compose -f docker-compose.app.yml up -d --build backend"
+```
+
+**Procedimento de deploy frontend (scp, não git):**
+```bash
+gcloud compute scp --zone=southamerica-east1-a --project=barberiapro-app \
+  barbearia-frontend/app/admin/crm/page.tsx ubuntu@barbeariapro:/tmp/crm_page.tsx
+gcloud compute ssh ubuntu@barbeariapro --zone=southamerica-east1-a --project=barberiapro-app \
+  --command="sudo cp /tmp/crm_page.tsx /opt/barbeariapro/barbearia-frontend/app/admin/crm/page.tsx && \
+  cd /opt/barbeariapro && sudo docker compose -f docker-compose.app.yml up -d --build frontend"
+```
 
 ---
 
@@ -90,12 +103,12 @@ Objetivo comercial: vender para mais barbearias; concorre com Trinks
 | Acesso SSH | `gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a` |
 | App na VM | `/opt/barbeariapro` (clone do repo + `.env` + `.env.docker`) |
 
-### Containers em produção (verificado 2026-06-23)
+### Containers em produção (verificado 2026-06-24)
 
 ```
-barbeariapro-app-backend    :8000   (healthy)   FastAPI
+barbeariapro-app-backend    :8000   (healthy)   FastAPI   — git f72cd59
 barbeariapro-app-frontend   :3000   (healthy)   Next.js
-barbeariapro-postgres       :5432   (healthy)   Postgres do app
+barbeariapro-postgres       :5432   (healthy)   Postgres do app — migration HEAD: 0010_conversations
 evolution_api               :8080               Evolution API v2.3.7
 evolution_postgres          (interno)           Postgres da Evolution
 evolution_redis             (interno)           Redis da Evolution
@@ -161,6 +174,7 @@ export SEED_ORG_ID=1
 | `/dashboard`, `/dashboard/operacional` | `app/api/dashboard.py` | JWT |
 | `/servicos` | `app/api/servicos.py` | JWT |
 | `/crm` | `app/api/crm.py` | JWT |
+| `/crm` (conversas) | `app/api/conversations.py` | JWT / token param (SSE) |
 | `/integracoes` | `app/api/integracoes.py` | JWT + público (callback) |
 
 ### Endpoints `/bot/*` (consumidos pelo n8n — `X-Bot-Token`)
@@ -170,15 +184,27 @@ export SEED_ORG_ID=1
 `GET /bot/availability`, `POST /bot/appointments`,
 `GET /bot/appointments`, `PATCH /bot/appointments/{id}/cancel`,
 `PATCH /bot/appointments/{id}/complete`,
-`POST /bot/messages` ← **novo (parte 5)**: grava mensagem inbound/outbound,
-  atualiza `last_contact_at`, avança lead `novo_contato→conversando` no inbound;
-  retorna `{"ok": false, "reason": "client_not_found"}` se o cliente não existe.
+`POST /bot/messages` — grava mensagem inbound/outbound via `conversation_service`;
+  idempotente por `(conversation_id, wa_message_id, sender_type)`; grava mesmo sem
+  cliente cadastrado (1º contato); avança lead `novo_contato→conversando` no inbound.
 
-### Endpoints `/crm/*` (JWT)
+### Endpoints `/crm/*` (JWT, `app/api/crm.py`)
 `GET /crm/board`, `POST /crm/leads`, `GET /crm/leads/{id}`,
 `PATCH /crm/leads/{id}`, `POST /crm/leads/{id}/move`, `DELETE /crm/leads/{id}`,
-`GET /crm/leads/{id}/messages` ← **novo (parte 5)**: retorna histórico de conversa
-  WhatsApp via `client_id` do lead (requires `body_text IS NOT NULL` em `message_log`).
+`GET /crm/leads/{id}/messages` — histórico de conversa via `Conversation.client_id`
+  (agora lê de `messages`, não de `message_log`).
+
+### Endpoints `/crm/*` (JWT, `app/api/conversations.py`) — Fase 3/4/5
+`GET /crm/conversations` — lista paginada por cursor (base64 JSON), JOIN com clients/leads,
+  total_open count; `?status=open|snoozed|closed`, `?assigned_user_id=N`.
+`GET /crm/conversations/search?q=` — ILIKE em `messages.body_text` via índice GIN pg_trgm.
+`GET /crm/conversations/{id}` — detalhe com client e lead.
+`GET /crm/conversations/{id}/messages` — scroll infinito por cursor `?before=<id>`, `?limit=N`;
+  inclui `attachments` via `selectinload`.
+`PATCH /crm/conversations/{id}/read` — zera `unread_count`.
+`GET /crm/stream?token=<jwt>` — **SSE em tempo real**; token como query param porque
+  browser `EventSource` não suporta headers customizados; keepalive a cada 25 s;
+  publica evento `new_message` com payload completo (ver D-21, D-23).
 
 ---
 
@@ -193,7 +219,7 @@ export SEED_ORG_ID=1
 | `/admin/equipe` | `app/admin/equipe/page.tsx` |
 | `/admin/financeiro` | `app/admin/financeiro/page.tsx` |
 | `/admin/servicos` | `app/admin/servicos/page.tsx` |
-| `/admin/crm` | `app/admin/crm/page.tsx` |
+| `/admin/crm` | `app/admin/crm/page.tsx` — toggle Kanban ⇄ Inbox |
 | `/admin/configuracoes` | `app/admin/configuracoes/page.tsx` (Suspense + Google Calendar) |
 | `/barbeiro/agenda` | `app/barbeiro/agenda/page.tsx` (mobile-first) |
 
@@ -201,21 +227,29 @@ export SEED_ORG_ID=1
 
 ## 8. Migrations Alembic
 
-Head atual (verificado na VM em 2026-06-23, parte 5): **`0009_conversation_log`**.
+Head atual (verificado na VM em 2026-06-24): **`0010_conversations`**.
 
 ```
 0001_initial → 0002_loyalty → 0002_client_last_photo → 0003_client_photo_description
 → 0005_barber_services → 0006_client_blocked → 0007_crm_leads
-→ 0008_client_bot_paused → 0009_conversation_log  ← HEAD
+→ 0008_client_bot_paused → 0009_conversation_log → 0010_conversations  ← HEAD
 ```
 
-`integration_accounts`, `calendar_sync` e `message_log` existem desde `0001_initial`.
-- `0008_client_bot_paused` — coluna `bot_paused BOOLEAN` em `clients`
-- `0009_conversation_log` — coluna `body_text TEXT` em `message_log` (parte 5)
+- `0009_conversation_log` — coluna `body_text TEXT` em `message_log`
+- `0010_conversations` — tabelas `conversations`, `messages`, `attachments` com RLS,
+  ENUMs `conversation_status`/`message_sender_type`/`message_type`/`attachment_media_type`,
+  índice GIN pg_trgm em `messages.body_text`, índice parcial de idempotência
+  `(conversation_id, wa_message_id, sender_type) WHERE wa_message_id IS NOT NULL`,
+  backfill do `message_log` para `messages` (idempotente, ON CONFLICT DO NOTHING).
 
-> ⚠️ **Migrations 0008 e 0009 foram aplicadas via `ALTER TABLE` direto como postgres
-> superuser** (não via `alembic upgrade`), porque `barber_app` não tem privilégio DDL.
-> Forma correta: `docker exec barbeariapro-postgres psql -U postgres -d barbeariapro`
+> ⚠️ **Migrations precisam de superuser postgres para DDL** — `barber_app` não tem
+> privilégio CREATE TYPE/TABLE. Para rodar na VM:
+> ```bash
+> sudo docker exec -e DATABASE_URL="postgresql+psycopg://postgres:<SENHA>@host.docker.internal:5432/barbeariapro" \
+>   barbeariapro-app-backend python -m alembic upgrade head
+> ```
+> A senha do postgres está no `.env` da VM como `POSTGRES_PASSWORD`.
+> Ver também `Dockerfile.migrate.dockerignore` (D-25).
 
 ---
 
@@ -234,15 +268,13 @@ Senha de seed: `senha123`.
 Admin via superuser `postgres`. Seed faz GRANT, não CREATE ROLE — o role
 `barber_app` foi criado manualmente ao remontar a VM.
 
-**Clientes reais cadastrados (verificado 2026-06-23 parte 5):**
+**Clientes reais cadastrados (verificado 2026-06-23):**
 - `id=1` Augusto Pegoraro — `+556399368196` (dono da conta)
 - `id=5` Reinaldo Viterbo — `+5563999789977`
 
-**Leads no Kanban (verificado 2026-06-23 parte 5):**
+**Leads no Kanban (verificado 2026-06-23):**
 - `id=1` "Cliente Teste Funil" — estágio `agendado`, sem `client_id`
 - `id=4` "Augusto Pegoraro" — estágio `novo_contato`, `client_id=1`
-  (**criado manualmente**: o AI Agent criou o cliente antes do código de Lead
-  existir; a lógica nova cria Lead automático para novos contatos)
 
 > ⚠️ **Número do WhatsApp de Augusto:** Evolution API envia `+556399368196`
 > (8 dígitos após DDD). O usuário pode informar como `+5563999368196` (9 dígitos).
@@ -309,19 +341,19 @@ se `EVOLUTION_API_URL` **ou** `EVOLUTION_INSTANCE_NAME` estiverem vazios.
 - **Modelo:** GPT-4o-mini (node `OpenAI GPT-4o-mini`, tipo `lmChatOpenAi`).
 - **Credencial OpenAI:** ID `md1VzrcFUBhOFYfr` ("OpenAI account", tipo `openAiApi`).
 
-### Fluxo principal do bot (2026-06-23 parte 5 — VERIFICADO NA VM)
+### Fluxo principal do bot (VERIFICADO NA VM)
 
 ```
 Webhook → Block List → Set Phone → IF Is Audio / IF Individual / IF Has Image
 → HTTP Debounce → IF Controller → Wait 5s → HTTP Flush Buffer
-→ Log Inbound Message          ← [NOVO parte 5] POST /bot/messages (direction=inbound)
-→ Code Horário Comercial       ← usa $('HTTP Flush Buffer').first().json.* (refs explícitas)
+→ Log Inbound Message          (POST /bot/messages, direction=inbound)
+→ Code Horário Comercial       usa $('HTTP Flush Buffer').first().json.* (refs explícitas)
 → IF Horário Aberto
 → Send Composing → Wait Typing Init → Send Composing Active
 → HTTP Check Bot Pause → IF Bot Paused
 → Memory → AI Agent (com tools abaixo)
 → Send Response
-→ Log Outbound Message         ← [NOVO parte 5] POST /bot/messages (direction=outbound)
+→ Log Outbound Message         (POST /bot/messages, direction=outbound)
 ```
 
 ### Tools do AI Agent
@@ -335,11 +367,11 @@ Webhook → Block List → Set Phone → IF Is Audio / IF Individual / IF Has Im
 `cancelar_agendamento` (`PATCH /bot/appointments/{id}/cancel`),
 `faq` (Code node local).
 
-### Nós de Log (parte 5) — detalhes críticos
+### Nós de Log — detalhes críticos
 - **Tipo:** `n8n-nodes-base.httpRequest` v4.4, `onError: continueRegularOutput`
 - **URL:** `http://host.docker.internal:8000/bot/messages`
 - **Auth:** header `X-Bot-Token: ={{ $env.BOT_API_KEY }}`
-- **Body format:** `specifyBody: "json"`, `jsonBody: "={{ {phone: ..., direction: ..., body: ...} }}"` — expressão que retorna OBJETO (não `JSON.stringify`)
+- **Body format:** `specifyBody: "json"`, `jsonBody: "={{ {phone: ..., direction: ..., body: ...} }}"`
 - **Posição:** EM SÉRIE, não paralelo (ver D-18)
 - **Log Inbound:** referencia `$('HTTP Flush Buffer').item.json.message`
 - **Log Outbound:** referencia `$('AI Agent').item.json.output`
@@ -350,19 +382,56 @@ Webhook → Block List → Set Phone → IF Is Audio / IF Individual / IF Has Im
 ### Autenticação n8n (API REST)
 Cookie de sessão expira. Para renovar:
 ```bash
-# Na VM
 python3 -c "
 import json, urllib.request
 body = json.dumps({'emailOrLdapLoginId': 'admin@barbeariapro.com', 'password': 'Barbearia2026'}).encode()
 r = urllib.request.urlopen(urllib.request.Request('http://localhost:5678/rest/login', body, {'Content-Type': 'application/json'}))
 print([h for h in r.headers.items() if 'set-cookie' in h[0].lower()])
 "
-# Salvar cookies em /tmp/n8n.cookies (formato netscape) para uso posterior
 ```
 
 ---
 
-## 13. Suíte de testes
+## 13. CRM Conversacional — arquitetura (Fases 2–5)
+
+### Modelo de dados
+- `conversations` — uma por `(org, phone, channel)`; `UNIQUE(organization_id, phone_e164, channel)`;
+  FK nullable para `clients` e `leads` (SET NULL se deletados); `unread_count`, `last_message_at`,
+  `last_message_preview`, `bot_active`, `status`.
+- `messages` — cada mensagem; `sender_type`: `client|bot|human|system`; `message_type`: `text|audio|image|document|event`;
+  FK para `conversation_id` (NOT NULL), `sender_user_id` (nullable), `message_log_id` (nullable FK para `message_log`).
+- `attachments` — mídia; FK `message_id` CASCADE; `media_type`: `audio|image|document|video`.
+
+### Porta única de escrita: `app/services/conversation.py`
+- `get_or_create_conversation(db, org_id, phone, *, client_id, channel)` — upsert atômico,
+  backfill de `client_id` e `lead_id` se NULL.
+- `record_message(db, *, org_id, phone, sender_type, body, ...)` — idempotente por
+  `(conversation_id, wa_message_id, sender_type)` onde `wa_message_id IS NOT NULL`;
+  atualiza `last_message_at`/`preview`/`unread_count`; chama `_publish` após `flush()`.
+- `_publish` — publica evento no `sse_broker` com payload completo (não requer GET adicional).
+- **Quem chama:** `bot.py:log_message`, `reminders.py`, `reactivation.py`.
+- **Invariante:** `message_log` é intocado por este serviço — continua sendo usado para
+  reminders/reativação com template/retry. `messages` é o store canônico de conversa (ver D-26).
+
+### SSE broker: `app/services/sse_broker.py`
+- `_subs: dict[int, set[asyncio.Queue]]` — `org_id → set de filas` (uma por conexão SSE aberta).
+- Single-process (asyncio); safe para deploy sem `--workers`. Para múltiplos workers, migrar
+  para PostgreSQL LISTEN/NOTIFY (ver D-21).
+- `subscribe(org_id)` → Queue; `unsubscribe(org_id, q)`; `publish(org_id, event)` — drop silencioso
+  se `QueueFull` (consumer lento).
+
+### Frontend (page.tsx `/admin/crm`)
+- Toggle **Kanban ⇄ Inbox** no cabeçalho da página CRM.
+- **InboxView:** lista de conversas com cursor pagination; abre `EventSource` no mount
+  (`GET /crm/stream?token=`); eventos `new_message` atualizam preview/unread na lista
+  e propagam `sseMsg` para o painel ativo.
+- **ConvMessagePanel:** scroll infinito com `before=<id>`; recebe `sseMsg` via prop e
+  appenda com deduplicação por `id`; polling 10 s como fallback; `PATCH /read` ao abrir.
+- Polling (10 s / 15 s) permanece como fallback caso SSE caia.
+
+---
+
+## 14. Suíte de testes
 
 ```bash
 docker start barbeariapro-staging-postgres
