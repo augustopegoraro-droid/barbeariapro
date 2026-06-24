@@ -1,0 +1,40 @@
+# .dockerignore específico para Dockerfile.migrate
+# Mantém alembic/ e alembic.ini que o .dockerignore principal exclui.
+
+# Frontend (não necessário)
+barbearia-frontend/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime do app (não necessário para migration)
+app/
+
+# Segredos e ambiente
+.env
+.env.*
+!.env.example
+
+# Git e metadados
+.git/
+.gitignore
+.DS_Store
+
+# Infra / docs / backups / dumps
+docker-compose*.yml
+Dockerfile
+backups/
+docs/
+scripts/
+*.json
+*.sql
+*.txt
+!requirements.txt
+*.md
