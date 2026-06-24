@@ -144,5 +144,24 @@ async def record_message(
 
 
 async def _publish(org_id: int, conversation_id: int, msg: Message) -> None:
-    """Hook de tempo real. Fase 2: no-op. Fase 5: publica no broker SSE após commit."""
-    _logger.debug("conv_event org=%s conv=%s msg=%s", org_id, conversation_id, msg.id)
+    """Publica evento SSE. Chamado após flush (msg.id garantido), antes do commit.
+
+    O payload traz a mensagem completa — o frontend a adiciona ao estado local
+    sem precisar de um GET adicional, eliminando a janela de race condition.
+    """
+    from app.services import sse_broker
+
+    event = {
+        "type": "new_message",
+        "conversation_id": conversation_id,
+        "message": {
+            "id": msg.id,
+            "sender_type": msg.sender_type.value,
+            "message_type": msg.message_type.value,
+            "body": msg.body_text,
+            "wa_message_id": msg.wa_message_id,
+            "created_at": (msg.created_at or datetime.now(timezone.utc)).isoformat(),
+            "attachments": [],
+        },
+    }
+    await sse_broker.publish(org_id, event)
