@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.core.phone import normalize_phone as _validate_phone
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
-from models import Client, ClientLoyalty, User
+from models import Client, ClientLoyalty, Conversation, User
 from models.enums import ContactChannel, LoyaltyNivel, LoyaltyStatus
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
@@ -338,6 +338,17 @@ async def toggle_bot_pause(
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
 
     client.bot_paused = paused
+
+    # Sincroniza Conversation.bot_active para o Inbox refletir o estado real.
+    # Client.bot_paused=True → bot_active=False (bot pausado).
+    conv = (
+        await db.execute(
+            select(Conversation).where(Conversation.client_id == client_id)
+        )
+    ).scalar_one_or_none()
+    if conv is not None:
+        conv.bot_active = not paused
+
     response = _to_client_out(client)
     await db.commit()
     return response

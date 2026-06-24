@@ -112,6 +112,7 @@ async def record_message(
         body_text=body,
         wa_message_id=wa_message_id,
         message_log_id=message_log_id,
+        created_at=datetime.now(timezone.utc),  # explícito: server_default não popula após flush()
     )
     db.add(msg)
     await db.flush()
