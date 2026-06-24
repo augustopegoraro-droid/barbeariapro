@@ -5,7 +5,62 @@
 
 ## Branch ativo
 
-`main` (backend) — em dia com `origin/main` (todos os commits pushados).
+`main` (backend) — pushado até `4d4ed5e`. VM está em `a11e0be` (ver abaixo).
+
+---
+
+## ✅ Sessão 2026-06-23 — parte 5: sincronização WhatsApp↔CRM em tempo real
+
+### Problema
+Bot respondia no WhatsApp mas o CRM não atualizava: sem polling, sem armazenamento
+de mensagens, sem progressão automática de estágio, sem `last_contact_at`.
+
+### O que foi implementado
+
+**Backend (commit `a11e0be`, no ar na VM):**
+- `alembic/versions/0009_conversation_log.py` — adiciona `body_text TEXT` a `message_log`
+- `models/integration.py` — campo `body_text` em `MessageLog`
+- `app/api/bot.py`:
+  - `POST /bot/messages` — grava mensagem inbound/outbound; idempotente por `whatsapp_message_id`; atualiza `last_contact_at`; move lead `novo_contato→conversando` em inbound; retorna `{"ok":false}` silenciosamente se cliente não existe
+  - `upsert_client` — atualiza `last_contact_at` no lead ativo quando cliente já existe
+- `app/api/crm.py` — `GET /crm/leads/{id}/messages` (histórico de conversa via `client_id`)
+- Migration 0009 aplicada na VM como postgres superuser (não via alembic CLI)
+
+**Frontend (commit `c550740` no repo do frontend, deploy via SCP+rebuild às 23:04):**
+- `types/index.ts` — interface `ConversationMessage`
+- `app/admin/crm/page.tsx` — reescrita completa:
+  - Kanban faz polling a cada 30s (`POLL_INTERVAL = 30_000`)
+  - `ConversationDrawer`: abre ao clicar no card, polling de 10s nas mensagens, balões de chat (inbound=esquerda/zinc-800, outbound=direita/green-800/50), separadores de data
+  - Botão pausa/retoma bot por card (parte 3, mantido)
+  - Rodapé "Atualiza automaticamente a cada 10 s"
+
+**n8n workflow (atualizado via API REST, NÃO via git):**
+- **2 novos nós:** `Log Inbound Message` e `Log Outbound Message`
+- **Posição EM SÉRIE** (não paralelo — ver D-18):
+  - `HTTP Flush Buffer → Log Inbound → Code Horário Comercial → ...`
+  - `... → AI Agent → Send Response → Log Outbound`
+- `Code Horário Comercial` atualizado para usar `$('HTTP Flush Buffer').first().json.*` (refs explícitas, necessário porque Log Inbound agora é o nó anterior)
+- Workflow: 43 nós, ativo, versionId `97604086-8181-4695-a056-d86d40220d91`
+
+### Diagnóstico crítico descoberto (D-18)
+**n8n v2.27.3 não executa nós em fanout paralelo**: conexões `[nodeA, nodeB]` no
+mesmo `main[0]` resultam apenas em `nodeA` executando; `nodeB` nunca aparece no
+`runData` e nunca é chamado. Verificado em 9+ execuções consecutivas. Solução: série.
+
+### Estado do DB após sessão
+- Migration HEAD: `0009_conversation_log`
+- Clientes: Augusto Pegoraro (`+556399368196`, id=1), Reinaldo Viterbo (id=5)
+- Leads: id=1 "Cliente Teste Funil" (agendado, sem client_id), id=4 "Augusto Pegoraro" (novo_contato, client_id=1) — **id=4 criado manualmente** porque o AI Agent criou o cliente antes do código de lead existir
+- `message_log`: 2 linhas (inbound + outbound, do teste curl, client_id=1)
+
+### Estado git ao final
+- Local: `4d4ed5e` (n8n log nodes — `workflows.json` com conexões PARALELAS originais)
+- VM: `a11e0be` (workflow real na VM tem conexões SÉRIES aplicadas por API)
+- `workflows.json` local **DIVERGE** da VM — não usar como referência
+- **`git pull` na VM agora funciona**: `sudo git config --global --add safe.directory /opt/barbeariapro` rodado nesta sessão
+
+### Pendente de confirmação
+- [ ] **Teste ao vivo**: usuário enviar mensagem WhatsApp → verificar que `POST /bot/messages` é chamado nos logs → lead move para `conversando` → mensagens aparecem no drawer do CRM. Ainda não foi possível confirmar (sessão encerrada antes do teste).
 
 ---
 
@@ -119,13 +174,21 @@ e não criava nenhum agendamento.
 
 ## Pendências imediatas (próxima sessão)
 
-- [ ] **Corrigir `git pull` na VM** — rodar `sudo git config --global --add safe.directory /opt/barbeariapro` para poder fazer pull normalmente.
-- [ ] **HTTPS + domínio** — env ativo usa IP `34.95.199.134`. Commit `876d841`
-  trocou para `taylorethedy.app` / `api.taylorethedy.com` no código, mas não foi
-  aplicado ao `.env`/Nginx da VM. `deploy/nginx.conf` + certbot prontos.
+- [ ] **[CRÍTICO] Confirmar sincronização CRM ao vivo**: mandar mensagem WhatsApp → checar `docker logs barbeariapro-app-backend` por `POST /bot/messages 200 OK` → confirmar lead em `conversando` → mensagem no drawer. Os nós de log nunca foram testados em execução real com as conexões em série.
+- [ ] **Sincronizar `workflows.json`** — o arquivo local tem as conexões PARALELAS originais. Exportar da VM e commitar:
+  ```bash
+  gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a \
+    --command="python3 -c \"import json,urllib.request; cookies={}; [cookies.update({p[5]:p[6]}) for line in open('/tmp/n8n.cookies') for p in [line.strip().split('\t')] if len(p)>=7]; r=urllib.request.urlopen(urllib.request.Request('http://localhost:5678/rest/workflows/25QZQ664N6hrIg59',headers={'Cookie':'; '.join(f\\\"{k}={v}\\\" for k,v in cookies.items())})); print(r.read().decode())\""  > workflows.json
+  ```
+- [ ] **Sincronizar VM com git** (1 commit atrás):
+  ```bash
+  gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a \
+    --command="sudo git -C /opt/barbeariapro pull && cd /opt/barbeariapro && sudo docker compose -f docker-compose.app.yml up --build -d"
+  ```
+- [ ] **HTTPS + domínio** — env ativo usa IP `34.95.199.134`. `deploy/nginx.conf` + certbot prontos.
 - [ ] **Fechar portas** ao mundo após HTTPS (5678/8000/3000/8080 hoje abertas).
-- [ ] **Backup automatizado** dos volumes Docker da VM (zeramento mostrou que não há).
-- [ ] **Validar lembrete 24h** end-to-end (`CronReminder24h01` ativo, mas nunca testado com agendamento real).
+- [ ] **Backup automatizado** dos volumes Docker da VM.
+- [ ] **Validar lembrete 24h** end-to-end (`CronReminder24h01` ativo, nunca testado).
 
 ---
 

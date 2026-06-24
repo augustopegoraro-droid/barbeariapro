@@ -203,6 +203,59 @@ O item da dívida técnica sobre "`NEXT_PUBLIC_ORG_ID` mudou de 3 para 1" está
 
 ---
 
+### D-18 — n8n v2.27.3: fanout paralelo não executa os nós secundários
+**Data:** 2026-06-23 (parte 5)
+**Decisão:** Qualquer nó de log/efeito-colateral no workflow n8n DEVE ser conectado
+em SÉRIE, nunca em paralelo (fanout `main[0]: [nodeA, nodeB]`).
+**Motivo (verificado empiricamente em 9 execuções):** Quando um nó conecta à saída
+de outro em paralelo com outros nós, apenas o primeiro nó da lista (`nodeA`) é
+executado. O segundo (`nodeB`) nunca aparece no `runData` e nunca é chamado.
+Não há erro visível — o workflow termina como `success` e silenciosamente ignora
+o nó secundário. Suspeita: bug ou limitação do n8n v2.27.3 com fanout.
+**Solução aplicada para os nós de log:**
+```
+ANTES (paralelo — não funciona):
+  HTTP Flush Buffer → [Code Horário Comercial, Log Inbound Message]  ← Log nunca roda
+  AI Agent → [Send Response, Log Outbound Message]                   ← Log nunca roda
+
+DEPOIS (série — funciona):
+  HTTP Flush Buffer → Log Inbound Message → Code Horário Comercial
+  AI Agent → Send Response → Log Outbound Message
+```
+**Consequência para Code Horário Comercial:** como agora recebe a saída do Log Inbound
+(não do Flush Buffer), foi atualizado para referenciar o Flush Buffer explicitamente:
+`$('HTTP Flush Buffer').first().json.message` em vez de `$json.message`.
+**Atenção:** ao adicionar novos nós ao workflow, NUNCA conectar em paralelo —
+sempre encadear em série ou usar sub-workflows.
+
+### D-19 — jsonBody de HTTP Request n8n: usar expressão de objeto, não JSON.stringify
+**Data:** 2026-06-23 (parte 5)
+**Decisão:** Com `specifyBody: "json"`, o campo `jsonBody` deve conter uma expressão
+n8n que retorna um **objeto JavaScript**, no formato `={{ {chave: valor, ...} }}`.
+Não usar `JSON.stringify({...})` — retorna string, não objeto, e pode causar
+comportamento imprevisível dependendo da versão do nó.
+**Exemplo correto:**
+```json
+"jsonBody": "={{ {\"phone\": \"+\" + $('Set Phone').item.json.phone, \"direction\": \"inbound\", \"body\": $('HTTP Flush Buffer').item.json.message} }}"
+```
+**Comparação:** o nó `HTTP Flush Buffer` (que funciona) usa formato diferente:
+`={\n  \"phone\": \"+{{ ... }}\"\n}` — template literal com `{{ }}` dentro.
+Ambos funcionam; o formato `={{ {} }}` é mais flexível para valores que contêm
+caracteres especiais (não quebra o JSON ao interpolar strings com aspas).
+
+### D-20 — `POST /bot/messages` não cria cliente: silencia se cliente não existe
+**Data:** 2026-06-23 (parte 5)
+**Decisão:** Se o cliente não existe no DB, `POST /bot/messages` retorna
+`{"ok": false, "reason": "client_not_found"}` sem criar o cliente nem o lead.
+**Motivo:** Separação de responsabilidades. Criação de cliente/lead é responsabilidade
+do AI Agent via `cadastrar_cliente`. Log de mensagem é secundário.
+**Consequência prática:** A primeira mensagem de um **novo** número não é gravada no
+histórico de conversa — apenas a partir da segunda (após o AI Agent criar o cliente).
+**Futura melhoria (não urgente):** `log_message` poderia criar o cliente automaticamente
+se não existir, ou o `Log Inbound Message` poderia chamar `POST /bot/clients` primeiro.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -210,7 +263,8 @@ O item da dívida técnica sobre "`NEXT_PUBLIC_ORG_ID` mudou de 3 para 1" está
 | Sem backup dos volumes Docker da VM | infra VM | ⚠️ Alto | VM já foi zerada uma vez; perdeu pareamento WhatsApp e dados. |
 | Estado do bot em memória (debounce, dedup, sessões) | `app/api/bot.py:49-61` | Médio | Restart perde estado; impossibilita 2ª instância. Aguarda Redis. |
 | Portas abertas ao mundo na VM | firewall GCP | Médio | 5678/8000/3000/8080 públicas; fechar após HTTPS. |
-| 3 commits de deploy não pushados | git `main` | Médio | Clone novo da VM não teria `Dockerfile.migrate`/kit `deploy/`. |
-| `workflows.json` modificado e divergente da VM | `workflows.json` | Baixo | Versão ativa real está na VM (editada via API). |
+| `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | VM tem série; local tem paralelo. Exportar da VM antes de qualquer edição. |
+| VM 1 commit atrás do main local | git VM | Médio | VM em `a11e0be`; local em `4d4ed5e`. `git pull` agora funciona na VM. |
+| Primeira mensagem de novo número não é logada | `app/api/bot.py:264` | Baixo | `client_not_found` silencia. Ver D-20. |
 | N+1 nos crons de reativação e lembrete | `app/services/reactivation.py`, `reminders.py` | Baixo | 3-4 queries por alvo; aceitável no volume atual. |
 | 2 testes hardcoded na org 3 | `tests/test_clientes_integration.py`, `test_e2e_flow.py` | Baixo | Fail ambiental; não são bugs (ver D-17). |

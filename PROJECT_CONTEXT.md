@@ -1,6 +1,6 @@
 # PROJECT_CONTEXT.md
 > Fonte de verdade para novas sessões de desenvolvimento.
-> Verificado contra o código E contra a VM de produção em **2026-06-23**.
+> Verificado contra o código E contra a VM de produção em **2026-06-23** (última atualização: sessão parte 5).
 
 ---
 
@@ -16,6 +16,9 @@
 4. **A produção restaurada usa `organization_id = 1`** (não org 3, como diziam os
    docs antigos). Banco re-semeado do zero. Ver §9.
 5. **O bot WhatsApp está funcionando end-to-end** (conversa + agendamento). Ver §12.
+6. **Sincronização WhatsApp↔CRM implementada (parte 5)** — mensagens do bot agora
+   aparecem no CRM em tempo real; CRM faz polling automático; nós de log no n8n
+   gravados em série (ver §12, §8 e D-18). Pendente: teste de confirmação ao vivo.
 
 ---
 
@@ -39,12 +42,16 @@ Objetivo comercial: vender para mais barbearias; concorre com Trinks
 > Commits de backend e frontend são feitos separadamente
 > (`git -C barbearia-frontend/ ...`). Ver D-08.
 
-**Estado git do backend (2026-06-23):**
-- Branch `main`, **3 commits à frente de `origin/main` (NÃO pushados)** — o kit de
-  deploy (`99eaabb`, `c9297bb`, `876d841`). Um clone novo do GitHub não tem esses
-  commits nem `Dockerfile.migrate`/`docker-compose.app.yml` atualizados.
-- `workflows.json` tem modificações locais **não commitadas** (correções do bot —
-  ver CURRENT_SPRINT.md).
+**Estado git do backend (2026-06-23, após sessão parte 5):**
+- Branch `main`, commits pushados até `4d4ed5e`.
+- **VM está em `a11e0be`** (1 commit atrás): o commit `4d4ed5e` (n8n log nodes)
+  não foi feito via git pull — o workflow foi atualizado diretamente pela API REST.
+- `workflows.json` local **diverge da VM**: a versão local registra as conexões
+  paralelas originais; a VM tem as conexões em SÉRIE (ver D-18, §12).
+  Para sincronizar: exportar o workflow da VM via `GET /rest/workflows/25QZQ664N6hrIg59`
+  e salvar como `workflows.json`.
+- **`git pull` na VM agora funciona**: `safe.directory` configurado na sessão parte 5.
+  Procedimento: `sudo git -C /opt/barbeariapro pull && docker compose -f docker-compose.app.yml up --build -d backend`
 
 ---
 
@@ -159,9 +166,19 @@ export SEED_ORG_ID=1
 ### Endpoints `/bot/*` (consumidos pelo n8n — `X-Bot-Token`)
 `POST /bot/debounce`, `POST /bot/debounce/flush`, `GET /bot/services`,
 `GET /bot/barbers`, `POST /bot/clients`, `PATCH /bot/clients/photo`,
-`GET /bot/clients/profile`, `GET /bot/availability`, `POST /bot/appointments`,
+`GET /bot/clients/profile`, `GET /bot/clients/paused-status`,
+`GET /bot/availability`, `POST /bot/appointments`,
 `GET /bot/appointments`, `PATCH /bot/appointments/{id}/cancel`,
-`PATCH /bot/appointments/{id}/complete`.
+`PATCH /bot/appointments/{id}/complete`,
+`POST /bot/messages` ← **novo (parte 5)**: grava mensagem inbound/outbound,
+  atualiza `last_contact_at`, avança lead `novo_contato→conversando` no inbound;
+  retorna `{"ok": false, "reason": "client_not_found"}` se o cliente não existe.
+
+### Endpoints `/crm/*` (JWT)
+`GET /crm/board`, `POST /crm/leads`, `GET /crm/leads/{id}`,
+`PATCH /crm/leads/{id}`, `POST /crm/leads/{id}/move`, `DELETE /crm/leads/{id}`,
+`GET /crm/leads/{id}/messages` ← **novo (parte 5)**: retorna histórico de conversa
+  WhatsApp via `client_id` do lead (requires `body_text IS NOT NULL` em `message_log`).
 
 ---
 
@@ -184,15 +201,21 @@ export SEED_ORG_ID=1
 
 ## 8. Migrations Alembic
 
-Head atual (verificado na VM): **`0007_crm_leads`**.
+Head atual (verificado na VM em 2026-06-23, parte 5): **`0009_conversation_log`**.
 
 ```
 0001_initial → 0002_loyalty → 0002_client_last_photo → 0003_client_photo_description
-→ 0005_barber_services → 0006_client_blocked → 0007_crm_leads  ← HEAD
+→ 0005_barber_services → 0006_client_blocked → 0007_crm_leads
+→ 0008_client_bot_paused → 0009_conversation_log  ← HEAD
 ```
 
 `integration_accounts`, `calendar_sync` e `message_log` existem desde `0001_initial`.
-A Fase 2 (Calendar) **não criou migration nova**.
+- `0008_client_bot_paused` — coluna `bot_paused BOOLEAN` em `clients`
+- `0009_conversation_log` — coluna `body_text TEXT` em `message_log` (parte 5)
+
+> ⚠️ **Migrations 0008 e 0009 foram aplicadas via `ALTER TABLE` direto como postgres
+> superuser** (não via `alembic upgrade`), porque `barber_app` não tem privilégio DDL.
+> Forma correta: `docker exec barbeariapro-postgres psql -U postgres -d barbeariapro`
 
 ---
 
@@ -210,6 +233,20 @@ Senha de seed: `senha123`.
 **Roles do Postgres:** apenas `barber_app` (RLS, NOBYPASSRLS, senha `senha123`).
 Admin via superuser `postgres`. Seed faz GRANT, não CREATE ROLE — o role
 `barber_app` foi criado manualmente ao remontar a VM.
+
+**Clientes reais cadastrados (verificado 2026-06-23 parte 5):**
+- `id=1` Augusto Pegoraro — `+556399368196` (dono da conta)
+- `id=5` Reinaldo Viterbo — `+5563999789977`
+
+**Leads no Kanban (verificado 2026-06-23 parte 5):**
+- `id=1` "Cliente Teste Funil" — estágio `agendado`, sem `client_id`
+- `id=4` "Augusto Pegoraro" — estágio `novo_contato`, `client_id=1`
+  (**criado manualmente**: o AI Agent criou o cliente antes do código de Lead
+  existir; a lógica nova cria Lead automático para novos contatos)
+
+> ⚠️ **Número do WhatsApp de Augusto:** Evolution API envia `+556399368196`
+> (8 dígitos após DDD). O usuário pode informar como `+5563999368196` (9 dígitos).
+> São o mesmo número normalizado pela Evolution. O DB usa o formato da Evolution.
 
 > ⚠️ Dois testes hardcoded em `organization_id == 3` falham contra qualquer banco
 > org 1 (staging E a produção restaurada). São fails ambientais, não bugs.
@@ -265,18 +302,63 @@ se `EVOLUTION_API_URL` **ou** `EVOLUTION_INSTANCE_NAME` estiverem vazios.
   número `5563920001734`.
 - **Webhook:** Evolution → `http://host.docker.internal:5678/webhook/whatsapp`.
 - **n8n v2.27.3** — 3 workflows ativos:
-  - `BarbeariaPro Bot - WhatsApp Chatbot` (id `25QZQ664N6hrIg59`)
+  - `BarbeariaPro Bot - WhatsApp Chatbot` (id `25QZQ664N6hrIg59`, **43 nós**)
   - `BarbeariaPro Cron - Lembrete 24h` (id `CronReminder24h01`)
   - `BarbeariaPro Cron - Reativação Diária` (id `CronReactivation1`)
 - **Persona:** "Raquel", recepcionista (system prompt no node `AI Agent`).
 - **Modelo:** GPT-4o-mini (node `OpenAI GPT-4o-mini`, tipo `lmChatOpenAi`).
 - **Credencial OpenAI:** ID `md1VzrcFUBhOFYfr` ("OpenAI account", tipo `openAiApi`).
-- **Fluxo:** debounce (5s) → flush → AI Agent com tools `obter_perfil_cliente`,
-  `listar_servicos`, `verificar_disponibilidade`, `criar_agendamento`, etc.,
-  todas batendo em `http://host.docker.internal:8000/bot/*`.
 
-> ⚠️ **n8n é frágil — leia D-14 antes de mexer.** NUNCA editar o SQLite direto nem
-> apagar arquivos WAL. Sempre usar a API REST do n8n.
+### Fluxo principal do bot (2026-06-23 parte 5 — VERIFICADO NA VM)
+
+```
+Webhook → Block List → Set Phone → IF Is Audio / IF Individual / IF Has Image
+→ HTTP Debounce → IF Controller → Wait 5s → HTTP Flush Buffer
+→ Log Inbound Message          ← [NOVO parte 5] POST /bot/messages (direction=inbound)
+→ Code Horário Comercial       ← usa $('HTTP Flush Buffer').first().json.* (refs explícitas)
+→ IF Horário Aberto
+→ Send Composing → Wait Typing Init → Send Composing Active
+→ HTTP Check Bot Pause → IF Bot Paused
+→ Memory → AI Agent (com tools abaixo)
+→ Send Response
+→ Log Outbound Message         ← [NOVO parte 5] POST /bot/messages (direction=outbound)
+```
+
+### Tools do AI Agent
+`obter_perfil_cliente` (`GET /bot/clients/profile`),
+`cadastrar_cliente` (`POST /bot/clients`),
+`listar_servicos` (`GET /bot/services`),
+`listar_barbeiros` (`GET /bot/barbers`),
+`verificar_disponibilidade` (`GET /bot/availability`),
+`criar_agendamento` (`POST /bot/appointments`),
+`consultar_agendamentos` (`GET /bot/appointments`),
+`cancelar_agendamento` (`PATCH /bot/appointments/{id}/cancel`),
+`faq` (Code node local).
+
+### Nós de Log (parte 5) — detalhes críticos
+- **Tipo:** `n8n-nodes-base.httpRequest` v4.4, `onError: continueRegularOutput`
+- **URL:** `http://host.docker.internal:8000/bot/messages`
+- **Auth:** header `X-Bot-Token: ={{ $env.BOT_API_KEY }}`
+- **Body format:** `specifyBody: "json"`, `jsonBody: "={{ {phone: ..., direction: ..., body: ...} }}"` — expressão que retorna OBJETO (não `JSON.stringify`)
+- **Posição:** EM SÉRIE, não paralelo (ver D-18)
+- **Log Inbound:** referencia `$('HTTP Flush Buffer').item.json.message`
+- **Log Outbound:** referencia `$('AI Agent').item.json.output`
+
+> ⚠️ **n8n é frágil — leia D-14 e D-18 antes de mexer.** NUNCA editar o SQLite direto.
+> O `workflows.json` local diverge da VM; a fonte de verdade é a VM via API REST.
+
+### Autenticação n8n (API REST)
+Cookie de sessão expira. Para renovar:
+```bash
+# Na VM
+python3 -c "
+import json, urllib.request
+body = json.dumps({'emailOrLdapLoginId': 'admin@barbeariapro.com', 'password': 'Barbearia2026'}).encode()
+r = urllib.request.urlopen(urllib.request.Request('http://localhost:5678/rest/login', body, {'Content-Type': 'application/json'}))
+print([h for h in r.headers.items() if 'set-cookie' in h[0].lower()])
+"
+# Salvar cookies em /tmp/n8n.cookies (formato netscape) para uso posterior
+```
 
 ---
 
