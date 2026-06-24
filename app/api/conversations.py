@@ -6,19 +6,24 @@ app/services/conversation.py + app/api/bot.py.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from datetime import datetime, timezone
-from typing import Annotated, List, Optional
+from typing import Annotated, Any, AsyncIterator, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status as http_status
+from fastapi.responses import StreamingResponse
+from jose import JWTError
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.rbac import require_full_access
+from app.core.security import decode_access_token
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services import sse_broker
 from models import Client, Conversation, Lead, Message, User
 from models.enums import ConversationStatus
 
@@ -377,3 +382,42 @@ async def mark_conversation_read(
     conv.unread_count = 0
     conv.updated_at = datetime.now(timezone.utc)
     return {"ok": True}
+
+
+@router.get("/stream")
+async def sse_stream(
+    request: Request,
+    token: str = Query(..., description="JWT token (EventSource não suporta headers)"),
+) -> StreamingResponse:
+    """SSE stream de mensagens em tempo real para a org do usuário autenticado."""
+    try:
+        payload = decode_access_token(token)
+        org_id = int(payload["org"])
+    except (JWTError, KeyError, ValueError):
+        raise HTTPException(status_code=http_status.HTTP_401_UNAUTHORIZED,
+                            detail="Token inválido")
+
+    async def generator() -> AsyncIterator[str]:
+        q = sse_broker.subscribe(org_id)
+        try:
+            yield 'data: {"type":"connected"}\n\n'
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=25)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            sse_broker.unsubscribe(org_id, q)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
