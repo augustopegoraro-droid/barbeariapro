@@ -138,17 +138,21 @@ async def evolution_webhook(
     payload: dict = await request.json()
     event: str = payload.get("event", "")
 
-    # Forward ao n8n para qualquer evento (connection, messages, etc.)
-    background_tasks.add_task(_forward_to_n8n, payload)
+    # Não encaminha send.message ao n8n para evitar loop (bot responde, n8n recebe, gera outra resposta...)
+    if event != "send.message":
+        background_tasks.add_task(_forward_to_n8n, payload)
 
-    if event != "messages.upsert":
+    _MSG_EVENTS = ("messages.upsert", "send.message")
+    if event not in _MSG_EVENTS:
         return {"ok": True, "skipped": True, "reason": f"event={event}"}
 
     data: dict = payload.get("data", {})
     key: dict = data.get("key", {})
-    from_me: bool = key.get("fromMe", False)
 
-    # Filtra apenas mensagens de contatos individuais (inbound e outbound do bot)
+    # send.message é sempre fromMe=true; messages.upsert depende do campo
+    from_me: bool = (event == "send.message") or key.get("fromMe", False)
+
+    # Filtra apenas mensagens de contatos individuais
     phone = _extract_phone(key.get("remoteJid", ""))
     if phone is None:
         return {"ok": True, "skipped": True, "reason": "not_individual"}
@@ -159,9 +163,8 @@ async def evolution_webhook(
         _logger.warning("wa_webhook instance inesperada: got=%r expected=%r", instance, settings.evolution_instance_name)
         return {"ok": True, "skipped": True, "reason": "instance_mismatch"}
 
-    # fromMe=true → resposta do bot enviada via Evolution
-    # fromMe=false → mensagem do cliente
     sender_type = MessageSenderType.bot if from_me else MessageSenderType.client
+    _logger.info("wa_webhook event=%s phone=%s sender=%s", event, phone, sender_type.value)
 
     wa_message_id: Optional[str] = key.get("id")
     msg_type_raw: str = data.get("messageType", "conversation")
