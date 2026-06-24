@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     evolution_instance_name: str = ""
     evolution_api_key: str = ""
 
+    # Webhook direto Evolution → FastAPI (substitui debounce do n8n para o CRM)
+    # N8N_WEBHOOK_URL: URL base do n8n para forward (ex: http://host.docker.internal:5678)
+    # WA_WEBHOOK_SECRET: se definido, valida o header X-Webhook-Secret em /bot/wa-webhook
+    n8n_webhook_url: str = ""
+    wa_webhook_secret: str = ""
+
     # Google Calendar (Fase 2 — OAuth2 + sync de eventos). Default vazio:
     # sem credenciais, o módulo de integração fica inerte (não afeta produção).
     google_client_id: str = ""
