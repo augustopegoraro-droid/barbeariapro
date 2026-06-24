@@ -130,3 +130,31 @@ class LeadStage(str, enum.Enum):
     agendado = "agendado"
     concluido = "concluido"
     perdido = "perdido"
+
+
+class ConversationStatus(str, enum.Enum):
+    open = "open"
+    snoozed = "snoozed"
+    closed = "closed"
+
+
+class MessageSenderType(str, enum.Enum):
+    client = "client"
+    bot = "bot"
+    human = "human"
+    system = "system"
+
+
+class MessageType(str, enum.Enum):
+    text = "text"
+    audio = "audio"
+    image = "image"
+    document = "document"
+    event = "event"
+
+
+class AttachmentMediaType(str, enum.Enum):
+    audio = "audio"
+    image = "image"
+    document = "document"
+    video = "video"

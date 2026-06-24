@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.services.loyalty import resolve_benefit
 from app.services.whatsapp import send_text
+import app.services.conversation as _conv_svc
 from models import (
     Barber,
     Client,
@@ -22,7 +23,7 @@ from models import (
     MessageLog,
     Service,
 )
-from models.enums import LoyaltyStatus
+from models.enums import LoyaltyStatus, MessageSenderType, MessageType
 from models.loyalty import ClientLoyalty
 
 _logger = logging.getLogger(__name__)
@@ -124,19 +125,27 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
 
         success = await send_text(phone=client.phone_e164, message=message)
 
-        session.add(
-            MessageLog(
-                organization_id=org_id,
-                client_id=client.id,
-                direction=MessageDirection.outbound,
-                template=_TEMPLATE,
-                delivery_status=DeliveryStatus.sent if success else DeliveryStatus.failed,
-                attempt_count=1,
-            )
+        log = MessageLog(
+            organization_id=org_id,
+            client_id=client.id,
+            direction=MessageDirection.outbound,
+            template=_TEMPLATE,
+            delivery_status=DeliveryStatus.sent if success else DeliveryStatus.failed,
+            attempt_count=1,
         )
+        session.add(log)
         await session.flush()
 
         if success:
+            await _conv_svc.record_message(
+                session,
+                org_id=org_id,
+                phone=client.phone_e164,
+                sender_type=MessageSenderType.system,
+                body=message,
+                message_type=MessageType.text,
+                message_log_id=log.id,
+            )
             sent += 1
         else:
             skipped += 1

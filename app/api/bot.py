@@ -20,6 +20,8 @@ from app.core.phone import normalize_phone
 from app.deps import get_bot_db
 from app.services.scheduling import barber_has_conflict
 from app.services.loyalty import recalculate as _recalculate_loyalty
+import app.services.conversation as _conv_svc
+from app.services.conversation import MediaIn as _MediaIn
 from models import (
     Appointment,
     AppointmentItem,
@@ -39,7 +41,8 @@ from models import (
     TimeOff,
     Unit,
 )
-from models.enums import DeliveryStatus, LeadStage, MessageDirection
+from models.enums import (DeliveryStatus, LeadStage, MessageDirection,
+                          MessageSenderType, MessageType, AttachmentMediaType)
 
 router = APIRouter(prefix="/bot", tags=["bot"])
 BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
@@ -216,11 +219,34 @@ async def debug_set_session(_auth: _BotAuth, body: _DebugSessionIn):
 # ---------------------------------------------------------------------------
 
 
+class _MediaPayload(BaseModel):
+    media_type: str
+    url: Optional[str] = None
+    mime: Optional[str] = None
+    size_bytes: Optional[int] = None
+    duration_s: Optional[int] = None
+    transcript: Optional[str] = None
+    caption: Optional[str] = None
+
+    def to_domain(self) -> _MediaIn:
+        return _MediaIn(
+            media_type=AttachmentMediaType(self.media_type),
+            url=self.url,
+            mime=self.mime,
+            size_bytes=self.size_bytes,
+            duration_s=self.duration_s,
+            transcript=self.transcript,
+            caption=self.caption,
+        )
+
+
 class _MessageLogIn(BaseModel):
     phone: str
-    direction: str          # "inbound" | "outbound"
-    body: str
+    direction: str
+    body: Optional[str] = None
     whatsapp_message_id: Optional[str] = None
+    message_type: str = "text"
+    media: Optional[_MediaPayload] = None
 
 
 @router.post("/messages", status_code=200)
@@ -228,7 +254,8 @@ async def log_message(body: _MessageLogIn, db: BotDB, _auth: _BotAuth = None):
     """Grava mensagem recebida ou enviada no histórico de conversa.
 
     Chamado pelo n8n após debounce/flush (inbound) e após resposta do AI Agent
-    (outbound). Seguro para re-entrega: idempotente via whatsapp_message_id.
+    (outbound). Idempotente via whatsapp_message_id (namespaced por conversa+direção).
+    Grava mesmo sem cliente cadastrado (1º contato).
     """
     phone = _normalize_phone(body.phone)
     org_id = settings.bot_organization_id
@@ -237,21 +264,9 @@ async def log_message(body: _MessageLogIn, db: BotDB, _auth: _BotAuth = None):
 
     _logger.info(
         "conversation_log direction=%s phone=%s wamid=%s body_len=%d",
-        direction.value, phone, body.whatsapp_message_id or "none", len(body.body),
+        direction.value, phone, body.whatsapp_message_id or "none",
+        len(body.body or ""),
     )
-
-    # Deduplicação: se o wamid já foi gravado, ignorar silenciosamente.
-    if body.whatsapp_message_id:
-        dup = (
-            await db.execute(
-                select(MessageLog).where(
-                    MessageLog.idempotency_key == body.whatsapp_message_id
-                )
-            )
-        ).scalar_one_or_none()
-        if dup is not None:
-            _logger.info("conversation_log duplicate wamid=%s skipped", body.whatsapp_message_id)
-            return {"ok": True, "duplicate": True}
 
     client = (
         await db.execute(
@@ -261,28 +276,27 @@ async def log_message(body: _MessageLogIn, db: BotDB, _auth: _BotAuth = None):
         )
     ).scalar_one_or_none()
 
-    if not client:
-        _logger.warning("conversation_log client_not_found phone=%s", phone)
-        return {"ok": False, "reason": "client_not_found"}
+    sender = (MessageSenderType.client if direction == MessageDirection.inbound
+              else MessageSenderType.bot)
 
-    db.add(
-        MessageLog(
-            organization_id=org_id,
-            client_id=client.id,
-            direction=direction,
-            body_text=body.body,
-            idempotency_key=body.whatsapp_message_id,
-            delivery_status=(
-                DeliveryStatus.sent
-                if direction == MessageDirection.outbound
-                else DeliveryStatus.delivered
-            ),
-            attempt_count=0,
-        )
+    msg = await _conv_svc.record_message(
+        db,
+        org_id=org_id,
+        phone=phone,
+        sender_type=sender,
+        body=body.body,
+        message_type=MessageType(body.message_type),
+        wa_message_id=body.whatsapp_message_id,
+        client_id=client.id if client else None,
+        media=body.media.to_domain() if body.media else None,
     )
 
-    # Mensagem inbound → atualiza last_contact_at e avança lead para 'conversando'.
-    if direction == MessageDirection.inbound:
+    if msg is None:
+        await db.commit()
+        return {"ok": True, "duplicate": True}
+
+    # ── avanço de estágio do funil — INALTERADO (só quando há cliente+lead) ──
+    if direction == MessageDirection.inbound and client is not None:
         lead = (
             await db.execute(
                 select(Lead)

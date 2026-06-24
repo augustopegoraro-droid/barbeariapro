@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.dates import local_tz
 from app.services.whatsapp import send_text
+import app.services.conversation as _conv_svc
 from models import (
     Appointment,
     AppointmentItem,
@@ -31,6 +32,7 @@ from models import (
     MessageLog,
     Service,
 )
+from models.enums import MessageSenderType, MessageType
 
 _logger = logging.getLogger(__name__)
 
@@ -145,19 +147,29 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
 
         # Falha não grava a idempotency_key: a próxima rodada dentro da janela
         # tenta de novo (ex.: Evolution API fora do ar por alguns minutos).
-        session.add(
-            MessageLog(
-                organization_id=org_id,
-                client_id=client.id,
-                appointment_id=appt.id,
-                direction=MessageDirection.outbound,
-                idempotency_key=key if success else None,
-                template=_TEMPLATE,
-                delivery_status=DeliveryStatus.sent if success else DeliveryStatus.failed,
-                attempt_count=1,
-            )
+        log = MessageLog(
+            organization_id=org_id,
+            client_id=client.id,
+            appointment_id=appt.id,
+            direction=MessageDirection.outbound,
+            idempotency_key=key if success else None,
+            template=_TEMPLATE,
+            delivery_status=DeliveryStatus.sent if success else DeliveryStatus.failed,
+            attempt_count=1,
         )
+        session.add(log)
         await session.flush()
+
+        if success:
+            await _conv_svc.record_message(
+                session,
+                org_id=org_id,
+                phone=client.phone_e164,
+                sender_type=MessageSenderType.system,
+                body=message,
+                message_type=MessageType.text,
+                message_log_id=log.id,
+            )
 
         if success:
             sent += 1

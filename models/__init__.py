@@ -10,8 +10,10 @@ from __future__ import annotations
 from .base import Base
 from .enums import (
     AppointmentStatus,
+    AttachmentMediaType,
     ConsentStatus,
     ContactChannel,
+    ConversationStatus,
     DeliveryStatus,
     IntegrationProvider,
     IntegrationStatus,
@@ -19,6 +21,8 @@ from .enums import (
     LoyaltyNivel,
     LoyaltyStatus,
     MessageDirection,
+    MessageSenderType,
+    MessageType,
     PaymentMethod,
     ServiceCategory,
     SubscriptionStatus,
@@ -36,17 +40,22 @@ from .payment import Expense, ExpenseCategory, Payment
 from .integration import CalendarSync, IntegrationAccount, MessageLog
 from .loyalty import ClientLoyalty
 from .lead import Lead, LeadEvent
+from .conversation import Attachment, Conversation, Message
 
 __all__ = [
     "Base",
     # enums
     "AppointmentStatus",
+    "AttachmentMediaType",
     "ConsentStatus",
     "ContactChannel",
+    "ConversationStatus",
     "DeliveryStatus",
     "IntegrationProvider",
     "IntegrationStatus",
     "MessageDirection",
+    "MessageSenderType",
+    "MessageType",
     "PaymentMethod",
     "ServiceCategory",
     "SubscriptionStatus",
@@ -90,4 +99,8 @@ __all__ = [
     # CRM / funil
     "Lead",
     "LeadEvent",
+    # CRM conversacional
+    "Conversation",
+    "Message",
+    "Attachment",
 ]

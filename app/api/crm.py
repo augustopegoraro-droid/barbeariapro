@@ -18,8 +18,8 @@ from sqlalchemy.orm import selectinload
 from app.core.phone import normalize_phone as _validate_phone
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
-from models import Client, Lead, LeadEvent, MessageLog, User
-from models.enums import ContactChannel, LeadStage
+from models import Client, Conversation, Lead, LeadEvent, Message, MessageLog, User
+from models.enums import ContactChannel, LeadStage, MessageSenderType
 
 router = APIRouter(prefix="/crm", tags=["crm"])
 
@@ -393,6 +393,9 @@ async def delete_lead(
     await db.commit()
 
 
+_MSG_PREVIEW = {"audio": "🎤 Áudio", "image": "📷 Imagem", "document": "📎 Documento"}
+
+
 @router.get("/leads/{lead_id}/messages", response_model=List[ConversationMessageOut])
 async def get_lead_messages(
     lead_id: int,
@@ -407,12 +410,20 @@ async def get_lead_messages(
     if not lead.client_id:
         return []
 
+    conv = (
+        await db.execute(
+            select(Conversation).where(Conversation.client_id == lead.client_id)
+        )
+    ).scalars().first()
+
+    if conv is None:
+        return []
+
     rows = (
         await db.execute(
-            select(MessageLog)
-            .where(MessageLog.client_id == lead.client_id)
-            .where(MessageLog.body_text.isnot(None))
-            .order_by(MessageLog.created_at.desc())
+            select(Message)
+            .where(Message.conversation_id == conv.id)
+            .order_by(Message.created_at.desc())
             .limit(limit)
         )
     ).scalars().all()
@@ -420,8 +431,10 @@ async def get_lead_messages(
     return [
         ConversationMessageOut(
             id=m.id,
-            direction=m.direction.value,
-            body=m.body_text,
+            direction=(
+                "inbound" if m.sender_type == MessageSenderType.client else "outbound"
+            ),
+            body=m.body_text or _MSG_PREVIEW.get(m.message_type.value, ""),
             created_at=_iso(m.created_at),
         )
         for m in reversed(rows)
