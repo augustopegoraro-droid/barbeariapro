@@ -15,17 +15,20 @@ from typing import Annotated, Any, AsyncIterator, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status as http_status
 from fastapi.responses import StreamingResponse
 from jose import JWTError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.rbac import require_full_access
 from app.core.security import decode_access_token
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services import conversation as _conv_svc
 from app.services import sse_broker
+from app.services import whatsapp
 from models import Client, Conversation, Lead, Message, User
-from models.enums import ConversationStatus
+from models.enums import ConversationStatus, MessageSenderType, MessageType
 
 router = APIRouter(prefix="/crm", tags=["crm"])
 
@@ -382,6 +385,76 @@ async def mark_conversation_read(
     conv.unread_count = 0
     conv.updated_at = datetime.now(timezone.utc)
     return {"ok": True}
+
+
+# ─────────────────────────── Envio de mensagem ───────────────────────────────
+
+class SendMessageIn(BaseModel):
+    body: str = Field(..., min_length=1, max_length=4096)
+
+
+@router.post("/conversations/{conversation_id}/send",
+             response_model=MessageOut,
+             status_code=http_status.HTTP_201_CREATED)
+async def send_conversation_message(
+    conversation_id: int,
+    body: SendMessageIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> MessageOut:
+    """Envia mensagem pelo CRM (atendente humano → WhatsApp).
+
+    Em staging (Evolution não configurado) grava sem disparar — permite
+    testar a UI sem WhatsApp real.
+    Em produção, falha com 502 se a Evolution API não aceitar.
+    """
+    require_full_access(await resolve_current_role(db, current_user))
+
+    conv = (
+        await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    ).scalar_one_or_none()
+    if conv is None:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND,
+                            detail="Conversa não encontrada")
+
+    evolution_configured = bool(
+        settings.evolution_api_url and settings.evolution_instance_name
+    )
+    if evolution_configured:
+        sent = await whatsapp.send_text(conv.phone_e164, body.body)
+        if not sent:
+            raise HTTPException(
+                status_code=http_status.HTTP_502_BAD_GATEWAY,
+                detail="Falha ao enviar mensagem via WhatsApp.",
+            )
+
+    msg = await _conv_svc.record_message(
+        db,
+        org_id=conv.organization_id,
+        phone=conv.phone_e164,
+        sender_type=MessageSenderType.human,
+        body=body.body,
+        message_type=MessageType.text,
+        sender_user_id=current_user.id,
+    )
+    if msg is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Mensagem não pôde ser registrada.",
+        )
+    await db.commit()
+
+    # Retorna sem acessar msg.attachments (lazy-load inválido pós-commit).
+    # Mensagens humanas nunca têm anexo via esta rota.
+    return MessageOut(
+        id=msg.id,
+        sender_type=msg.sender_type.value,
+        message_type=msg.message_type.value,
+        body=msg.body_text,
+        wa_message_id=msg.wa_message_id,
+        created_at=_iso(msg.created_at) or datetime.now(timezone.utc).isoformat(),
+        attachments=[],
+    )
 
 
 @router.get("/stream")
