@@ -14,25 +14,19 @@
 **Motivo:** Em sessão anterior, `.env.staging` apontava para Evolution de prod —
 risco real de disparo em massa de WhatsApp para clientes reais.  
 **Implementação:** Trava em `app/services/whatsapp.py:17` (dry-run nativo quando
-`EVOLUTION_API_URL` vazio). Regra documentada em `MANUAL-OPERACIONAL.md` Seção 2.
+`EVOLUTION_API_URL` vazio).
 
 ### D-02 — State JWT no fluxo OAuth (sem sessão server-side)
 **Data:** 2026-06-21  
 **Decisão:** O parâmetro `state` do OAuth é um JWT assinado com `SECRET_KEY`, TTL
-5 minutos, contendo `org_id`. Verificado no callback sem precisar de armazenamento
-em Redis ou banco.  
-**Motivo:** Evita dependência de armazenamento de sessão no servidor para um fluxo
-que dura segundos. CSRF-safe porque o state é assinado.  
+5 minutos, contendo `org_id`. Verificado no callback sem armazenamento em Redis/banco.  
 **Arquivo:** `app/api/integracoes.py:52-70` (`_build_state`, `_verify_state`).
 
 ### D-03 — Tokens OAuth cifrados em repouso (Fernet/AES-128)
 **Data:** 2026-06-21  
 **Decisão:** `access_token` e `refresh_token` do Google são cifrados com Fernet
-antes de persistir em `integration_accounts.token_encrypted` (LargeBinary).  
-**Motivo:** Tokens OAuth dão acesso à agenda Google do usuário — não podem ser
-armazenados em plaintext mesmo num banco com RLS.  
-**Implementação:** `app/core/crypto.py`. Chave via `TOKEN_ENCRYPTION_KEY` (env var,
-nunca no código). Falha explícita se chave ausente.
+antes de persistir em `integration_accounts.token_encrypted`.  
+**Implementação:** `app/core/crypto.py`. Chave via `TOKEN_ENCRYPTION_KEY`.
 
 ---
 
@@ -40,42 +34,20 @@ nunca no código). Falha explícita se chave ausente.
 
 ### D-04 — Fase 2 sem contato com n8n/bot
 **Data:** 2026-06-16  
-**Decisão:** A integração Google Calendar não toca o workflow n8n, a Evolution API
-nem o bot WhatsApp. O sync é direto: `appointments → Google Calendar` via
-BackgroundTask FastAPI.  
-**Motivo:** O bot em produção é o core do produto. Qualquer mudança no n8n/Evolution
-requer chip de teste isolado + janela de manutenção.  
-**Consequência:** Fase 3 (disponibilidade via Calendar, status CRM automático) fica
-bloqueada até staging n8n/Evolution ser montado.
+**Decisão:** A integração Google Calendar não toca o workflow n8n, Evolution nem bot WhatsApp.
+**Motivo:** O bot em produção é o core do produto.
 
 ### D-05 — Sync Calendar como BackgroundTask (não fila/worker)
 **Data:** 2026-06-21  
-**Decisão:** `push_appointment()` é chamado como `fastapi.BackgroundTasks` nos
-endpoints de criação, reagendamento, conclusão, cancelamento e faltou.  
-**Motivo:** MVP com instância única — adicionar Redis/Celery seria
-over-engineering. BackgroundTask não bloqueia o response do barbeiro.  
-**Trade-off:** Se o processo do FastAPI reiniciar durante o background task, a
-sincronização é perdida (sem retry automático). Aceitável no MVP; para HA futura,
-migrar para fila.  
-**Arquivo:** `app/services/calendar_sync.py`. Hooks em `app/api/agenda.py` e
-`app/api/barbeiro.py`.
+**Arquivo:** `app/services/calendar_sync.py`.
 
 ### D-06 — Sem migration nova para a Fase 2 (Google Calendar)
 **Data:** 2026-06-21  
-**Decisão:** Tabelas `integration_accounts` e `calendar_sync` já existiam desde
-`0001_initial`. A Fase 2 apenas as utiliza — sem ALTER TABLE, sem nova migration.  
-**Motivo:** Reduz risco de deploy; a migration `0007_crm_leads` já está em
-produção e é o head atual.
+**Decisão:** Tabelas `integration_accounts` e `calendar_sync` já existiam desde `0001_initial`.
 
 ### D-07 — Callback OAuth redireciona para o frontend
 **Data:** 2026-06-21  
-**Decisão:** O callback `/integracoes/google/calendar/callback` redireciona para
-`GOOGLE_FRONTEND_SUCCESS_URL?calendar=connected` quando essa variável estiver
-configurada; caso contrário retorna JSON (útil para testes de API).  
-**Motivo:** O usuário não deve ver um JSON cru após autorizar o Calendar; deve
-voltar para o painel com feedback visual.  
-**Implementação:** `config.py:53` (`google_frontend_success_url`). Frontend
-exibe banner verde quando detecta `?calendar=connected` na URL.
+**Arquivo:** `config.py:53` (`google_frontend_success_url`).
 
 ---
 
@@ -83,31 +55,16 @@ exibe banner verde quando detecta `?calendar=connected` na URL.
 
 ### D-08 — Frontend é repositório git separado
 **Data:** descoberto em 2026-06-21  
-**Decisão:** `barbearia-frontend/` tem seu próprio `.git`. Commits de frontend
-e backend são feitos em repos separados.  
-**Consequência prática:** Sempre fazer `git -C barbearia-frontend/ add/commit`
-para mudanças de frontend. O repo externo agora registra `barbearia-frontend`
-como gitlink (modo 160000) — isso é inofensivo para o deploy mas deve-se evitar
-commitar a referência do submodule pelo repo externo inadvertidamente.
-**Deploy:** via `gcloud compute scp` + `sudo cp` + `docker compose up --build frontend` (não git pull).
+**Decisão:** `barbearia-frontend/` tem seu próprio `.git`. Commits separados.
+**Deploy:** via `gcloud compute scp` + `sudo cp` + `docker compose up --build frontend`.
 
 ### D-09 — Agenda do barbeiro mobile-first
 **Data:** 2026-06-21  
-**Decisão:** `/barbeiro/agenda` foi refatorada para uso primário em celular:
-header sticky, modal de conclusão como bottom-sheet, ações com touch targets
-≥44px, skeleton de loading, auto-reload via `visibilitychange`.  
-**Motivo:** O barbeiro usa a página no próprio celular durante o dia de trabalho,
-não num desktop.  
 **Arquivo:** `barbearia-frontend/app/barbeiro/agenda/page.tsx` (commit `205e43f`).
 
 ### D-10 — Botão "Conectar Calendar" usa endpoint `/authorize-url` (não redirect direto)
 **Data:** 2026-06-21  
-**Decisão:** O frontend chama `GET /integracoes/google/calendar/authorize-url`
-(que retorna `{"url": "..."}`) e depois faz `window.location.href = url`.
-Não chama `/authorize` diretamente.  
-**Motivo:** Axios/fetch seguem redirects automaticamente, mas o redirect vai para
-`accounts.google.com` que bloqueia pela política CORS. A abordagem JSON resolve
-isso: o frontend recebe a URL e o browser navega nativamente.  
+**Motivo:** Axios/fetch seguem redirects automaticamente, mas Google bloqueia por CORS.
 **Arquivo:** `app/api/integracoes.py:188-210` (`authorize_url_json`).
 
 ---
@@ -115,213 +72,177 @@ isso: o frontend recebe a URL e o browser navega nativamente.
 ## Produto e priorização
 
 ### D-11 — Lembrete 24h é a próxima feature de maior ROI
-**Data:** 2026-06-21 (análise do ROADMAP_IMPLEMENTACAO.md)  
-**Decisão:** Após o merge da Fase 2, a próxima feature prioritária é o lembrete
-24h antes via WhatsApp.  
-**Motivo:** A infraestrutura já está 100% pronta (`message_log`, Evolution API,
-n8n, `app/api/reminders.py`, telefones E.164, consentimentos LGPD). É o argumento
-de venda nº 1 (redução de no-show). Só precisa de 1 workflow cron no n8n.  
-**Requisito prévio:** Fase 3 exige staging de n8n/Evolution com chip de teste.
-O lembrete também toca o Evolution — portanto é Fase 3.
+**Data:** 2026-06-21  
+**Decisão:** Após estabilização do CRM, próxima prioridade é lembrete 24h antes via WhatsApp.
+Infraestrutura pronta (`CronReminder24h01` ativo, nunca testado end-to-end).
 
 ### D-12 — Google Calendar sync é ROI baixo (mas foi pedido)
 **Data:** 2026-06-21  
-**Decisão:** O sync Calendar foi implementado mesmo com ROI baixo no ranking do
-ROADMAP (posição 28 de 30).  
-**Motivo:** Pedido direto do usuário como feature da Fase 2. Não atrapalha o
-roadmap comercial — foi feito de forma isolada sem tocar o bot.
+**Motivo:** Pedido direto do usuário.
 
 ---
 
-## Infraestrutura e produção (sessão 2026-06-23)
+## Infraestrutura e produção
 
 ### D-13 — Produção roda na VM via docker-compose, NÃO no Cloud Run
 **Data:** 2026-06-23  
-**Decisão:** A produção real é a VM GCP `barbeariapro` (`34.95.199.134`, projeto
-`barberiapro-app`), com toda a stack em containers via `docker-compose.yml` +
-`docker-compose.app.yml`. O Cloud Run não é usado.  
-**Motivo:** A Run Admin API nem está habilitada no projeto; `deploy/gcp-cloud-run.sh`
-nunca rodou com sucesso. O bot/Evolution precisa de estado persistente e webhooks
-estáveis, o que o VM com volumes Docker já entrega.  
-**Consequência:** O acesso operacional é por SSH
-(`gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a`).
-O app vive em `/opt/barbeariapro` na VM. **Não há backup automatizado dos volumes** —
-a VM já foi encontrada zerada uma vez (perdeu pareamento WhatsApp + dados).
+**Decisão:** VM GCP `barbeariapro` (`34.95.199.134`), stack em containers.
+**Consequência:** Sem backup automatizado dos volumes — VM já foi zerada uma vez.
 
 ### D-14 — n8n: SEMPRE via API REST, NUNCA editar o SQLite direto
 **Data:** 2026-06-23  
-**Decisão:** Qualquer alteração de credencial ou workflow no n8n é feita pela API
-REST (`/rest/login`, `/rest/credentials`, `PATCH /rest/workflows/:id`,
-`POST /rest/workflows/:id/activate`), nunca por `UPDATE` no `database.sqlite`.  
-**Motivo (aprendido na marra):** Várias horas foram perdidas tentando injetar a
-credencial OpenAI direto no SQLite. Problemas encontrados:
-- A criptografia do n8n v2.x é **formato OpenSSL** (`U2FsdGVkX1...`), não o JSON
-  `{iv, content}` que tentei gerar manualmente → erro "Credentials could not be decrypted".
-- **Apagar os arquivos `-wal`/`-shm`** após copiar o `.sqlite` descarta mudanças
-  não checkpointed → reverteu correções feitas via API.
-- O n8n v2.27.3 separa **`versionId`** (rascunho) de **`activeVersionId`** (versão
-  que os webhooks realmente executam, vinda de `workflow_history`). Editar só os
-  `nodes` do `workflow_entity` não muda o que o webhook roda.  
-**Como fazer certo:**
-- Criar/atualizar credencial: `POST`/`PATCH /rest/credentials/:id` com
-  `{name, type, data:{apiKey:...}}` — o n8n cifra corretamente.
-- Ativar workflow: `POST /rest/workflows/:id/activate` com body
-  `{"versionId":"<uuid existente em workflow_history>"}` (o `versionId` é obrigatório).
-- Login n8n: `admin@barbeariapro.com` / `Barbearia2026`. Chave de cripto em
-  `/home/node/.n8n/config`. `N8N_SECURE_COOKIE=false` (acesso HTTP).
+**Decisão:** Qualquer alteração de credencial ou workflow via API REST.  
+**Motivo (aprendido na marra):** Criptografia do n8n v2.x é formato OpenSSL;
+WAL/SHM descartam mudanças; `versionId` separa rascunho de versão ativa.  
+**Como fazer:**
+```bash
+# Login (renovar cookie):
+curl -s -c /tmp/n8n_cookies -X POST 'http://localhost:5678/rest/login' \
+  -H 'Content-Type: application/json' \
+  -d '{"emailOrLdapLoginId":"admin@barbearia.com","password":"Barbearia@2026!"}'
+
+# Atualizar workflow:
+curl -sb /tmp/n8n_cookies -X PATCH \
+  'http://localhost:5678/rest/workflows/25QZQ664N6hrIg59' \
+  -H 'Content-Type: application/json' -d @/tmp/wf_payload.json
+```
 
 ### D-15 — Bot usa GPT-4o-mini + regra explícita de interpretação de slots
 **Data:** 2026-06-23  
-**Decisão:** O bot roda em `gpt-4o-mini`. Foi adicionada uma seção
-"INTERPRETAÇÃO DE SLOTS" no system prompt do node `AI Agent` deixando explícito que
-os horários retornados por `verificar_disponibilidade` ESTÃO disponíveis.  
-**Motivo:** O GPT-4o-mini alucinou dizendo que um horário livre (11h com o Thedy)
-"já estava reservado", embora a API tivesse retornado o slot como disponível.  
-**Trade-off:** GPT-4o seria mais confiável em raciocínio com listas, mas ~10× mais
-caro por token. Optou-se por reforçar o prompt mantendo o mini.  
-**Alternativa se reincidir:** trocar o node para `gpt-4o`.
+**Decisão:** Seção "INTERPRETAÇÃO DE SLOTS" no system prompt do AI Agent.
+**Alternativa se reincidir:** trocar node para `gpt-4o`.
 
 ### D-16 — `toolHttpRequest` do n8n não avalia `$env` em `fieldValue`
 **Data:** 2026-06-23  
 **Decisão:** Nos 8 nodes `toolHttpRequest`, o header `X-Bot-Token` recebe a
-`BOT_API_KEY` **hardcoded**, não `={{ $env.BOT_API_KEY }}`.  
-**Motivo:** Com `valueProvider: "fieldValue"`, o n8n envia a string literal
-`={{ $env.BOT_API_KEY }}` em vez de avaliar a expressão → backend respondia 401.  
-**Arquivo:** `workflows.json` (e versão ativa na VM via n8n).
+`BOT_API_KEY` **hardcoded** (não `={{ $env.BOT_API_KEY }}`).  
+**Motivo:** Com `valueProvider: "fieldValue"`, n8n envia a string literal sem avaliar.
 
 ---
 
-## Correções de premissas dos docs antigos (2026-06-23)
+## Correções de premissas dos docs antigos
 
 ### D-17 — Produção é `organization_id = 1` (supersede a premissa de org 3)
 **Data:** 2026-06-23  
-**Contexto:** Docs anteriores afirmavam "produção usa org_id=3".  
-**Realidade verificada:** A VM foi re-semeada do zero e a única organização é
-`id=1` ("Barbearia Taylor e Thedy"). `BOT_ORGANIZATION_ID=1`, `BOT_UNIT_ID=1`,
-`NEXT_PUBLIC_ORG_ID=1`. Barbeiros: Taylor(1), Thedy(2), Marciana(3), Sandra(4), Pablo(5).  
-**Consequência:** Os 2 testes hardcoded em `organization_id == 3` falham contra
-produção também (não só staging) — continuam sendo fails ambientais, não bugs.
+**Realidade:** VM re-semeada do zero; única org é `id=1`. `BOT_ORGANIZATION_ID=1`.
 
 ---
 
+## n8n: comportamento e armadilhas
+
 ### D-18 — n8n v2.27.3: fanout paralelo não executa os nós secundários
 **Data:** 2026-06-23 (parte 5)  
-**Decisão:** Qualquer nó de log/efeito-colateral no workflow n8n DEVE ser conectado
-em SÉRIE, nunca em paralelo (fanout `main[0]: [nodeA, nodeB]`).  
-**Motivo (verificado empiricamente em 9 execuções):** Quando um nó conecta à saída
-de outro em paralelo com outros nós, apenas o primeiro nó da lista (`nodeA`) é
-executado. O segundo (`nodeB`) nunca aparece no `runData` e nunca é chamado.
-Não há erro visível — o workflow termina como `success` e silenciosamente ignora
-o nó secundário. Suspeita: bug ou limitação do n8n v2.27.3 com fanout.  
-**Solução aplicada para os nós de log:**
+**Decisão:** Qualquer nó de log/efeito-colateral DEVE ser conectado em SÉRIE.  
+**Motivo:** Com fanout paralelo, apenas o primeiro nó da lista é executado.
+Não há erro visível — workflow termina como `success`.  
+**Solução:**
 ```
 ANTES (paralelo — não funciona):
-  HTTP Flush Buffer → [Code Horário Comercial, Log Inbound Message]  ← Log nunca roda
-  AI Agent → [Send Response, Log Outbound Message]                   ← Log nunca roda
+  HTTP Flush Buffer → [Log Inbound, Code Horário]
+  AI Agent → [Send Response, Log Outbound]
 
 DEPOIS (série — funciona):
-  HTTP Flush Buffer → Log Inbound Message → Code Horário Comercial
-  AI Agent → Send Response → Log Outbound Message
+  HTTP Flush Buffer → Code Horário     (Log Inbound desabilitado — ver D-30)
+  AI Agent → Send Response → Log Outbound
 ```
-**Consequência para Code Horário Comercial:** como agora recebe a saída do Log Inbound
-(não do Flush Buffer), foi atualizado para referenciar o Flush Buffer explicitamente:
-`$('HTTP Flush Buffer').first().json.message` em vez de `$json.message`.  
-**Atenção:** ao adicionar novos nós ao workflow, NUNCA conectar em paralelo —
-sempre encadear em série ou usar sub-workflows.
 
 ### D-19 — jsonBody de HTTP Request n8n: usar expressão de objeto, não JSON.stringify
 **Data:** 2026-06-23 (parte 5)  
-**Decisão:** Com `specifyBody: "json"`, o campo `jsonBody` deve conter uma expressão
-n8n que retorna um **objeto JavaScript**, no formato `={{ {chave: valor, ...} }}`.
-Não usar `JSON.stringify({...})` — retorna string, não objeto, e pode causar
-comportamento imprevisível dependendo da versão do nó.  
 **Exemplo correto:**
 ```json
 "jsonBody": "={{ {\"phone\": \"+\" + $('Set Phone').item.json.phone, \"direction\": \"inbound\", \"body\": $('HTTP Flush Buffer').item.json.message} }}"
 ```
 
+### D-26 — Webhook direto Evolution→FastAPI para eliminar delay do n8n
+**Data:** 2026-06-24 (2ª sessão)  
+**Decisão:** Evolution aponta para `POST /bot/wa-webhook` (FastAPI) em vez de n8n.
+O payload é registrado imediatamente e encaminhado ao n8n em background (retry 3×).  
+**Motivo:** O n8n tem debounce de 5 s mínimo; mensagens do cliente chegavam com atraso
+visível no Inbox. Com o webhook direto, o SSE dispara em < 100 ms.  
+**Arquivo:** `app/api/wa_webhook.py` (novo); `app/core/config.py` (`n8n_webhook_url`, `wa_webhook_secret`).  
+**Consequência:** n8n continua recebendo os payloads (para rodar o bot IA), mas não é mais
+o responsável pelo registro no CRM.
+
+### D-27 — Expressões n8n com `$` ficam corrompidas ao passar por SSH double-quote
+**Data:** 2026-06-24 (2ª sessão)  
+**Problema:** Ao enviar payload JSON para n8n via `curl ... -d '...'` dentro de
+`gcloud compute ssh --command="..."`, expressões como `$json.field` ou `$('NodeName')`
+têm o `$` expandido pela shell local (torna-se vazio ou executa subshell).  
+**Solução:** Escrever o payload em arquivo Python no servidor remoto (`cat > /tmp/script.py << 'PYEOF'`
+com `PYEOF` entre aspas simples evita expansão), executar Python, depois `curl -d @/tmp/arquivo.json`.  
+**Consequência atual:** `Log Outbound Message` usa `$json["key"]["remoteJid"]` (colchetes,
+sem ponto, mais seguro contra expansão futura) em vez da expressão original com `$('AI Agent')`.
+
+### D-28 — Acidente n8n `user-management:reset` e recuperação
+**Data:** 2026-06-24 (2ª sessão)  
+**O que aconteceu:** Comando `docker exec -u node n8n n8n user-management:reset` foi
+executado durante investigação. Apagou a conta owner do n8n.  
+**Recuperação:**
+```bash
+curl -X POST http://localhost:5678/rest/owner/setup \
+  -H 'Content-Type: application/json' \
+  -d '{"firstName":"Admin","lastName":"Admin","email":"admin@barbearia.com","password":"Barbearia@2026!"}'
+# Depois logar com POST /rest/login usando emailOrLdapLoginId
+```
+**Novas credenciais n8n:** `admin@barbearia.com` / `Barbearia@2026!`  
+(Antigas eram `admin@barbeariapro.com` / `Barbearia2026` — não existem mais)  
+**Lição:** Nunca rodar comandos de reset do n8n em produção. Sempre fazer login via API.
+
+### D-29 — Não aplicar conversão 8→9 dígitos em `normalize_phone` sem migrar o DB
+**Data:** 2026-06-24 (2ª sessão)  
+**Contexto:** Celulares brasileiros têm 9 dígitos no formato moderno (ex: `+5563999368196`)
+mas alguns números antigos têm 8 dígitos (ex: `+556399368196`). Evolution v2.3.7 envia
+o mesmo número de WhatsApp em formato 8 dígitos para este cliente específico.  
+**Decisão:** NÃO aplicar a conversão 8→9 em `normalize_phone` (revertido de versão local).  
+**Motivo:** `conv_id=1` tem `phone_e164 = '+556399368196'` (8 dígitos). Se `normalize_phone`
+convertesse para `+5563999368196`, `get_or_create_conversation` não encontraria a conversa
+existente e criaria uma nova (duplicata). O n8n também usa o formato que Evolution retorna.  
+**Se no futuro quiser normalizar:** migrar o DB primeiro (`UPDATE conversations SET phone_e164 = ...`
+e `UPDATE clients SET phone_e164 = ...`), depois aplicar `normalize_phone`.
+
+### D-30 — `Log Inbound Message` desabilitado no n8n (não deletado)
+**Data:** 2026-06-24 (2ª sessão)  
+**Decisão:** O nó `Log Inbound Message` foi desabilitado (não removido) no workflow n8n.
+`HTTP Flush Buffer` agora conecta direto em `Code Horário Comercial`.  
+**Motivo:** Com o webhook direto (`wa_webhook.py`), mensagens de cliente já são gravadas
+em `messages` antes do n8n processar. Se `Log Inbound` também rodasse, cada mensagem
+de cliente seria duplicada no DB (sem `wa_message_id` passado pelo n8n, o índice de
+idempotência não protege).  
+**Manter desabilitado:** a funcionalidade de gravação de inbound está no webhook direto.
+
 ---
 
-## CRM Conversacional (sessão 2026-06-24)
+## CRM Conversacional (sessão 2026-06-24, 1ª)
 
 ### D-20 — `POST /bot/messages` agora grava sem cliente (supersede versão anterior)
-**Data original:** 2026-06-23 (parte 5) — primeiro contato não era gravado.  
-**Supersedida em:** 2026-06-24 (Fase 2 CRM Conversacional).  
-**Estado atual:** `log_message` em `bot.py` chama `record_message(client_id=None)`.
-`record_message` cria a conversa sem `client_id` e grava a mensagem. Quando o AI Agent
-cadastra o cliente (`POST /bot/clients`), `upsert_client` retorna o `client_id` e na
-próxima chamada de `record_message` o `client_id` e `lead_id` são backfillados na conversa.
-**Consequência:** A primeira mensagem de um número novo AGORA É gravada em `messages`.
-A linha `return {"ok": False, "reason": "client_not_found"}` que ainda existe em `bot.py`
-pertence ao endpoint `PATCH /bot/clients/photo` (linha 628), não ao `log_message`.
+**Data original:** 2026-06-23 (parte 5).  
+**Estado atual:** `log_message` chama `record_message(client_id=None)`. Conversa criada
+sem `client_id`; backfill ocorre quando AI Agent cadastra o cliente.
 
 ### D-21 — SSE usa query param para autenticação
 **Data:** 2026-06-24 (Fase 5)  
-**Decisão:** `GET /crm/stream` aceita o JWT como `?token=<jwt>` (não como header
-`Authorization: Bearer`).  
-**Motivo:** O browser `EventSource` não suporta headers customizados — a API da
-interface não permite setar headers em conexões SSE nativas. Alternativas (SSE via
-`fetch` com `ReadableStream`, ou WebSocket) foram descartadas por complexidade
-desnecessária no MVP.  
-**Risco:** Token JWT visível nos logs de servidor (query string logada). Aceitável
-para MVP interno. Se for exposto publicamente, migrar para token de curta duração
-(exchange endpoint) ou WebSocket com header de upgrade.  
+**Decisão:** `GET /crm/stream` aceita JWT como `?token=<jwt>`.  
+**Motivo:** Browser `EventSource` não suporta headers customizados.  
 **Arquivo:** `app/api/conversations.py:387` (`sse_stream`).
 
 ### D-22 — Idempotência de mensagem é namespaced por conversa (não global)
 **Data:** 2026-06-24 (Fase 2)  
-**Decisão:** O índice de idempotência em `messages` é:
-`UNIQUE(conversation_id, wa_message_id, sender_type) WHERE wa_message_id IS NOT NULL` (parcial).  
-**Motivo:** O antigo `message_log.idempotency_key` era globalmente único — uma mesma
-`wamid` não poderia aparecer como inbound E outbound. O índice namespaced por
-`(conversation, wamid, sender)` permite que a mesma `wamid` exista para `client` e
-`bot` em contextos distintos, o que é semanticamente correto (Evolution pode ecoar
-IDs).  
-**Arquivo:** `alembic/versions/0010_conversations.py`.
+`UNIQUE(conversation_id, wa_message_id, sender_type) WHERE wa_message_id IS NOT NULL`
 
 ### D-23 — `_publish` chamado após `flush()`, antes do `commit()`
 **Data:** 2026-06-24 (Fase 5)  
-**Decisão:** O SSE broker é notificado com o payload completo da mensagem logo após
-`db.flush()` (que garante que `msg.id` está preenchido pelo PostgreSQL), mas antes
-de `db.commit()`.  
-**Motivo:** Chamar após commit garante consistência mas cria uma janela de tempo
-onde o frontend recebe o evento antes que a mensagem esteja visível em GET —
-condição de corrida. Chamar com payload completo no evento elimina a necessidade de
-um GET de follow-up, tornando a race condition irrelevante.  
-**Consequência:** Se a transaction for revertida após o flush, o evento SSE já foi
-emitido com uma mensagem que não persiste. Na prática isso é raro e imperceptível
-(o GET de fallback do poll 10 s não trará a mensagem, mas o usuário não verá
-duplicata).  
+**Motivo:** `flush()` garante `msg.id`; payload completo no evento elimina GET de follow-up.  
 **Arquivo:** `app/services/conversation.py:_publish`.
 
 ### D-24 — `message_log` é intocado pelo CRM Conversacional
 **Data:** 2026-06-24 (Fase 2)  
-**Decisão:** A tabela `message_log` continua sendo escrita exclusivamente por
-`reminders.py` e `reactivation.py` para mensagens programáticas com `template`,
-`delivery_status` e lógica de retry.  
-**Motivo:** Separação de responsabilidades. `message_log` é o store transacional de
-mensagens de campanha com auditoria de entrega. `messages` é o store canônico de
-conversa com histórico por thread. Misturar os dois introduziria complexidade sem
-benefício.  
-**O que foi adicionado:** `reminders.py` e `reactivation.py` também chamam
-`record_message(sender_type=system)` *além* de seu write no `message_log` — para
-que mensagens automáticas apareçam no Inbox do CRM. O `message_log_id` é passado
-como FK cruzada para rastreabilidade.  
-**Invariante:** nunca escrever `message_log` de dentro de `conversation_service`.
-Nunca substituir `message_log` por `messages` nos crons — eles precisam de
-`delivery_status` e retry.
+**Invariante:** `message_log` é para reminders/reativação com template/retry.
+`messages` é o store canônico de conversa. Nunca substituir um pelo outro.
 
 ### D-25 — `Dockerfile.migrate.dockerignore` para builds de migration
 **Data:** 2026-06-24 (fix deploy)  
-**Decisão:** Arquivo `Dockerfile.migrate.dockerignore` criado na raiz do repo.
-Docker 29 suporta arquivos `.dockerignore` específicos por Dockerfile:
-`<Dockerfile>.dockerignore` tem precedência sobre o `.dockerignore` global.  
-**Motivo:** O `.dockerignore` principal exclui `alembic/` e `alembic.ini`
-(comentário no arquivo: "migrations not needed at runtime") — correto para o
-container de runtime. Mas o build de migration precisa desses arquivos. Sem o
-arquivo específico, o contexto enviado ao Docker não continha as migrations e o
-`alembic upgrade head` falhava com `No such file or directory: 'alembic.ini'`.  
-**Arquivo:** `Dockerfile.migrate.dockerignore`.
+**Motivo:** `.dockerignore` principal exclui `alembic/`; builds de migration precisam dele.  
+**Arquivo:** `Dockerfile.migrate.dockerignore` (criado na raiz do repo).
 
 ---
 
@@ -330,11 +251,12 @@ arquivo específico, o contexto enviado ao Docker não continha as migrations e 
 | Item | Arquivo | Severidade | Observação |
 |---|---|---|---|
 | Sem backup dos volumes Docker da VM | infra VM | ⚠️ Alto | VM já foi zerada uma vez; perdeu pareamento WhatsApp e dados. |
-| Estado do bot em memória (debounce, dedup, sessões) | `app/api/bot.py:49-61` | Médio | Restart perde estado; impossibilita 2ª instância. Aguarda Redis. |
+| Debug print temporário no webhook | `app/api/wa_webhook.py` | ⚠️ Médio | `print [WA_WEBHOOK]` nos logs — remover após confirmar evento send.message |
+| Bot responses não confirmadas no CRM | fluxo n8n + Evolution | ⚠️ Alto | send.message pode não disparar; Log Outbound conectado mas não validado |
+| Estado do bot em memória (debounce) | `app/api/bot.py:49-61` | Médio | Restart perde estado. Aguarda Redis. |
 | Portas abertas ao mundo na VM | firewall GCP | Médio | 5678/8000/3000/8080 públicas; fechar após HTTPS. |
-| `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | VM tem série; local tem paralelo. Exportar da VM antes de qualquer edição. |
-| SSE single-process: sse_broker em memória | `app/services/sse_broker.py` | Baixo | Não funciona com múltiplos workers. Para escalar: PostgreSQL LISTEN/NOTIFY. |
-| Token JWT visível em query string do SSE | `GET /crm/stream?token=` | Baixo | Aceitável para MVP interno. Ver D-21 para mitigações. |
-| N+1 nos crons de reativação e lembrete | `app/services/reactivation.py`, `reminders.py` | Baixo | 3-4 queries por alvo; aceitável no volume atual. |
-| 2 testes hardcoded na org 3 | `tests/test_clientes_integration.py`, `test_e2e_flow.py` | Baixo | Fail ambiental; não são bugs (ver D-17). |
-| `barbearia-frontend` registrado como gitlink no repo externo | `git ls-files --stage` | Info | Inofensivo; deploy via SCP não usa git. Não adicionar como submodule formal sem discussão. |
+| `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | Exportar da VM antes de qualquer edição local. |
+| SSE single-process: sse_broker em memória | `app/services/sse_broker.py` | Baixo | Não funciona com múltiplos workers. |
+| Token JWT visível em query string do SSE | `GET /crm/stream?token=` | Baixo | Aceitável para MVP interno. Ver D-21. |
+| 2 testes hardcoded na org 3 | `tests/` | Baixo | Fail ambiental; não são bugs (ver D-17). |
+| Formato de telefone 8 vs 9 dígitos | DB + `normalize_phone` | Médio | conv_id=1 tem 8 dígitos; conv_id=10 tem 9 dígitos (mesmo número físico). Ver D-29. |
