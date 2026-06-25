@@ -355,7 +355,7 @@ curl -s -X POST http://localhost:8080/webhook/set/Barbearia \
     "webhook": {
       "enabled": true,
       "url": "http://host.docker.internal:8000/bot/wa-webhook",
-      "byEvents": true, "base64": false,
+      "byEvents": false, "base64": false,
       "events": ["MESSAGES_UPSERT","MESSAGES_UPDATE","SEND_MESSAGE","CONNECTION_UPDATE","QRCODE_UPDATED"]
     }
   }'

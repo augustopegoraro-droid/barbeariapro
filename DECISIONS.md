@@ -169,6 +169,12 @@ sudo certbot --nginx -d taylorethedy.app -d api.taylorethedy.com --redirect
 **Motivo:** Quando a instância foi recriada em 2026-06-25, o webhook foi acidentalmente apontado
 para o n8n (`http://host.docker.internal:5678/webhook/whatsapp`). Isso quebra o CRM inbox:
 mensagens de cliente não são gravadas em `conversations.messages` nem publicadas via SSE.
+**⚠️ Atenção adicional: `byEvents` DEVE ser `false`**
+Com `byEvents: true`, a Evolution roteia cada evento para um sub-path (`/bot/wa-webhook/send-message`,
+`/bot/wa-webhook/messages-upsert` etc.) que não existem no FastAPI → 404 em tudo → bot mudo.
+O endpoint FastAPI aceita todos os eventos no path base (`/bot/wa-webhook`); o campo `event` no
+payload JSON distingue o tipo. **Sempre usar `byEvents: false`.**
+
 **Correção:**
 ```bash
 curl -s -X POST http://localhost:8080/webhook/set/Barbearia \
@@ -178,7 +184,7 @@ curl -s -X POST http://localhost:8080/webhook/set/Barbearia \
     "webhook": {
       "enabled": true,
       "url": "http://host.docker.internal:8000/bot/wa-webhook",
-      "byEvents": true, "base64": false,
+      "byEvents": false, "base64": false,
       "events": ["MESSAGES_UPSERT","MESSAGES_UPDATE","SEND_MESSAGE","CONNECTION_UPDATE","QRCODE_UPDATED"]
     }
   }'
