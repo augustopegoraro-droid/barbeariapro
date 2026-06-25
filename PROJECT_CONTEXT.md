@@ -1,25 +1,27 @@
 # PROJECT_CONTEXT.md
 > Fonte de verdade para novas sessões de desenvolvimento.
-> Verificado contra o código E contra a VM de produção em **2026-06-24** (última atualização: sessão webhook direto Evolution→FastAPI + correções CRM).
+> Verificado contra o código E contra a VM de produção em **2026-06-25** (última atualização: sessão frontend shell + nginx).
 
 ---
 
-## 0. LEIA PRIMEIRO — o que mudou em 2026-06-24 (2ª sessão)
+## 0. LEIA PRIMEIRO — o que mudou em 2026-06-25
 
-1. **Webhook direto Evolution→FastAPI implementado** (`app/api/wa_webhook.py`).
-   Evolution agora aponta para `http://host.docker.internal:8000/bot/wa-webhook`.
-   Mensagens de cliente chegam **sem o delay de 5 s do n8n** e disparam SSE imediatamente.
-2. **Migration `0011_grant_crm_tables` aplicada** — `barber_app` agora tem CRUD em
-   `conversations`, `messages`, `attachments`. Sem ela, `record_message` falhava com
-   `InsufficientPrivilege`.
-3. **n8n workflow reconfigurado** — `Log Inbound Message` desabilitado (cliente já gravado
-   pelo webhook direto); `HTTP Flush Buffer` conecta direto em `Code Horário Comercial`;
-   `Log Outbound Message` usa `$json["key"]["remoteJid"]` (resposta da Evolution, mais robusto).
-4. **Evento `SEND_MESSAGE` adicionado ao webhook da Evolution** — para capturar mensagens
-   enviadas pelo bot. Código implementado em `wa_webhook.py` mas **AINDA NÃO CONFIRMADO**
-   funcionando (bot responses não aparecem no CRM — investigação em andamento).
-5. **Credenciais n8n alteradas** (acidente `user-management:reset`) — ver §12 e D-28.
-6. **`N8N_WEBHOOK_URL` adicionado ao `.env.docker`** para o forward background.
+1. **Admin shell implementado no frontend** — `AdminSidebar`, `AdminHeader`, `AdminShell`
+   criados em `components/layout/`. Layout em `app/admin/layout.tsx`. Dark theme completo
+   com tokens `#0a0a0a / #111111 / #f59e0b`. ESLint 0 erros, TypeScript clean, build clean.
+2. **shadcn/ui v4 instalado** com Tailwind v4 — `components.json`, `lib/utils.ts` e 6 componentes
+   UI (`button`, `card`, `dialog`, `input`, `select`, `tooltip`).
+3. **6 novas rotas do admin criadas**: `/admin/conversas` (redirect → `/admin/crm?view=inbox`),
+   `/admin/fidelidade`, `/admin/campanhas`, `/admin/empresa`, `/admin/usuarios`,
+   `/admin/integracoes` (placeholders).
+4. **CRM page**: inicialização de `view` via `window.location.search` (não `useSearchParams`
+   — evita Suspense obrigatório). Bugs de mutação de variável durante render corrigidos.
+5. **nginx instalado na VM** — proxy reverso na porta 80 → `localhost:3000` (frontend) e
+   `api.taylorethedy.com` → `localhost:8000`. Config em `/etc/nginx/sites-available/barbeariapro`.
+6. **Deploy frontend**: procedimento mudou para **tar + SSH** (repo `DoctorDCombo/barbearia-frontend`
+   não existe mais). Ver §2.
+7. **Domínio `taylorethedy.app` NÃO está registrado** — `http://34.95.199.134` funciona via nginx.
+   SSL pendente (necessita registrar o domínio primeiro).
 
 ---
 
@@ -38,35 +40,32 @@ Objetivo comercial: vender para mais barbearias; concorre com Trinks.
 | `/Users/apleandro/dev/barbeariapro` | `main` | Backend FastAPI + infra Docker + workflows n8n |
 | `/Users/apleandro/dev/barbeariapro/barbearia-frontend` | `main` | Frontend Next.js (repo git **separado** dentro do diretório) |
 
-> **Atenção:** `barbearia-frontend/` é um sub-repositório git independente.
-> Commits de backend e frontend são feitos separadamente. Ver D-08.
+> **Atenção:** `barbearia-frontend/` tem seu próprio `.git` com remote apontando para
+> `https://github.com/DoctorDCombo/barbearia-frontend.git` — **este repo NÃO EXISTE mais**.
+> Commits locais existem mas não têm push remoto funcional. Deploy é feito via tar+SSH direto na VM.
 
-**Estado git (2026-06-24, fim da 2ª sessão):**
-- Branch `main`, commit `dfdf7b9` — **local E VM estão em sync**.
-- Commits desta sessão (sobre `f72cd59`):
-  - `3fe1085` — `app/api/wa_webhook.py` (webhook direto Evolution)
-  - `2c0cc2a` — migration `0011_grant_crm_tables`
-  - `94aa8fc` — `fromMe=true` handling no webhook
-  - `3f7e2f8` — tratamento de evento `send.message`
-  - `b8a793c`, `dfdf7b9` — debug logging (TEMPORÁRIO — remover após confirmar send.message)
-- `workflows.json` local: **NÃO usar como referência**. Fonte de verdade = VM via API REST.
+**Estado git (2026-06-25, fim da sessão):**
+- Backend (`main`): commit `dfdf7b9` — local e VM em sync.
+- Frontend (`main`): commit `9310df0` — **apenas local** (push remoto falha; deploy via tar+SSH).
 
 **Procedimento de deploy backend:**
 ```bash
-gcloud compute ssh apleandro@barbeariapro --zone=southamerica-east1-a \
-  --command="cd /opt/barbeariapro && sudo git pull origin main && \
-  sudo docker compose -f docker-compose.app.yml restart backend"
+ssh -i ~/.ssh/google_compute_engine apleandro@34.95.199.134 \
+  "sudo git -C /opt/barbeariapro pull origin main && \
+   cd /opt/barbeariapro && sudo docker compose -f docker-compose.app.yml restart backend"
 ```
-> Nota: usa `restart` (não `up --build`) para deploys sem mudança de dependências.
-> `up --build` é necessário apenas quando `requirements.txt` ou `Dockerfile` muda.
+> `restart` para deploys sem mudança de dependências; `up --build` quando `requirements.txt` ou `Dockerfile` mudar.
 
-**Procedimento de deploy frontend (scp, não git):**
+**Procedimento de deploy frontend (tar + SSH):**
 ```bash
-gcloud compute scp --zone=southamerica-east1-a \
-  barbearia-frontend/app/admin/crm/page.tsx apleandro@barbeariapro:/tmp/crm_page.tsx
-gcloud compute ssh apleandro@barbeariapro --zone=southamerica-east1-a \
-  --command="sudo cp /tmp/crm_page.tsx /opt/barbeariapro/barbearia-frontend/app/admin/crm/page.tsx && \
-  cd /opt/barbeariapro && sudo docker compose -f docker-compose.app.yml up -d --build frontend"
+tar -czf - \
+  --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='projetopagina.html' \
+  -C /Users/apleandro/dev/barbeariapro/barbearia-frontend . | \
+  ssh -i ~/.ssh/google_compute_engine apleandro@34.95.199.134 \
+  "sudo tar -xzf - -C /opt/barbeariapro/barbearia-frontend/ && echo 'sync ok'"
+
+ssh -i ~/.ssh/google_compute_engine apleandro@34.95.199.134 \
+  "cd /opt/barbeariapro && sudo docker compose -f docker-compose.app.yml up -d --build frontend"
 ```
 
 ---
@@ -81,16 +80,21 @@ gcloud compute ssh apleandro@barbeariapro --zone=southamerica-east1-a \
 - Criptografia de tokens OAuth: Fernet (`app/core/crypto.py`)
 
 ### Frontend
-- **Next.js** App Router — leia `barbearia-frontend/AGENTS.md` antes de mexer
-- next-auth (sessão JWT), Tailwind CSS, Axios (`barbearia-frontend/lib/api.ts`)
-- `useSearchParams()` exige `<Suspense>` boundary
+- **Next.js 16** App Router — leia `barbearia-frontend/AGENTS.md` antes de mexer
+- **TypeScript** strict mode
+- **Tailwind CSS v4** (`@import "tailwindcss"` — sem `tailwind.config.ts`)
+- **shadcn/ui v4.11.0** com Tailwind v4 — usa `@base-ui/react` (não Radix UI)
+- **next-auth v5** (beta) com `proxy.ts` (middleware de auth)
+- **Inter font** via `next/font/google` (não Geist)
+- `useSearchParams()` exige `<Suspense>` boundary — preferir `window.location.search` em client components
+- Admin shell: `AdminSidebar` + `AdminHeader` em `components/layout/`; compostos por `AdminShell`
 
 ### Infraestrutura
 - **Docker Compose** — dois arquivos:
   - `docker-compose.yml`: infra (Postgres prod `:5432`, n8n `:5678`, Evolution `:8080`,
     evolution-postgres, evolution-redis)
   - `docker-compose.app.yml`: app (backend `:8000`, frontend `:3000`)
-- O `docker-compose.app.yml` usa `.env.docker` para sobrescrever variáveis para containers.
+- **nginx v1.22.1** instalado no host da VM — proxy reverso na porta 80 (ver §4)
 
 ---
 
@@ -102,33 +106,38 @@ gcloud compute ssh apleandro@barbeariapro --zone=southamerica-east1-a \
 | VM | `barbeariapro` |
 | Zona | `southamerica-east1-a` |
 | IP externo | `34.95.199.134` |
-| Acesso SSH | `gcloud compute ssh apleandro@barbeariapro --zone=southamerica-east1-a` |
+| Acesso SSH | `ssh -i ~/.ssh/google_compute_engine apleandro@34.95.199.134` |
 | App na VM | `/opt/barbeariapro` |
 
-### Containers em produção (verificado 2026-06-24, ~17:30)
+### Containers em produção (verificado 2026-06-25)
 
 ```
-barbeariapro-app-backend    :8000   Up ~1h (healthy)   FastAPI   — git dfdf7b9
-barbeariapro-app-frontend   :3000   Up ~5h (healthy)   Next.js
-barbeariapro-postgres       :5432   Up ~26h (healthy)  Postgres  — migration HEAD: 0011_grant_crm_tables
-evolution_api               :8080   Up ~26h            Evolution API v2.3.7
+barbeariapro-app-backend    :8000   healthy   FastAPI   — git dfdf7b9
+barbeariapro-app-frontend   :3000   healthy   Next.js   — tar-deploy 9310df0
+barbeariapro-postgres       :5432   healthy   Postgres  — migration HEAD: 0011_grant_crm_tables
+evolution_api               :8080   Up        Evolution API v2.3.7
 evolution_postgres          (interno)
 evolution_redis             (interno)
-n8n                         :5678   Up ~23h            n8n v2.27.3
+n8n                         :5678   Up        n8n v2.27.3
 ```
 
-### Acessos administrativos
-- **n8n editor:** `http://34.95.199.134:5678`
-  - Login: `admin@barbearia.com` / `Barbearia@2026!` ← **ATUALIZADO** (ver D-28)
-  - Cookie de sessão salvo em `/tmp/n8n_cookies` na VM (expira; renovar com POST /rest/login)
-- **Evolution manager:** `http://34.95.199.134:8080/manager` — login com `EVOLUTION_API_KEY`
-- **App frontend:** `http://34.95.199.134:3000`
+### nginx (host da VM, não container)
+- Instalado em `/etc/nginx/` — `systemctl enable nginx` (inicia no boot)
+- Config: `/etc/nginx/sites-available/barbeariapro` → link em `sites-enabled/`
+- Porta 80: `default_server` → `localhost:3000` (frontend)
+- Porta 80 + `Host: api.taylorethedy.com` → `localhost:8000` (backend)
+- **SSL/HTTPS**: pendente — domínio `taylorethedy.app` não registrado
+
+### Acessos
+- **App frontend:** `http://34.95.199.134` (porta 80 via nginx) ou `:3000` direto
 - **App backend:** `http://34.95.199.134:8000`
+- **n8n editor:** `http://34.95.199.134:5678` — login: `admin@barbearia.com` / `Barbearia@2026!`
+- **Evolution manager:** `http://34.95.199.134:8080/manager`
 - **Postgres (admin):** `docker exec barbeariapro-postgres psql -U postgres -d barbeariapro`
 
 ### Firewall (target-tag `http-server`)
-`allow-evolution` (8080), `allow-n8n` (5678), `allow-backend` (8000), `allow-frontend` (3000).
-> ⚠️ Todas as portas estão abertas ao mundo. HTTPS/domínio ainda NÃO configurado.
+`allow-evolution` (8080), `allow-n8n` (5678), `allow-backend` (8000), `allow-frontend` (3000), porta 80 aberta.
+> ⚠️ Todas as portas abertas ao mundo. HTTPS ainda NÃO configurado (domínio não registrado).
 
 ---
 
@@ -154,25 +163,13 @@ n8n                         :5678   Up ~23h            n8n v2.27.3
 | `/crm` | `app/api/crm.py` | JWT |
 | `/crm` (conversas) | `app/api/conversations.py` | JWT / token param (SSE) |
 | `/integracoes` | `app/api/integracoes.py` | JWT + público (callback) |
-| ... demais | ver rotas padrão | JWT |
 
 ### Endpoint `/bot/wa-webhook` — webhook proxy Evolution→FastAPI
 `POST /bot/wa-webhook` — recebe eventos Evolution API:
 - **`messages.upsert`** (fromMe=false): grava mensagem do cliente (`sender_type=client`) → SSE imediato
-- **`messages.upsert`** (fromMe=true): grava como bot — mas Evolution v2.3.7 **NÃO dispara** este evento para msgs enviadas via API
-- **`send.message`**: evento para msgs enviadas pelo bot; grava como `sender_type=bot`; **NÃO encaminha ao n8n** (evita loop)
+- **`send.message`**: evento para msgs enviadas pelo bot; grava como `sender_type=bot`; NÃO encaminha ao n8n
 - Outros eventos: encaminhados ao n8n em background (retry 3× com backoff)
-- Autenticação: `X-Webhook-Secret` header (se `WA_WEBHOOK_SECRET` configurado no env)
-- Debug temporário: `print(f"[WA_WEBHOOK] event=...")` nos logs — **REMOVER** após confirmar `send.message`
-
-### Endpoints `/bot/*` (consumidos pelo n8n — `X-Bot-Token`)
-`POST /bot/debounce`, `POST /bot/debounce/flush`, `GET /bot/services`,
-`GET /bot/barbers`, `POST /bot/clients`, `GET /bot/clients/profile`,
-`GET /bot/clients/paused-status`, `GET /bot/availability`,
-`POST /bot/appointments`, `GET /bot/appointments`,
-`PATCH /bot/appointments/{id}/cancel`, `PATCH /bot/appointments/{id}/complete`,
-`POST /bot/messages` — grava mensagem via `conversation_service`; idempotente por
-`(conversation_id, wa_message_id, sender_type)`; grava sem cliente (1º contato).
+- Debug temporário: `print(f"[WA_WEBHOOK] event=...")` — **REMOVER** após confirmar `send.message`
 
 ### Endpoints `/crm/*` (JWT, conversations.py) — Inbox em tempo real
 `GET /crm/conversations`, `GET /crm/conversations/search?q=`,
@@ -183,22 +180,45 @@ n8n                         :5678   Up ~23h            n8n v2.27.3
 
 ---
 
-## 7. Páginas do frontend (confirmadas no código)
+## 7. Páginas do frontend (confirmadas no código — 15 rotas)
 
-| Rota | Arquivo |
-|---|---|
-| `/login` | `app/login/page.tsx` |
-| `/admin/agenda` | `app/admin/agenda/page.tsx` |
-| `/admin/clientes` | `app/admin/clientes/page.tsx` |
-| `/admin/dashboard` | `app/admin/dashboard/page.tsx` |
-| `/admin/crm` | `app/admin/crm/page.tsx` — toggle Kanban ⇄ Inbox |
-| ... demais | padrão |
+| Rota | Arquivo | Observação |
+|---|---|---|
+| `/login` | `app/login/page.tsx` | público |
+| `/admin/dashboard` | `app/admin/dashboard/page.tsx` | |
+| `/admin/agenda` | `app/admin/agenda/page.tsx` | |
+| `/admin/clientes` | `app/admin/clientes/page.tsx` | |
+| `/admin/crm` | `app/admin/crm/page.tsx` | toggle Kanban ⇄ Inbox; `?view=inbox` abre Inbox |
+| `/admin/conversas` | `app/admin/conversas/page.tsx` | redirect server-side → `/admin/crm?view=inbox` |
+| `/admin/financeiro` | `app/admin/financeiro/page.tsx` | |
+| `/admin/servicos` | `app/admin/servicos/page.tsx` | |
+| `/admin/equipe` | `app/admin/equipe/page.tsx` | |
+| `/admin/fidelidade` | `app/admin/fidelidade/page.tsx` | placeholder "Em breve" |
+| `/admin/campanhas` | `app/admin/campanhas/page.tsx` | placeholder "Em breve" |
+| `/admin/empresa` | `app/admin/empresa/page.tsx` | placeholder "Em breve" |
+| `/admin/usuarios` | `app/admin/usuarios/page.tsx` | placeholder "Em breve" |
+| `/admin/integracoes` | `app/admin/integracoes/page.tsx` | placeholder "Em breve" |
+| `/admin/configuracoes` | `app/admin/configuracoes/page.tsx` | |
+| `/barbeiro/agenda` | `app/barbeiro/agenda/page.tsx` | |
+
+### Layout do admin (`app/admin/layout.tsx`)
+Todas as rotas `/admin/*` usam `AdminShell` (sidebar + header).
+- `components/layout/AdminSidebar.tsx` — colapsável (240px↔64px), localStorage `sb_nav_v1_collapsed`, mobile overlay, badges estáticos (Agenda:2, Conversas:5)
+- `components/layout/AdminHeader.tsx` — breadcrumb dinâmico via `ROUTE_META`, notificação bell amber
+- `components/layout/AdminShell.tsx` — compõe os dois, controla estado `mobileOpen`
+
+### Design tokens (dark theme fixo — classe `dark` no `<html>`)
+```
+body: #0a0a0a | sidebar: #111111 | header: #0d0d0d
+brand amber: #f59e0b | borders: #1a1a1a
+active nav: rgba(245,158,11,0.11) + border-l-2 border-amber-500
+```
 
 ---
 
 ## 8. Migrations Alembic
 
-Head atual (verificado na VM em 2026-06-24): **`0011_grant_crm_tables`**.
+Head atual (verificado na VM): **`0011_grant_crm_tables`**.
 
 ```
 0001_initial → 0002_loyalty → 0002_client_last_photo → 0003_client_photo_description
@@ -207,11 +227,7 @@ Head atual (verificado na VM em 2026-06-24): **`0011_grant_crm_tables`**.
 → 0011_grant_crm_tables  ← HEAD
 ```
 
-- `0010_conversations` — tabelas `conversations`/`messages`/`attachments` com RLS e índices
-- `0011_grant_crm_tables` — `GRANT SELECT,INSERT,UPDATE,DELETE ON conversations,messages,attachments TO barber_app` + `GRANT USAGE,SELECT ON ALL SEQUENCES`
-
-> ⚠️ **Migrations precisam de superuser postgres** — `barber_app` não tem privilégio CREATE TYPE/TABLE.
-> A `0011` foi pré-aplicada manualmente e depois commitada; alembic_version já estava em `0011` antes do `upgrade head`.
+> ⚠️ Migrations precisam de superuser postgres — `barber_app` não tem privilégio CREATE TYPE/TABLE.
 
 ---
 
@@ -220,21 +236,13 @@ Head atual (verificado na VM em 2026-06-24): **`0011_grant_crm_tables`**.
 **Única organização:** `id=1` — "Barbearia Taylor e Thedy".
 
 **Clientes reais:**
-- `id=1` Augusto Pegoraro — `+556399368196` (dono da conta, número em formato 8 dígitos)
+- `id=1` Augusto Pegoraro — `+556399368196` (8 dígitos — formato Evolution)
 - `id=5` Reinaldo Viterbo — `+5563999789977`
 
-**Conversas no DB (verificado 2026-06-24):**
-- `conv_id=1`: phone `+556399368196` — conversa real do Augusto (maioria das msgs)
-- `conv_id=2`: phone `+5511999990000` — teste mock
-- `conv_id=10`: phone `+5563999368196` — criado por teste manual com 9 dígitos
+> ⚠️ **Formato de telefone:** Evolution envia 8 dígitos (`556399368196@s.whatsapp.net`).
+> `conv_id=1` tem `phone_e164 = '+556399368196'`. NÃO aplicar conversão 8→9 sem migrar o DB. Ver D-29.
 
-> ⚠️ **Formato de telefone:** Evolution envia `556399368196@s.whatsapp.net` (8 dígitos).
-> O mesmo número pode ser `+5563999368196` (9 dígitos) em outras fontes.
-> **NÃO APLICAR** a conversão 8→9 no `normalize_phone` sem antes migrar o DB — conv_id=1
-> tem o número em 8 dígitos e a conversão quebraria o lookup. Ver D-29.
-
-**Roles do Postgres:** apenas `barber_app` (RLS, NOBYPASSRLS, senha `senha123`).
-Admin via superuser `postgres`.
+**Roles do Postgres:** `barber_app` (RLS, senha `senha123`). Admin via `postgres`.
 
 ---
 
@@ -251,17 +259,15 @@ CORS_ORIGINS=http://34.95.199.134:3000
 NEXT_PUBLIC_API_URL=http://34.95.199.134:8000
 TZ=America/Sao_Paulo
 # + BOT_API_KEY, EVOLUTION_API_KEY, OPENAI_API_KEY, POSTGRES_PASSWORD, SECRET_KEY
-# WA_WEBHOOK_SECRET não configurado (webhook sem autenticação por agora)
 ```
 
 ### Produção VM — `/opt/barbeariapro/.env.docker`
 ```
 DATABASE_URL=postgresql+psycopg://barber_app:senha123@host.docker.internal:5432/barbeariapro
 EVOLUTION_API_URL=http://host.docker.internal:8080
-N8N_WEBHOOK_URL=http://host.docker.internal:5678    ← NOVO (forward background)
+N8N_WEBHOOK_URL=http://host.docker.internal:5678
 API_URL_INTERNAL=http://host.docker.internal:8000
 AUTH_SECRET=<segredo>   AUTH_TRUST_HOST=true
-# WA_WEBHOOK_SECRET=    ← comentado (opcional, para autenticar webhook)
 ```
 
 ---
@@ -275,96 +281,57 @@ se `EVOLUTION_API_URL` **ou** `EVOLUTION_INSTANCE_NAME` estiverem vazios.
 
 ## 12. Bot WhatsApp / n8n (produção)
 
-- **Evolution:** v2.3.7, instância **`Barbearia`** (B maiúsculo). WhatsApp pareado ao
-  número `5563920001734`.
-- **Webhook Evolution:** aponta para **`http://host.docker.internal:8000/bot/wa-webhook`**
-  ← ALTERADO nesta sessão (antes apontava para n8n `:5678/webhook/whatsapp`)
+- **Evolution:** v2.3.7, instância **`Barbearia`** (B maiúsculo). WhatsApp pareado ao número `5563920001734`.
+- **Webhook Evolution:** `http://host.docker.internal:8000/bot/wa-webhook`
 - **Eventos webhook:** `MESSAGES_UPSERT`, `SEND_MESSAGE`, `CONNECTION_UPDATE`, `QRCODE_UPDATED`
-  ← `SEND_MESSAGE` adicionado nesta sessão
-- **n8n v2.27.3** — 3 workflows ativos:
-  - `BarbeariaPro Bot - WhatsApp Chatbot` (id `25QZQ664N6hrIg59`, **43 nós**, versionId `3473de06`)
-  - `BarbeariaPro Cron - Lembrete 24h` (id `CronReminder24h01`)
-  - `BarbeariaPro Cron - Reativação Diária` (id `CronReactivation1`)
-- **n8n login:** `admin@barbearia.com` / `Barbearia@2026!` ← **ATUALIZADO** (ver D-28)
-- **Persona:** "Raquel", recepcionista (system prompt no node `AI Agent`).
-- **Modelo:** GPT-4o-mini (node `OpenAI GPT-4o-mini`, tipo `lmChatOpenAi`).
-- **Credencial OpenAI:** ID `md1VzrcFUBhOFYfr` ("OpenAI account").
+- **n8n v2.27.3** — login: `admin@barbearia.com` / `Barbearia@2026!`
+- **Workflows ativos:** `BarbeariaPro Bot - WhatsApp Chatbot` (id `25QZQ664N6hrIg59`), `CronReminder24h01`, `CronReactivation1`
+- **Persona:** "Raquel", GPT-4o-mini. Tools: `obter_perfil_cliente`, `cadastrar_cliente`, `listar_servicos`, etc.
 
-### Fluxo do bot (VERIFICADO NA VM — workflow versionId `3473de06`)
-
+### Fluxo do bot (verificado na VM)
 ```
-Webhook → Block List → Set Phone → IF Is Audio / IF Individual / IF Has Image
+Webhook → Block List → Set Phone → IF Audio/Individual/Image
 → HTTP Debounce → IF Controller → Wait 5s → HTTP Flush Buffer
-→ Code Horário Comercial    ← direto (Log Inbound Message DESABILITADO — ver D-30)
-→ IF Horário Aberto
-→ Send Composing → Wait Typing Init → Send Composing Active
+→ Code Horário Comercial  (Log Inbound DESABILITADO — ver D-30)
+→ IF Horário Aberto → Send Composing → Wait → Composing Active
 → HTTP Check Bot Pause → IF Bot Paused
-→ Memory → AI Agent (com tools abaixo)
-→ Send Response
-→ Log Outbound Message      (POST /bot/messages, direction=outbound)
+→ Memory → AI Agent → Send Response → Log Outbound Message
 ```
-
-> ⚠️ **Log Outbound Message** usa `$json["key"]["remoteJid"]` e `$json["message"]["conversation"]`
-> (dados da resposta da Evolution API retornada pelo `Send Response`) — não usa mais `$('AI Agent')`.
-> Isso evita quebra de expressão por expansão de `$` na shell durante configuração via API REST.
-
-### Tools do AI Agent (inalteradas)
-`obter_perfil_cliente`, `cadastrar_cliente`, `listar_servicos`, `listar_barbeiros`,
-`verificar_disponibilidade`, `criar_agendamento`, `consultar_agendamentos`,
-`cancelar_agendamento`, `faq`.
 
 ### Autenticação n8n (API REST)
 ```bash
-# Na VM, renovar cookie:
 curl -s -c /tmp/n8n_cookies -X POST 'http://localhost:5678/rest/login' \
   -H 'Content-Type: application/json' \
   -d '{"emailOrLdapLoginId":"admin@barbearia.com","password":"Barbearia@2026!"}'
-
-# Atualizar workflow:
-curl -sb /tmp/n8n_cookies -X PATCH \
-  'http://localhost:5678/rest/workflows/25QZQ664N6hrIg59' \
-  -H 'Content-Type: application/json' -d @/tmp/wf_payload.json
 ```
 
-> ⚠️ **D-14**: NUNCA editar SQLite do n8n. SEMPRE via API REST.
-> ⚠️ **D-18**: NUNCA conectar nós em paralelo. SEMPRE em série.
-> ⚠️ **D-29**: Expressões `$('NomeNó')` em payloads passados via SSH double-quote têm `$`
-> expandido pela shell. Escrever payload em arquivo Python antes de enviar via curl.
+> ⚠️ D-14: NUNCA editar SQLite do n8n. SEMPRE via API REST.
+> ⚠️ D-18: NUNCA conectar nós em paralelo. SEMPRE em série.
 
 ---
 
-## 13. CRM Conversacional — arquitetura (Fases 2–5 + webhook direto)
+## 13. CRM Conversacional — arquitetura
 
-### Fluxo completo de uma mensagem do cliente
+### Fluxo completo de uma mensagem
 ```
 WhatsApp → Evolution → POST /bot/wa-webhook → record_message(sender=client) → SSE → Inbox
                      ↓ (background, retry 3×)
-                     n8n webhook → debounce → AI Agent → Send Response (Evolution)
-                                                       → Log Outbound Message
-                                                         → POST /bot/messages (direction=outbound)
-                                                           → record_message(sender=bot) → SSE → Inbox
+                     n8n → debounce → AI Agent → Send Response (Evolution)
+                                               → Log Outbound Message
+                                                 → POST /bot/messages → record_message(sender=bot) → SSE → Inbox
 ```
 
-> ⚠️ **Bot responses ainda não confirmadas no Inbox** (2026-06-24):
-> - `Log Outbound Message` conectado e `$json` expression correta, mas:
->   - O snapshot do workflow usado nas execuções 80/81 (14:09/14:22) NÃO tinha o nó
->     (foi adicionado depois — mesmo versionId por quirk do n8n)
->   - `SEND_MESSAGE` via Evolution webhook: código implementado mas comportamento
->     não confirmado (Evolution pode não disparar esse evento para msgs via API)
-> - Debug logging ativo (`print [WA_WEBHOOK]` nos logs do backend)
-> - **PRÓXIMO PASSO:** enviar msg WhatsApp, ler logs, confirmar evento e remover debug
+> ⚠️ **Bot responses ainda não confirmadas no Inbox** (pendente desde 2026-06-24):
+> debug `print [WA_WEBHOOK]` ativo nos logs do backend — remover após confirmar.
 
 ### Modelo de dados
-- `conversations` — `UNIQUE(organization_id, phone_e164, channel)`; FK nullable para `clients`/`leads`
-- `messages` — `sender_type`: `client|bot|human|system`; idempotência por `(conv_id, wa_message_id, sender_type) WHERE wamid IS NOT NULL`
-- `attachments` — mídia; FK `message_id` CASCADE
+- `conversations` — `UNIQUE(organization_id, phone_e164, channel)`
+- `messages` — `sender_type`: `client|bot|human|system`; idempotência por `(conv_id, wa_message_id, sender_type)`
+- `attachments` — FK `message_id` CASCADE
 
 ### Porta única de escrita: `app/services/conversation.py`
 - `record_message` — idempotente; atualiza preview/unread; chama `_publish` após `flush()`
-- `_publish` — publica no SSE broker com payload completo
-
-### SSE broker: `app/services/sse_broker.py`
-- Single-process (asyncio). Para múltiplos workers: migrar para PostgreSQL LISTEN/NOTIFY.
+- SSE broker: `app/services/sse_broker.py` — single-process (asyncio)
 
 ---
 
@@ -378,4 +345,3 @@ export SEED_ORG_ID=1
 ```
 
 **Baseline:** ~206 pass / 2 fail ambientais / 4 skip.
-Fails conhecidos (NÃO são bugs): testes hardcoded em `organization_id == 3` (ver D-17).

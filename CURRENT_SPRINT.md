@@ -1,145 +1,125 @@
 # CURRENT_SPRINT.md
-> Estado do desenvolvimento em **2026-06-24**. Atualizar a cada sessão.
+> Estado do desenvolvimento em **2026-06-25**. Atualizar a cada sessão.
 
 ---
 
 ## Branch ativo
 
-`main` — local e VM em **`dfdf7b9`** (em sync total).
+- **Backend** (`main`): commit `dfdf7b9` — local e VM em sync.
+- **Frontend** (`main`): commit `9310df0` — local. Deploy na VM via tar+SSH (repo remoto não existe).
 
 ---
 
 ## 🔴 TAREFA EM ABERTO — Bot responses no CRM Inbox
 
-**Status:** Mensagens de **cliente** aparecem no Inbox ✅. Mensagens do **bot** NÃO aparecem ❌.
+**Status:** Mensagens de **cliente** aparecem no Inbox ✅. Mensagens do **bot** NÃO confirmadas ❌.
 
-### O que foi feito nesta sessão
-1. Webhook direto `POST /bot/wa-webhook` criado — cliente gravado imediatamente sem delay
-2. Migration `0011` aplicada — GRANT de CRUD ao `barber_app` nas tabelas CRM
-3. Evolution webhook reconfigurado para apontar a FastAPI (não mais n8n)
-4. n8n workflow corrigido: `Log Outbound Message` em série após `Send Response`
-5. Evento `SEND_MESSAGE` adicionado ao webhook da Evolution
-6. Código em `wa_webhook.py` trata `send.message` como `sender_type=bot`
-
-### Causa raiz identificada mas não confirmada
-Evolution API v2.3.7 pode não disparar `MESSAGES_UPSERT` com `fromMe=true` para msgs
-enviadas via API. Adicionamos `SEND_MESSAGE` como evento alternativo. Debug print ativo.
-
-### PRÓXIMO PASSO OBRIGATÓRIO (deve ser o PRIMEIRO ato da próxima sessão)
+**PRÓXIMO PASSO OBRIGATÓRIO (primeiro ato da próxima sessão de backend):**
 ```bash
-# 1. Enviar mensagem WhatsApp de teste
-# 2. Aguardar resposta do bot no WhatsApp
-# 3. Ler logs do backend na VM:
-gcloud compute ssh apleandro@barbeariapro --zone=southamerica-east1-a \
-  --command="docker logs barbeariapro-app-backend --since=5m 2>&1 | grep -v health"
+# 1. Enviar mensagem WhatsApp de teste para o número da barbearia
+# 2. Aguardar resposta do bot
+# 3. Ler logs do backend:
+ssh -i ~/.ssh/google_compute_engine apleandro@34.95.199.134 \
+  "sudo docker logs barbeariapro-app-backend --since=5m 2>&1 | grep -v health"
 ```
-O log mostrará `[WA_WEBHOOK] event=...` para TODOS os eventos recebidos.
-Com base no event name, ajustar o código se necessário.
-
+O log mostrará `[WA_WEBHOOK] event=...` para todos os eventos.
 Após confirmar o evento correto e bot messages no DB:
-- Remover os commits de debug (`b8a793c`, `dfdf7b9`) ou substituir `print` por `_logger.debug`
-- Atualizar esta seção como ✅
+- Substituir `print` por `_logger.debug` em `wa_webhook.py`
+- Marcar como ✅ aqui
 
-### Estado do DB (verificado 17:33 local)
-```sql
--- Últimas mensagens em produção (org_id=1)
--- id=15..19 são todas client ou human (nenhuma bot do fluxo real)
--- id=11: única mensagem bot = teste manual em conv_id=10 (telefone errado)
--- conv_id=1 é a conversa real do Augusto (+556399368196, 8 dígitos)
+---
+
+## ✅ Sessão 2026-06-25 — Frontend shell + nginx
+
+### Admin shell (FASE 4 — implementação completa)
+**Commit:** `9310df0` no frontend (apenas local — sem remote funcional)
+
+**Componentes criados em `components/layout/`:**
+- `AdminSidebar.tsx` — colapsável (240px↔64px, 220ms cubic-bezier), persistência `localStorage sb_nav_v1_collapsed`, mobile overlay com backdrop, badges estáticos (Agenda:2, Conversas:5), grupos OPERACIONAL/GESTÃO/MARKETING/CONFIGURAÇÕES
+- `AdminHeader.tsx` — breadcrumb dinâmico por `ROUTE_META` (14 rotas mapeadas), bell com dot amber, hamburger mobile
+- `AdminShell.tsx` — compõe sidebar + header, controla `mobileOpen`
+
+**Arquivos modificados/criados:**
+- `app/admin/layout.tsx` — usa `AdminShell`
+- `app/barbeiro/layout.tsx` — passthrough
+- `app/globals.css` — tokens dark theme (`--background: #0a0a0a`, `--primary: #f59e0b`, etc.) + `@keyframes slideDown/fadeIn`
+- `app/layout.tsx` — Inter font, `SessionProvider`, `TooltipProvider`, `class="dark"` no `<html>`
+- `package.json` — shadcn/ui v4.11.0, Tailwind v4, Lucide React, clsx, tailwind-merge
+- `components.json` — config shadcn
+- `lib/utils.ts` — `cn()` helper
+
+**Componentes shadcn/ui instalados:** `button`, `card`, `dialog`, `input`, `select`, `tooltip`, `badge`
+
+**6 rotas novas do admin:**
+- `/admin/conversas` — redirect server-side → `/admin/crm?view=inbox`
+- `/admin/fidelidade`, `/admin/campanhas`, `/admin/empresa`, `/admin/usuarios`, `/admin/integracoes` — placeholders "Em breve"
+
+**CRM page (`app/admin/crm/page.tsx`) — correções:**
+- View inicializada via `window.location.search` (não `useSearchParams` — evita Suspense)
+- Bugs de mutação de variável durante `.map()` corrigidos (`lastDate`, `lastDateLabel` → índice)
+- Import não-utilizado `ConversationListData` removido
+- ESLint: 25 problemas → 0 (eslint-disable pontuais para padrões legítimos)
+
+**Build:** TypeScript clean, ESLint 0 erros/warnings, `next build` 15 rotas OK.
+
+### Deploy frontend
+Procedimento tar+SSH (ver PROJECT_CONTEXT §2):
+```bash
+tar -czf - --exclude='.git' --exclude='node_modules' --exclude='.next' \
+  --exclude='projetopagina.html' \
+  -C /Users/apleandro/dev/barbeariapro/barbearia-frontend . | \
+  ssh -i ~/.ssh/google_compute_engine apleandro@34.95.199.134 \
+  "sudo tar -xzf - -C /opt/barbeariapro/barbearia-frontend/ && echo 'sync ok'"
 ```
+Depois: `sudo docker compose -f docker-compose.app.yml up -d --build frontend`
+
+### nginx instalado na VM
+- `apt install nginx certbot python3-certbot-nginx`
+- Config: `/etc/nginx/sites-available/barbeariapro` (`default_server` porta 80 → `localhost:3000`)
+- `systemctl enable nginx` — inicia no boot
+- **`http://34.95.199.134` agora funciona** (porta 80 via nginx)
+- SSL pendente: domínio `taylorethedy.app` não registrado
 
 ---
 
 ## ✅ Sessão 2026-06-24 (2ª) — Webhook direto + correções CRM
 
-### Webhook direto Evolution → FastAPI (`app/api/wa_webhook.py`)
-**Novo arquivo:** `app/api/wa_webhook.py`
-- `POST /bot/wa-webhook` — recebe eventos Evolution sem o delay de 5 s do n8n
-- Grava `messages.upsert` inbound como `sender_type=client` imediatamente → SSE
-- Encaminha payload ao n8n em background com retry 3× (bot IA continua funcionando)
-- `send.message` → `sender_type=bot`; NÃO encaminha ao n8n (evita loop)
-- Novas settings: `n8n_webhook_url`, `wa_webhook_secret` (em `app/core/config.py`)
-- Registrado em `app/main.py`
-
-### Migration 0011 (`alembic/versions/0011_grant_crm_tables.py`)
-```sql
-GRANT SELECT, INSERT, UPDATE, DELETE ON conversations, messages, attachments TO barber_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO barber_app;
-```
-Aplicada manualmente antes do commit; `alembic_version` estampado para `0011` diretamente.
-
-### Reconfiguração Evolution webhook
-```
-ANTES: Evolution → http://host.docker.internal:5678/webhook/whatsapp (n8n)
-DEPOIS: Evolution → http://host.docker.internal:8000/bot/wa-webhook (FastAPI)
-Eventos: MESSAGES_UPSERT, SEND_MESSAGE, CONNECTION_UPDATE, QRCODE_UPDATED
-```
-Feito via `POST /webhook/set/Barbearia` com body `{"webhook": {...}}` (não PUT).
-
-### n8n workflow (id `25QZQ664N6hrIg59`, versionId `3473de06`, atualizado 16:26)
-- `Log Inbound Message`: **DESABILITADO** (cliente já gravado pelo webhook direto; evita duplicata)
-- `HTTP Flush Buffer → Code Horário Comercial` diretamente (antes passava por Log Inbound)
-- `Send Response → Log Outbound Message`: em série ✅
-- `Log Outbound Message` jsonBody: `$json["key"]["remoteJid"]` e `$json["message"]["conversation"]`
-  (usa resposta da Evolution, não referências a nós anteriores que quebravam via SSH)
-- **Descoberta crítica:** execuções 80/81 (14:09 e 14:22) usaram snapshot do workflow
-  **sem** `Log Outbound Message` — o nó foi adicionado depois mas o n8n manteve o mesmo versionId.
-  Futuras execuções usam o workflow atual com o nó.
-
-### Acidente n8n `user-management:reset` (ver D-28)
-Ao tentar debugar, o comando `docker exec n8n n8n user-management:reset` foi executado
-acidentalmente. Conta de owner apagada. Recuperação via:
-```bash
-curl -X POST http://localhost:5678/rest/owner/setup \
-  -H 'Content-Type: application/json' \
-  -d '{"firstName":"Admin","lastName":"Admin","email":"admin@barbearia.com","password":"Barbearia@2026!"}'
-```
-**Novas credenciais n8n:** `admin@barbearia.com` / `Barbearia@2026!`
+- `app/api/wa_webhook.py` — webhook direto Evolution→FastAPI (sem delay do n8n)
+- Migration `0011_grant_crm_tables` — GRANT CRUD ao `barber_app`
+- Evolution webhook reconfigurado: `http://host.docker.internal:8000/bot/wa-webhook`
+- n8n: `Log Outbound Message` em série após `Send Response`; `Log Inbound` desabilitado
+- Acidente `user-management:reset` → novas credenciais n8n: `admin@barbearia.com` / `Barbearia@2026!`
 
 ---
 
 ## ✅ Sessão 2026-06-24 (1ª) — CRM Conversacional Fases 2–5
 
-### Fase 2 — Persistência unificada (commit `f87f579` → `f72cd59`)
-- Migration `0010_conversations`: tabelas `conversations`/`messages`/`attachments` + RLS
-- `models/conversation.py`, `app/services/conversation.py`, `app/services/sse_broker.py`
-- `bot.py:log_message` delegado para `conversation_service`; grava sem cliente (1º contato)
-
-### Fase 3 — APIs de leitura (commit `7ee6cbf`)
-- Router `app/api/conversations.py` (prefixo `/crm`): list, search, detail, messages, read
-- Scroll infinito por cursor `?before=<id>`; busca GIN pg_trgm
-
-### Fase 4 — UI Inbox 3 painéis (commit `f046b9f` + SCP frontend)
-- Toggle Kanban ⇄ Inbox no `/admin/crm`
-- `ConvListItem`, `MsgBubble`, `ConvMessagePanel`, `InboxView`
-- `POST /crm/conversations/{id}/send` — envio de mensagem pelo Inbox ✅ (confirmado funcionando)
-
-### Fase 5 — SSE em tempo real (commits `effdd77` + `929c13e` + `f72cd59`)
-- `GET /crm/stream?token=<jwt>` — SSE com keepalive 25 s
-- `_publish` após `flush()` (msg.id garantido, antes do commit)
-- Frontend: `EventSource` no mount, evento `new_message` atualiza preview/unread
+- Migration `0010_conversations`: tabelas `conversations`/`messages`/`attachments`
+- `app/services/conversation.py`, `app/services/sse_broker.py`
+- Router `app/api/conversations.py` (scroll infinito, busca GIN)
+- Frontend: toggle Kanban⇄Inbox, `ConvListItem`, `MsgBubble`, `ConvMessagePanel`, `InboxView`
+- `GET /crm/stream?token=<jwt>` — SSE em tempo real
 
 ---
 
-## ✅ Sessões 2026-06-23 (partes 1–5)
+## ✅ Sessões 2026-06-23
 
 - Restauração da VM do zero; bot WhatsApp end-to-end funcionando
-- Funil CRM: `novo_contato → conversando → agendado`
-- Pausa do bot via CRM (`GET /bot/clients/paused-status`, botão "Assumir")
-- `POST /bot/messages` (log_message) implementado
+- Funil CRM, pausa do bot, `POST /bot/messages`
 - n8n: nós Log em série (D-18 aplicado)
 
 ---
 
 ## Pendências prioritárias
 
-- [ ] **[CRÍTICO] Confirmar bot responses no Inbox** — ver seção "TAREFA EM ABERTO" acima
+- [ ] **[CRÍTICO] Confirmar bot responses no Inbox** — debug print ativo; ver "TAREFA EM ABERTO" acima
 - [ ] **Remover debug logging** (`print [WA_WEBHOOK]`) após confirmar evento Evolution
-- [ ] **HTTPS + domínio** — scripts em `deploy/nginx.conf` + certbot prontos
+- [ ] **HTTPS + domínio** — nginx configurado; falta registrar `taylorethedy.app` e rodar certbot
 - [ ] **Fechar portas** ao mundo após HTTPS (5678/8000/3000/8080 abertas)
 - [ ] **Backup automatizado** dos volumes Docker (VM já foi zerada uma vez)
 - [ ] **Validar lembrete 24h** end-to-end (`CronReminder24h01` ativo, nunca testado)
 - [ ] **`workflows.json` local diverge da VM** — exportar da VM antes de qualquer edição local
+- [ ] **Frontend git remoto** — `DoctorDCombo/barbearia-frontend` não existe; considerar mover para `augustopegoraro-droid/barbeariapro` ou criar novo repo
 
 ---
 
@@ -147,7 +127,8 @@ curl -X POST http://localhost:5678/rest/owner/setup \
 
 | # | Feature | Esforço | Observação |
 |---|---|---|---|
-| 1 | Lembrete 24h via WhatsApp | Baixo | `CronReminder24h01` ativo; validar end-to-end |
-| 2 | HTTPS + domínio | Médio | Pré-requisito para vender |
-| 3 | Cron de reativação | Trivial | `CronReactivation1` ativo |
-| 4 | Export CSV comissões | Baixo | Queries já no dashboard |
+| 1 | Confirmar bot responses no Inbox | Baixo | Debug já ativo; só precisa testar |
+| 2 | HTTPS + domínio | Médio | nginx pronto; falta registrar domínio (~$20/ano) |
+| 3 | Lembrete 24h via WhatsApp | Baixo | `CronReminder24h01` ativo; validar end-to-end |
+| 4 | Cron de reativação | Trivial | `CronReactivation1` ativo |
+| 5 | Export CSV comissões | Baixo | Queries já no dashboard |
