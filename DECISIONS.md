@@ -58,8 +58,8 @@ antes de persistir em `integration_accounts.token_encrypted`.
 **Situação atual:** `barbearia-frontend/` tem seu próprio `.git` com remote
 `https://github.com/DoctorDCombo/barbearia-frontend.git` — **este repo NÃO EXISTE**.
 Commits locais existem mas não têm push remoto funcional.
-**Deploy:** via tar+SSH direto para `/opt/barbeariapro/barbearia-frontend/` na VM.
-Ver PROJECT_CONTEXT §2 para o comando completo.
+**Deploy:** via scp + build Docker diretamente na VM.
+Ver PROJECT_CONTEXT §2 para os comandos completos.
 **Pendência:** considerar mover para `augustopegoraro-droid/barbeariapro` (subpasta) ou criar novo repo.
 
 ### D-09 — Agenda do barbeiro mobile-first
@@ -76,7 +76,6 @@ Ver PROJECT_CONTEXT §2 para o comando completo.
 **Decisão:** Layout do admin separado em três componentes em `components/layout/`.
 `AdminShell` compõe os dois e controla o estado `mobileOpen`.
 `app/admin/layout.tsx` envolve todas as rotas `/admin/*` com `AdminShell`.
-**Motivo:** Separação de concerns; sidebar e header são reutilizáveis independentemente.
 **Design tokens:** dark theme fixo (classe `dark` no `<html>`), amber `#f59e0b` como cor primária.
 
 ### D-32 — CRM view inicializada via `window.location.search`, não `useSearchParams`
@@ -84,14 +83,26 @@ Ver PROJECT_CONTEXT §2 para o comando completo.
 **Decisão:** `useState<"board"|"inbox">(() => new URLSearchParams(window.location.search).get("view") === "inbox" ? "inbox" : "board")`
 **Motivo:** `useSearchParams()` do Next.js exige `<Suspense>` boundary; sem ele,
 `next build` falha com "prerender error" na rota `/admin/crm`.
-A abordagem com lazy initializer evita o Suspense e funciona em client components.
 **Consequência:** `/admin/conversas` redireciona para `/admin/crm?view=inbox` (server redirect).
 
 ### D-33 — `/admin/conversas` é redirect, não página separada
 **Data:** 2026-06-25
 **Decisão:** `app/admin/conversas/page.tsx` chama `redirect("/admin/crm?view=inbox")` (server-side).
-**Motivo:** O Inbox já está implementado no CRM page como toggle. Manter uma única fonte
-de UI evita duplicação. O nav item "Conversas" usa `/admin/conversas` para semântica de URL.
+**Motivo:** Inbox já implementado no CRM page como toggle. Evita duplicação.
+
+### D-36 — n8n REST API: PATCH para atualizar workflow (não PUT)
+**Data:** 2026-06-25
+**Decisão:** `PATCH /rest/workflows/{id}` funciona. `PUT` retorna 404.
+**Campo de login:** `emailOrLdapLoginId` (não `email`) no `POST /rest/login`.
+**Aprendido em:** auditoria 2026-06-25 ao tentar atualizar o system prompt via API.
+
+### D-37 — `/admin/integracoes` como painel de operações WhatsApp
+**Data:** 2026-06-25
+**Decisão:** Página `/admin/integracoes` implementada com card WhatsApp:
+- `GET /integracoes/whatsapp/status` — consulta connectionState da Evolution API
+- `GET /integracoes/whatsapp/qr` — gera QR code base64 para reconexão
+- Frontend: modal com QR auto-refresh 30s + poll de status a cada 3s (fecha ao conectar)
+**Motivo:** WhatsApp cai toda vez que a VM reinicia. Operador precisa reconectar sem SSH.
 
 ---
 
@@ -100,7 +111,8 @@ de UI evita duplicação. O nav item "Conversas" usa `/admin/conversas` para sem
 ### D-11 — Lembrete 24h é feature de alto ROI
 **Data:** 2026-06-21
 **Decisão:** Após estabilização do CRM, próxima prioridade é lembrete 24h antes via WhatsApp.
-Infraestrutura pronta (`CronReminder24h01` ativo, nunca testado end-to-end).
+**Atualização 2026-06-25:** `CronReminder24h01` confirmado saudável (5 execuções em 24/06, todas success).
+Parou porque VM ficou TERMINATED. Volta a rodar automaticamente ao ligar a VM.
 
 ### D-12 — Google Calendar sync é ROI baixo (mas foi pedido)
 **Data:** 2026-06-21
@@ -113,17 +125,21 @@ Infraestrutura pronta (`CronReminder24h01` ativo, nunca testado end-to-end).
 ### D-13 — Produção roda na VM via docker-compose, NÃO no Cloud Run
 **Data:** 2026-06-23
 **Decisão:** VM GCP `barbeariapro` (`34.95.199.134`), stack em containers.
-**Consequência:** Sem backup automatizado dos volumes — VM já foi zerada uma vez.
+**Consequência:** Sem backup automatizado dos volumes; VM ficou TERMINATED em 2026-06-25.
+Verificar status da VM antes de cada sessão (ver PROJECT_CONTEXT §4).
 
-### D-14 — n8n: SEMPRE via API REST, NUNCA editar o SQLite direto
-**Data:** 2026-06-23
-**Decisão:** Qualquer alteração de credencial ou workflow via API REST.
-**Motivo (aprendido na marra):** Criptografia do n8n v2.x é formato OpenSSL;
-WAL/SHM descartam mudanças; `versionId` separa rascunho de versão ativa.
+### D-14 — n8n: SEMPRE via API REST, NUNCA editar o SQLite para workflows
+**Data:** 2026-06-23; atualizado 2026-06-25
+**Decisão:** Workflows e credenciais SEMPRE via API REST.
+**Exceção aplicada em 2026-06-25:** Tabela `user` do SQLite editada para resetar senha
+(quando login falha e não há outro caminho). Apenas a tabela `user` — nunca workflows.
 ```bash
+# Login correto:
 curl -s -c /tmp/n8n_cookies -X POST 'http://localhost:5678/rest/login' \
   -H 'Content-Type: application/json' \
-  -d '{"emailOrLdapLoginId":"admin@barbearia.com","password":"Barbearia@2026!"}'
+  -d '{"emailOrLdapLoginId":"admin@barbearia.com","password":"Barbearia2026"}'
+
+# Atualizar workflow (PATCH, não PUT):
 curl -sb /tmp/n8n_cookies -X PATCH \
   'http://localhost:5678/rest/workflows/25QZQ664N6hrIg59' \
   -H 'Content-Type: application/json' -d @/tmp/wf_payload.json
@@ -140,13 +156,32 @@ curl -sb /tmp/n8n_cookies -X PATCH \
 
 ### D-34 — nginx como reverse proxy na porta 80 (host, não container)
 **Data:** 2026-06-25
-**Decisão:** nginx instalado diretamente no host da VM (não como container).
-Config em `/etc/nginx/sites-available/barbeariapro`; `default_server` na porta 80
-proxia para `localhost:3000` (frontend). `api.taylorethedy.com` → `localhost:8000`.
-**Motivo:** Simples, sem overhead de container-para-container. Certbot integra nativamente.
+**Decisão:** nginx instalado diretamente no host da VM.
+Config em `/etc/nginx/sites-available/barbeariapro`; `default_server` porta 80 → `localhost:3000`.
 **SSL pendente:** domínio `taylorethedy.app` não registrado. Quando registrado:
 ```bash
 sudo certbot --nginx -d taylorethedy.app -d api.taylorethedy.com --redirect
+```
+
+### D-35 — Evolution: ao recriar instância, SEMPRE reconectar webhook ao FastAPI
+**Data:** 2026-06-25
+**Decisão:** O webhook da instância Evolution DEVE apontar para `http://host.docker.internal:8000/bot/wa-webhook`.
+**Motivo:** Quando a instância foi recriada em 2026-06-25, o webhook foi acidentalmente apontado
+para o n8n (`http://host.docker.internal:5678/webhook/whatsapp`). Isso quebra o CRM inbox:
+mensagens de cliente não são gravadas em `conversations.messages` nem publicadas via SSE.
+**Correção:**
+```bash
+curl -s -X POST http://localhost:8080/webhook/set/Barbearia \
+  -H 'apikey: 6BCBCA57CE49-4E10-9C21-5B9FECAE40B2' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "webhook": {
+      "enabled": true,
+      "url": "http://host.docker.internal:8000/bot/wa-webhook",
+      "byEvents": true, "base64": false,
+      "events": ["MESSAGES_UPSERT","MESSAGES_UPDATE","SEND_MESSAGE","CONNECTION_UPDATE","QRCODE_UPDATED"]
+    }
+  }'
 ```
 
 ---
@@ -184,16 +219,22 @@ Payload registrado imediatamente; encaminhado ao n8n em background (retry 3×).
 **Data:** 2026-06-24 (2ª sessão)
 **Solução:** Escrever payload em arquivo Python no servidor remoto antes de enviar via curl.
 
-### D-28 — Acidente n8n `user-management:reset` e recuperação
-**Data:** 2026-06-24 (2ª sessão)
-**Novas credenciais n8n:** `admin@barbearia.com` / `Barbearia@2026!`
-**Recuperação:**
+### D-28 — Credenciais n8n após reset acidental (atualizado 2026-06-25)
+**Data:** 2026-06-24 (2ª sessão); senha redefinida em 2026-06-25
+**Credenciais atuais n8n:** `admin@barbearia.com` / `Barbearia2026`
+**Histórico:**
+- Acidente `user-management:reset` em 2026-06-24 → credenciais recriadas via `/rest/owner/setup`
+- Em 2026-06-25, login estava falhando → senha resetada via bcrypt direto no SQLite (só tabela `user`)
+- Senha atual: `Barbearia2026` (sem `@` ou `!`)
+**Se precisar resetar senha novamente:**
 ```bash
-curl -X POST http://localhost:5678/rest/owner/setup \
-  -H 'Content-Type: application/json' \
-  -d '{"firstName":"Admin","lastName":"Admin","email":"admin@barbearia.com","password":"Barbearia@2026!"}'
+# Na VM, dentro do container n8n ou copiando o sqlite:
+docker cp n8n:/home/node/.n8n/database.sqlite /tmp/n8n_db.sqlite
+python3 -c "import bcrypt; print(bcrypt.hashpw('NOVA_SENHA'.encode(), bcrypt.gensalt(10)).decode())"
+sqlite3 /tmp/n8n_db.sqlite "UPDATE user SET password='HASH_ACIMA' WHERE email='admin@barbearia.com';"
+docker cp /tmp/n8n_db.sqlite n8n:/home/node/.n8n/database.sqlite
+docker restart n8n
 ```
-**Lição:** Nunca rodar comandos de reset do n8n em produção.
 
 ### D-29 — Não aplicar conversão 8→9 dígitos em `normalize_phone` sem migrar o DB
 **Data:** 2026-06-24 (2ª sessão)
@@ -205,6 +246,34 @@ curl -X POST http://localhost:5678/rest/owner/setup \
 **Data:** 2026-06-24 (2ª sessão)
 **Decisão:** Nó desabilitado (não removido). `HTTP Flush Buffer` conecta direto em `Code Horário Comercial`.
 **Motivo:** Com webhook direto, mensagens de cliente já gravadas antes do n8n. Duplicaria se Log Inbound rodasse.
+
+---
+
+## Bot WhatsApp (sessão 2026-06-25, 2ª)
+
+### D-38 — System prompt do bot deve listar todos os barbeiros ativos
+**Data:** 2026-06-25
+**Problema:** Prompt hardcodava apenas Taylor e Thedy. Novos funcionários (Marciana, Sandra, Pablo)
+foram cadastrados no DB mas nunca adicionados ao prompt → bot negava que trabalhavam na barbearia.
+**Solução:** Seção `OS BARBEIROS` no system prompt atualizada com todos os 5 funcionários.
+**Regra:** Ao cadastrar um novo barbeiro na plataforma, atualizar o system prompt via API:
+```bash
+# Exportar workflow, editar a seção OS BARBEIROS, re-importar com PATCH
+curl -sb /tmp/n8n_cookies http://localhost:5678/rest/workflows/25QZQ664N6hrIg59 > /tmp/wf.json
+# Editar /tmp/wf.json com python (substituir seção OS BARBEIROS)
+curl -sb /tmp/n8n_cookies -X PATCH \
+  'http://localhost:5678/rest/workflows/25QZQ664N6hrIg59' \
+  -H 'Content-Type: application/json' -d @/tmp/wf.json
+```
+**Nota:** A tool `listar_barbeiros` existe no workflow mas o bot não a chama proativamente
+quando perguntam "quem trabalha aqui?". Depende do knowledge no system prompt.
+
+### D-39 — Tabela `barbers` usa `deleted_at` para soft-delete (não `is_active`)
+**Data:** 2026-06-25
+**Realidade:** A tabela `barbers` não tem coluna `is_active`. Barbeiro ativo = `deleted_at IS NULL`.
+```sql
+SELECT id, name FROM barbers WHERE organization_id=1 AND deleted_at IS NULL;
+```
 
 ---
 
@@ -237,7 +306,7 @@ curl -X POST http://localhost:5678/rest/owner/setup \
 
 | Item | Arquivo | Severidade | Observação |
 |---|---|---|---|
-| Sem backup dos volumes Docker da VM | infra VM | ⚠️ Alto | VM já foi zerada uma vez |
+| Sem backup dos volumes Docker da VM | infra VM | ⚠️ Alto | VM ficou TERMINATED em 2026-06-25 |
 | Debug print temporário no webhook | `app/api/wa_webhook.py` | ⚠️ Médio | Remover após confirmar send.message |
 | Bot responses não confirmadas no CRM | fluxo n8n + Evolution | ⚠️ Alto | Pendente confirmação end-to-end |
 | Frontend sem remote git funcional | `barbearia-frontend/.git` | ⚠️ Médio | DoctorDCombo/barbearia-frontend não existe |
@@ -249,3 +318,5 @@ curl -X POST http://localhost:5678/rest/owner/setup \
 | `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | Exportar da VM antes de qualquer edição local |
 | Formato de telefone 8 vs 9 dígitos | DB + `normalize_phone` | Médio | conv_id=1 tem 8 dígitos. Ver D-29. |
 | 2 testes hardcoded na org 3 | `tests/` | Baixo | Fail ambiental; não são bugs |
+| System prompt do bot hardcoda barbeiros | n8n AI Agent node | Médio | Ao cadastrar novo barbeiro, atualizar manualmente (D-38) |
+| VM sem política de reinício automático | GCP VM | ⚠️ Alto | WhatsApp cai toda vez que VM reinicia; usar /admin/integracoes |
