@@ -13,9 +13,11 @@ contendo org_id. Impede CSRF e carrega contexto de tenant sem sessão server-sid
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -32,6 +34,8 @@ from models import User
 from models.enums import IntegrationProvider, IntegrationStatus
 from models.integration import IntegrationAccount
 
+_logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/integracoes", tags=["integracoes"])
 
 
@@ -41,6 +45,15 @@ class AuthorizeUrlOut(BaseModel):
 
 class CalendarStatusOut(BaseModel):
     connected: bool
+
+
+class WhatsAppStatusOut(BaseModel):
+    connected: bool
+    phone: Optional[str] = None
+
+
+class WhatsAppQrOut(BaseModel):
+    qr: str  # data URI base64
 
 
 _STATE_ALG = "HS256"
@@ -230,3 +243,66 @@ async def calendar_status(
         )
     ).scalar_one_or_none()
     return CalendarStatusOut(connected=connected is not None)
+
+
+# ─── WhatsApp (Evolution API) ─────────────────────────────────────────────────
+
+def _evolution_headers() -> dict[str, str]:
+    return {"apikey": settings.evolution_api_key}
+
+
+def _evolution_base() -> str:
+    return settings.evolution_api_url.rstrip("/")
+
+
+@router.get(
+    "/whatsapp/status",
+    response_model=WhatsAppStatusOut,
+    summary="Verifica se o WhatsApp está conectado via Evolution API",
+)
+async def whatsapp_status(
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> WhatsAppStatusOut:
+    if not settings.evolution_api_url:
+        return WhatsAppStatusOut(connected=False)
+    url = f"{_evolution_base()}/instance/connectionState/{settings.evolution_instance_name}"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, headers=_evolution_headers())
+            data = resp.json()
+            state = data.get("instance", {}).get("state", "close")
+            phone = data.get("instance", {}).get("ownerJid")
+            if phone:
+                phone = phone.replace("@s.whatsapp.net", "")
+            return WhatsAppStatusOut(connected=state == "open", phone=phone or None)
+    except Exception as exc:
+        _logger.warning("Falha ao checar status WhatsApp: %s", exc)
+        return WhatsAppStatusOut(connected=False)
+
+
+@router.get(
+    "/whatsapp/qr",
+    response_model=WhatsAppQrOut,
+    summary="Gera QR code para reconectar o WhatsApp",
+)
+async def whatsapp_qr(
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> WhatsAppQrOut:
+    if not settings.evolution_api_url:
+        raise HTTPException(status_code=503, detail="Evolution API não configurada")
+    url = f"{_evolution_base()}/instance/connect/{settings.evolution_instance_name}"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, headers=_evolution_headers())
+            data = resp.json()
+            qr = data.get("base64", "")
+            if not qr:
+                raise HTTPException(status_code=503, detail="QR code indisponível — WhatsApp pode já estar conectado")
+            return WhatsAppQrOut(qr=qr)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _logger.error("Falha ao buscar QR WhatsApp: %s", exc)
+        raise HTTPException(status_code=503, detail="Falha ao comunicar com a Evolution API")
