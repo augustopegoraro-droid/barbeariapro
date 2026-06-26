@@ -7,7 +7,7 @@
 ## Branch ativo
 
 - **Backend repo** (`main`): commit **`469f784`** — inclui o **PR #2** (reagendar aceita `barber_id`, D-43).
-- **Backend na VM**: commit **`3e138b5`** — **muito atrás** (faltam Fase 1.1 + CLAUDE.md + reagendar). Deploy pendente.
+- **Backend na VM**: commit **`469f784`** — **deployado 2026-06-26 16:43** (reagendar + Fase 1.1 + CLAUDE.md). Atrás do repo só pelo commit de docs.
 - **Frontend:** branch **`feat/design-system-react-query-f1-f3`** (`3399587`) = **toda a F1–F3**.
   **NÃO mergeado em `main`** (frontend `main` = `f5397a8`), **NÃO deployado**. Remote morto.
   ➜ Continuar: `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`.
@@ -32,7 +32,8 @@ até 2.4.0-rc2 com LID**). Falha global (2 números testados, `status: ERROR`).
 ## 🟢 Sessão 2026-06-26 (3ª) — Rearquitetura de Frontend (F1–F3) + backend reagendar
 
 > Frontend no branch `feat/design-system-react-query-f1-f3` (`3399587`); backend reagendar mergeado em `main` (PR #2).
-> **Nada deployado.** Detalhes/convenções em `barbearia-frontend/AGENTS.md` (roadmap F1–F4) e `PROJECT_CONTEXT.md §0.0`.
+> **✅ DEPLOYADO em produção 2026-06-26 16:43** (containers healthy). Pendência git: mergear o branch frontend no `main`.
+> Detalhes/convenções em `barbearia-frontend/AGENTS.md` (roadmap F1–F4) e `PROJECT_CONTEXT.md §0.0`.
 
 - **F1 Fundação:** tokens (globals.css), `components/patterns` (Loading/Skeleton/Empty/Error/**AsyncState**), React Query (provider + `useAuthedQuery`).
 - **F2:** 6 telas migradas p/ React Query + componentes de domínio + página enxuta (clientes, serviços, equipe, financeiro, dashboard, barbeiro) + polimento (KPIs com ícone, subtítulos).
@@ -139,10 +140,9 @@ VM estava TERMINATED desde ~24/06 — bot offline, cron parado. Sessão focada e
 ## Pendências prioritárias (2026-06-26, 3ª)
 
 - [ ] **[CRÍTICO] Migrar WhatsApp p/ Cloud API** (D-41) — bot não entrega; número restrito. Ver BLOQUEIO Nº 1.
-- [ ] **Mergear o frontend F1–F3** (`feat/design-system-react-query-f1-f3` → `main`) e **deployar** (scp+build).
-      ⚠️ O Inbox (`/admin/conversas`) exige migrations `0010/0011` — produção já está em `0011` (ok).
-- [ ] **Deploy do backend na VM** — `main` (`469f784`, com Fase 1.1 + CLAUDE.md + reagendar) à frente; VM em `3e138b5`.
-      `git pull` + rebuild backend (ver PROJECT_CONTEXT §2).
+- [x] **F1–F3 + reagendar DEPLOYADOS** na VM (2026-06-26 16:43, containers healthy). Verificado: Inbox/`barber_id` live.
+- [ ] **Mergear o frontend F1–F3 no `main` do repo frontend** (`feat/design-system-react-query-f1-f3` → `main`)
+      — higiene git: produção já roda esse código, mas o `main` do frontend ainda é `f5397a8`.
 - [ ] **(opcional) Toast de erro no drag da Agenda** — hoje o reagendar inválido (serviço não executado/conflito) reverte silencioso.
 - [ ] **Fase 1.3 — limpar histórico git** de `credentials.json` (`git filter-repo` + force-push). Seguro
       agora (chave já revogada).

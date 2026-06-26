@@ -7,10 +7,16 @@
 
 ## 0.0 SESSÃO 2026-06-26 (3ª) — Rearquitetura de Frontend (F1–F3) + backend reagendar
 
-> ⚠️ **Onde está o trabalho:** o frontend F1–F3 vive **só no branch** `feat/design-system-react-query-f1-f3`
-> (repo aninhado `barbearia-frontend`, commit `3399587`) — **NÃO mergeado em `main`, NÃO deployado**.
-> Para continuar: `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`.
-> O backend `reagendar` foi **mergeado em `main`** (PR #2, `469f784`) mas **NÃO deployado na VM**.
+> ✅ **DEPLOYADO em produção em 2026-06-26 ~16:43** (containers `app-backend`/`app-frontend` rebuildados, healthy).
+> - **Backend:** VM em `469f784` (reagendar + Fase 1.1 + CLAUDE.md). `AppointmentOut`/`AgendaReagendar` com
+>   `barber_id` confirmados no schema **em execução**.
+> - **Frontend:** F1–F3 **rodando** na VM (Inbox em `/admin/conversas`, Agenda do dia, etc.) — os arquivos foram
+>   copiados para a VM e o container foi buildado a partir deles (backup do antigo: `barbearia-frontend.bak.20260626-164038`).
+>
+> ⚠️ **Pendência de higiene git (não de deploy):** o frontend F1–F3 está **só no branch local**
+> `feat/design-system-react-query-f1-f3` (`3399587`) — **NÃO mergeado no `main` do repo frontend** (`main`=`f5397a8`,
+> remote morto). Para continuar localmente: `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`.
+> **Mergear esse branch no `main` do frontend** para o git refletir o que já está em produção.
 
 **Frontend — rearquitetura completa (validada no browser contra o staging, org 1):**
 - **F1 Fundação:** tokens (sombra/movimento/z-index) em `app/globals.css`; `components/patterns/`
@@ -65,8 +71,7 @@ um **número DEDICADO novo**. Evolução = projeto à parte (pré-requisitos Met
 1. **`CLAUDE.md` criado** (commit `15692b4`) = memória técnica viva.
 2. **Fase 1.1 commitada** (`13822a1`): helper `secrets_match()` (`app/core/security.py`, comparação
    tempo-constante) usado em `app/deps.py` (X-Bot-Token) e `app/api/wa_webhook.py` (X-Webhook-Secret);
-   `print` de debug do webhook → `_logger.debug`. **⚠️ AINDA NÃO DEPLOYADO na VM** (VM roda `3e138b5`,
-   ainda com o `print`). Deploy pendente: `git pull` + rebuild backend.
+   `print` de debug do webhook → `_logger.debug`. **✅ DEPLOYADO** (VM em `469f784`, build 16:43 de 2026-06-26).
 3. **Firewall GCP endurecido** (D-40): removidas `allow-n8n` (5678) e `allow-evolution` (8080); 5432 já
    estava fechada. **n8n e Evolution Manager agora só por SSH tunnel** (ver §12). Restam abertas 8000/3000.
 4. **`SECRET_KEY` de produção verificado: FORTE** (256 bits) — NÃO rotacionar (placeholder estava só no `.env` local).
@@ -130,13 +135,13 @@ Objetivo comercial: vender para mais barbearias; concorre com Trinks.
 > Commits locais existem mas não têm push remoto funcional. Deploy é feito via scp+SSH+docker build na VM.
 
 **Estado git (2026-06-26, 3ª sessão):**
-- Backend repo (`main`): commit **`469f784`** (merge do **PR #2** `feat/agenda-reagendar-trocar-profissional`
-  = `reagendar` aceita `barber_id`). `origin` = `github.com/augustopegoraro-droid/barbeariapro` (vivo).
-- Backend **na VM**: commit **`3e138b5`** — **MUITO atrás do repo** (faltam: Fase 1.1 segurança + CLAUDE.md +
-  reagendar). Deploy pendente (`git pull` + rebuild backend).
-- Frontend: branch **`feat/design-system-react-query-f1-f3`** commit **`3399587`** = **toda a F1–F3**.
-  **NÃO mergeado em `main`** (frontend `main` segue em `f5397a8`), **NÃO deployado**. Remote `DoctorDCombo` **morto**.
-  Continuar: `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`.
+- Backend repo (`main`): commit **`fa0857c`** (docs) ← `469f784` (PR #2 reagendar). `origin` vivo
+  (`github.com/augustopegoraro-droid/barbeariapro`).
+- Backend **na VM**: commit **`469f784`** — **deployado 16:43** (reagendar + Fase 1.1 + CLAUDE.md). Atrás do repo
+  só pelo commit de **docs** `fa0857c` (sem código). `git pull` na VM é só doc-sync, sem rebuild.
+- Frontend: branch **`feat/design-system-react-query-f1-f3`** (`3399587`) = **toda a F1–F3**, **já rodando na VM**
+  (copiada + buildada 16:43). **NÃO mergeado no `main` do repo frontend** (`main`=`f5397a8`; remote `DoctorDCombo` morto)
+  — pendência de higiene git. Continuar: `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`.
 
 **Procedimento de deploy backend (sem mudança de dependências):**
 ```bash
@@ -204,11 +209,11 @@ gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-ea
 > Verificar status antes de qualquer sessão: `gcloud compute instances describe barbeariapro --project=barberiapro-app --zone=southamerica-east1-a --format="value(status)"`
 > Para ligar: `gcloud compute instances start barbeariapro --project=barberiapro-app --zone=southamerica-east1-a`
 
-### Containers em produção (verificado 2026-06-25, 2ª sessão)
+### Containers em produção (verificado 2026-06-26, 3ª sessão)
 
 ```
-barbeariapro-app-backend    :8000   healthy   FastAPI   — git 3e138b5
-barbeariapro-app-frontend   :3000   healthy   Next.js   — scp-deploy f5397a8
+barbeariapro-app-backend    :8000   healthy   FastAPI   — git 469f784 (build 2026-06-26 16:43, reagendar+Fase1.1)
+barbeariapro-app-frontend   :3000   healthy   Next.js   — F1–F3 (build 2026-06-26 16:43, branch design-system-react-query)
 barbeariapro-postgres       :5432   healthy   Postgres  — migration HEAD: 0011_grant_crm_tables
 evolution_api               :8080   Up        Evolution API v2.3.7 — instância Barbearia (open)
 evolution_postgres          (interno)
@@ -277,7 +282,7 @@ GET  /integracoes/whatsapp/qr                     — { qr: "data:image/png;base
 - **`send.message`**: evento para msgs enviadas pelo bot; grava como `sender_type=bot`; NÃO encaminha ao n8n
 - Outros eventos: encaminhados ao n8n em background (retry 3× com backoff)
 - ~~Debug `print(f"[WA_WEBHOOK]...")`~~ → trocado por `_logger.debug` no repo (commit `13822a1`).
-  ⚠️ A VM ainda roda `3e138b5` (com o `print`) até o deploy do Fase 1.1.
+  ✅ Deployado (VM em `469f784`, build 16:43 de 2026-06-26) — o `print` não está mais em produção.
 
 ### Endpoints `/crm/*` (JWT, conversations.py) — Inbox em tempo real
 `GET /crm/conversations`, `GET /crm/conversations/search?q=`,
