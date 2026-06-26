@@ -356,6 +356,49 @@ Nenhuma mudança de software resolve.
 
 ---
 
+### D-42 — Frontend: Design System + React Query (rearquitetura F1–F3)
+
+**Contexto:** o frontend tinha telas monolíticas (CRM 1389 ln, Agenda 720 ln), data fetching manual
+(`useEffect+axios+useState`), zero React Query (apesar de instalado) e nenhum Design System.
+
+**Decisão:** rearquitetar em fases, **evoluindo sem reescrever**, com um Design System único e React Query.
+Padrão de toda tela: **página enxuta** + `components/<domínio>/*` + `hooks/use-<domínio>.ts` + `AsyncState`
+(os 5 estados de UI padronizados em `components/patterns`). Tokens em `app/globals.css`; **nada hardcoded**.
+Primitivos reutilizáveis promovidos a `components/ui/`: `SegmentedControl`, `StatCard`, `Panel`/`SectionTitle`
+(`section.tsx`), `InitialAvatar`. **Fonte de verdade do frontend: `barbearia-frontend/AGENTS.md`** (roadmap F1–F4).
+
+- **F1** fundação (tokens, patterns, React Query: `providers.tsx`, `lib/queryClient.ts`, `hooks/use-authed-query.ts`).
+- **F2** migra 6 telas para React Query (clientes, serviços, equipe, financeiro, dashboard, barbeiro/agenda).
+- **F3** quebra os monólitos: **Inbox sai do CRM para `/admin/conversas`** (o SSE passa a atualizar o cache do
+  React Query via `setQueryData`); CRM vira **só funil**; Agenda admin vira **grade do dia por profissional**.
+
+**Estado:** branch `feat/design-system-react-query-f1-f3` (`3399587`), **não mergeado, não deployado**.
+Validado no browser (extensão Chrome) contra o staging (org 1). `tsc`/`eslint`/`build` limpos (20 rotas).
+
+**Como aplicar:** `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`. Ao mexer no
+frontend, **ler `AGENTS.md` primeiro** e seguir o padrão (reuso de `ui/` + `patterns`, tokens, React Query).
+
+---
+
+### D-43 — Agenda: reagendar pode trocar de profissional (drag entre colunas)
+
+**Contexto:** a Agenda do dia tem uma coluna por profissional com drag-and-drop. `PATCH /agenda/{id}/reagendar`
+só mudava o horário (mantinha `AppointmentItem.barber_id`), impedindo arrastar o card para outro profissional.
+
+**Decisão:** o endpoint passa a aceitar **`barber_id` opcional**. Quando muda: revalida o vínculo
+**serviço↔profissional** (`BarberService`, reusando a lógica do `POST /agenda`) → `422` se o novo profissional
+não executa o serviço; checa **conflito no NOVO barbeiro** (`barber_has_conflict`, excluindo o próprio);
+atualiza `AppointmentItem.barber_id`. `AppointmentOut` passa a **expor `barber_id`** (o frontend precisa para o
+drag). **Sem migração de DB** (só atualiza valor de coluna). Multi-item (combo entre barbeiros, raro): troca só
+o item primário.
+
+**Estado:** **mergeado em `main`** (PR #2, commit `b2087ab`, merge `469f784`). **Não deployado na VM.**
+Testes em `tests/test_e2e_flow.py` (descobrem fixtures via API; suíte 211 pass / 3 fail ambientais).
+No frontend, arrastar para um profissional que não executa o serviço → 422 → o bloco **reverte silencioso**
+(falta toast — dívida anotada); o diálogo "Reagendar" mostra o erro corretamente.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -371,6 +414,8 @@ Nenhuma mudança de software resolve.
 | Token JWT visível em query string do SSE | `GET /crm/stream?token=` | Baixo | Aceitável para MVP interno |
 | `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | Exportar da VM antes de qualquer edição local |
 | Formato de telefone 8 vs 9 dígitos | DB + `normalize_phone` | Médio | conv_id=1 tem 8 dígitos. Ver D-29. |
-| 2 testes hardcoded na org 3 | `tests/` | Baixo | Fail ambiental; não são bugs |
+| 3 testes ambientais falham | `tests/` | Baixo | n8n bypass_hours, RLS isolation, par `1/6` hardcoded — **não são bugs** |
+| Drag da Agenda reverte silencioso em erro | `barbearia-frontend/components/agenda` | Baixo | Reagendar inválido (serviço/conflito) → 422 → bloco volta sem toast (D-43). Diálogo Reagendar mostra o erro. |
+| Frontend F1–F3 não mergeado/deployado | `barbearia-frontend` branch | ⚠️ Médio | Branch `feat/design-system-react-query-f1-f3`; mergear + deployar (D-42). Inbox exige migrations 0010/0011 (prod já ok). |
 | System prompt do bot hardcoda barbeiros | n8n AI Agent node | Médio | Ao cadastrar novo barbeiro, atualizar manualmente (D-38) |
 | VM sem política de reinício automático | GCP VM | ⚠️ Alto | WhatsApp cai toda vez que VM reinicia; usar /admin/integracoes |

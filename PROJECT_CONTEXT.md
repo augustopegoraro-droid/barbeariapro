@@ -1,7 +1,50 @@
 # PROJECT_CONTEXT.md
 > Fonte de verdade para novas sessões de desenvolvimento.
-> Verificado contra o código E contra a VM de produção em **2026-06-26** (auditoria arquitetural + segurança + incidente WhatsApp).
-> **Leia também `CLAUDE.md`** (raiz) — memória técnica viva criada em 2026-06-26 (arquitetura, fluxos, convenções, roadmap).
+> Verificado contra o código E contra a VM de produção em **2026-06-26** (auditoria + segurança + incidente WhatsApp + **rearquitetura de frontend F1–F3**).
+> **Leia também `CLAUDE.md`** (raiz) e **`barbearia-frontend/AGENTS.md`** (fonte de verdade do **frontend**: Design System, convenções, roadmap F1–F4).
+
+---
+
+## 0.0 SESSÃO 2026-06-26 (3ª) — Rearquitetura de Frontend (F1–F3) + backend reagendar
+
+> ⚠️ **Onde está o trabalho:** o frontend F1–F3 vive **só no branch** `feat/design-system-react-query-f1-f3`
+> (repo aninhado `barbearia-frontend`, commit `3399587`) — **NÃO mergeado em `main`, NÃO deployado**.
+> Para continuar: `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`.
+> O backend `reagendar` foi **mergeado em `main`** (PR #2, `469f784`) mas **NÃO deployado na VM**.
+
+**Frontend — rearquitetura completa (validada no browser contra o staging, org 1):**
+- **F1 Fundação:** tokens (sombra/movimento/z-index) em `app/globals.css`; `components/patterns/`
+  (Loading/Skeleton/EmptyState/ErrorState/**AsyncState**); **React Query** ligado (`components/providers.tsx`,
+  `lib/queryClient.ts`, hook `hooks/use-authed-query.ts`).
+- **F2 Data fetching:** 6 telas migradas de `useEffect+axios` para **React Query** + componentes de domínio +
+  página enxuta: clientes, serviços, equipe, financeiro, dashboard, barbeiro/agenda. + polimento (KPIs com ícone, subtítulos).
+- **F3 Monólitos quebrados:**
+  - CRM (1389 ln) → **Inbox real em `/admin/conversas`** (SSE atualiza o cache do React Query) +
+    `/admin/crm` vira **só o funil Kanban** (DnD optimistic). `app/admin/conversas/page.tsx` deixou de ser redirect.
+  - Agenda admin (720 ln) → **grade do dia com 1 coluna por profissional** (eixo de horas, encaixe em 1 clique,
+    ações no bloco, atalhos ←/→/T/N, filtro de profissionais, resumo do dia) + **drag-and-drop para reagendar,
+    inclusive entre profissionais**.
+- **Primitivos `ui/` novos** (reusados): `segmented-control.tsx`, `stat-card.tsx`, `section.tsx` (`Panel`+`SectionTitle`),
+  `avatar.tsx` (`InitialAvatar`). Sidebar: badges falsos (Agenda:2, Conversas:5) **removidos**.
+- **Hooks de dados:** `hooks/use-{clientes,servicos,equipe,financeiro,dashboard,agenda,agenda-barbeiro,conversas,crm}.ts`.
+- `tsc`/`eslint`/`build` limpos (20 rotas) em cada etapa.
+
+**Backend — reagendar pode trocar de profissional (D-43):**
+- `PATCH /agenda/{id}/reagendar` aceita `barber_id` opcional → revalida vínculo serviço↔profissional + conflito
+  no novo barbeiro + atualiza `AppointmentItem.barber_id`. `AppointmentOut` expõe `barber_id`. Sem migração de DB.
+- **Mergeado em `main`** (PR #2 `469f784`); testes em `tests/test_e2e_flow.py`. **Falta deploy na VM.**
+
+**Migrations staging:** subido de `0009` → **`0011`** (aplicadas `0010_conversations`+`0011_grant_crm_tables`
+para validar o Inbox localmente). Produção já estava em `0011`.
+
+**Como rodar a stack localmente (para validar o frontend):**
+```bash
+# backend (staging):  set -a; . ./.env.staging; set +a; export SEED_ORG_ID=1
+#                     .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+# frontend (staging): cd barbearia-frontend && NEXT_PUBLIC_ORG_ID=1 npm run dev -- --port 3000
+# login: taylor@barbeariapro.com / senha123  (staging = org 1)
+```
+> O `.env.local` do frontend tem `NEXT_PUBLIC_ORG_ID=3` (não tocar); para o staging override-se p/ `1`.
 
 ---
 
@@ -86,11 +129,14 @@ Objetivo comercial: vender para mais barbearias; concorre com Trinks.
 > `https://github.com/DoctorDCombo/barbearia-frontend.git` — **este repo NÃO EXISTE mais**.
 > Commits locais existem mas não têm push remoto funcional. Deploy é feito via scp+SSH+docker build na VM.
 
-**Estado git (2026-06-26):**
-- Backend repo (`main`): commit **`2dd94f1`** (+ `DECISIONS.md` com D-40/D-41 **ainda não commitado**).
-- Backend **na VM**: commit **`3e138b5`** — **ATRÁS do repo** pelos commits de segurança (Fase 1.1 + CLAUDE.md).
-  Deploy do 1.1 na VM ainda **pendente** (`git pull` + rebuild backend).
-- Frontend (`main`): commit `f5397a8` — apenas local (push remoto falha; deploy via scp+build na VM).
+**Estado git (2026-06-26, 3ª sessão):**
+- Backend repo (`main`): commit **`469f784`** (merge do **PR #2** `feat/agenda-reagendar-trocar-profissional`
+  = `reagendar` aceita `barber_id`). `origin` = `github.com/augustopegoraro-droid/barbeariapro` (vivo).
+- Backend **na VM**: commit **`3e138b5`** — **MUITO atrás do repo** (faltam: Fase 1.1 segurança + CLAUDE.md +
+  reagendar). Deploy pendente (`git pull` + rebuild backend).
+- Frontend: branch **`feat/design-system-react-query-f1-f3`** commit **`3399587`** = **toda a F1–F3**.
+  **NÃO mergeado em `main`** (frontend `main` segue em `f5397a8`), **NÃO deployado**. Remote `DoctorDCombo` **morto**.
+  Continuar: `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`.
 
 **Procedimento de deploy backend (sem mudança de dependências):**
 ```bash
@@ -242,16 +288,21 @@ GET  /integracoes/whatsapp/qr                     — { qr: "data:image/png;base
 
 ---
 
-## 7. Páginas do frontend (confirmadas no código — 15 rotas)
+## 7. Páginas do frontend (16 rotas)
+
+> ⚠️ **Duas realidades:** a tabela abaixo descreve o **branch `feat/design-system-react-query-f1-f3`**
+> (estado atual do trabalho). O **`main`/produção (`f5397a8`)** ainda tem a versão antiga (CRM com toggle
+> Kanban⇄Inbox, `/admin/conversas` = redirect, Agenda = lista linear). Convenções/arquitetura do frontend:
+> **`barbearia-frontend/AGENTS.md`** (Design System, padrão página-enxuta + `components/<domínio>` + `hooks/use-<domínio>` + `AsyncState`).
 
 | Rota | Arquivo | Observação |
 |---|---|---|
 | `/login` | `app/login/page.tsx` | público |
 | `/admin/dashboard` | `app/admin/dashboard/page.tsx` | |
-| `/admin/agenda` | `app/admin/agenda/page.tsx` | |
-| `/admin/clientes` | `app/admin/clientes/page.tsx` | |
-| `/admin/crm` | `app/admin/crm/page.tsx` | toggle Kanban ⇄ Inbox; `?view=inbox` abre Inbox |
-| `/admin/conversas` | `app/admin/conversas/page.tsx` | redirect server-side → `/admin/crm?view=inbox` |
+| `/admin/agenda` | `app/admin/agenda/page.tsx` | **grade do dia, 1 coluna/profissional** + DnD reagendar (branch). `components/agenda/*`, `hooks/use-agenda.ts` |
+| `/admin/clientes` | `app/admin/clientes/page.tsx` | React Query (`components/clientes/*`, `hooks/use-clientes.ts`) |
+| `/admin/crm` | `app/admin/crm/page.tsx` | **só funil Kanban** (DnD) — Inbox saiu p/ Conversas. `components/crm/*`, `hooks/use-crm.ts` |
+| `/admin/conversas` | `app/admin/conversas/page.tsx` | **Inbox real** (SSE no cache RQ) — não é mais redirect. `components/conversas/*`, `hooks/use-conversas.ts` |
 | `/admin/financeiro` | `app/admin/financeiro/page.tsx` | |
 | `/admin/servicos` | `app/admin/servicos/page.tsx` | |
 | `/admin/equipe` | `app/admin/equipe/page.tsx` | |
@@ -280,7 +331,8 @@ active nav: rgba(245,158,11,0.11) + border-l-2 border-amber-500
 
 ## 8. Migrations Alembic
 
-Head atual (verificado na VM): **`0011_grant_crm_tables`**.
+Head atual (verificado na VM **e no staging**): **`0011_grant_crm_tables`**.
+> Staging foi subido de `0009`→`0011` nesta sessão (3ª) para validar o Inbox conversacional localmente.
 
 ```
 0001_initial → 0002_loyalty → 0002_client_last_photo → 0003_client_photo_description
@@ -472,4 +524,7 @@ export SEED_ORG_ID=1
 .venv/bin/python -m pytest tests/ -q
 ```
 
-**Baseline:** ~206 pass / 2 fail ambientais / 4 skip.
+**Baseline (verificado 2026-06-26, 3ª):** **211 pass / 3 fail ambientais / 1 skip**.
+As 3 falhas são pré-existentes e **não são bugs**: `test_bypass_hours_is_false_in_workflow` (config n8n),
+`test_me_isola_tenant_via_rls` (isolamento RLS), `test_login_cria_cliente_cria_agendamento` (par barbeiro/serviço
+`1/6` hardcoded não vinculado na org 1). Os testes novos de `reagendar` (em `tests/test_e2e_flow.py`) **passam**.

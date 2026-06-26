@@ -1,14 +1,16 @@
 # CURRENT_SPRINT.md
 > Estado do desenvolvimento em **2026-06-26**. Atualizar a cada sessão.
-> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-41), `CLAUDE.md` (memória técnica).
+> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-43), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
 
 ---
 
 ## Branch ativo
 
-- **Backend repo** (`main`): commit **`2dd94f1`** (+ `DECISIONS.md` com D-40/D-41 **não commitado**).
-- **Backend na VM**: commit **`3e138b5`** — **atrás do repo**; deploy da Fase 1.1 **pendente**.
-- **Frontend** (`main`): commit `f5397a8` — local. Deploy na VM via scp+build (repo remoto não existe).
+- **Backend repo** (`main`): commit **`469f784`** — inclui o **PR #2** (reagendar aceita `barber_id`, D-43).
+- **Backend na VM**: commit **`3e138b5`** — **muito atrás** (faltam Fase 1.1 + CLAUDE.md + reagendar). Deploy pendente.
+- **Frontend:** branch **`feat/design-system-react-query-f1-f3`** (`3399587`) = **toda a F1–F3**.
+  **NÃO mergeado em `main`** (frontend `main` = `f5397a8`), **NÃO deployado**. Remote morto.
+  ➜ Continuar: `cd barbearia-frontend && git checkout feat/design-system-react-query-f1-f3`.
 
 ---
 
@@ -26,6 +28,21 @@ até 2.4.0-rc2 com LID**). Falha global (2 números testados, `status: ERROR`).
 - **NÃO** insistir em Evolution/Baileys nem em upgrade de versão (já testado e descartado).
 - Diagnóstico rápido p/ revalidar: `POST /message/sendText/Barbearia` direto na Evolution (via SSH) → se
   `status: ERROR` global, segue restrito.
+
+## 🟢 Sessão 2026-06-26 (3ª) — Rearquitetura de Frontend (F1–F3) + backend reagendar
+
+> Frontend no branch `feat/design-system-react-query-f1-f3` (`3399587`); backend reagendar mergeado em `main` (PR #2).
+> **Nada deployado.** Detalhes/convenções em `barbearia-frontend/AGENTS.md` (roadmap F1–F4) e `PROJECT_CONTEXT.md §0.0`.
+
+- **F1 Fundação:** tokens (globals.css), `components/patterns` (Loading/Skeleton/Empty/Error/**AsyncState**), React Query (provider + `useAuthedQuery`).
+- **F2:** 6 telas migradas p/ React Query + componentes de domínio + página enxuta (clientes, serviços, equipe, financeiro, dashboard, barbeiro) + polimento (KPIs com ícone, subtítulos).
+- **F3:** CRM (1389 ln) → **Inbox em `/admin/conversas`** (SSE no cache RQ) + CRM **só funil**; Agenda admin (720 ln) → **grade do dia por profissional** (encaixe 1 clique, ações no bloco, atalhos, filtro, resumo) + **DnD reagendar (inclusive entre profissionais)**.
+- **Primitivos `ui/`:** SegmentedControl, StatCard, Panel/SectionTitle (`section.tsx`), InitialAvatar. Sidebar: badges falsos removidos.
+- **Backend (D-43):** `PATCH /agenda/{id}/reagendar` aceita `barber_id` (troca de profissional: revalida serviço↔profissional + conflito no novo barbeiro; `AppointmentOut` expõe `barber_id`). Testes em `tests/test_e2e_flow.py`.
+- **Validado no browser** (extensão Chrome) contra o staging (org 1): criar/concluir+pagamento/cancelar/encaixe/filtro/DnD entre profissionais (e revert no 422). **Staging subido p/ migration `0011`.**
+- Dívida anotada: drag reverte **silencioso** em erro (falta toast); detalhe cosmético de tempo relativo no Inbox resolvido.
+
+---
 
 ## 🟢 Sessão 2026-06-26 — Auditoria arquitetural + Segurança (Fase 1) + incidente WhatsApp
 
@@ -119,12 +136,14 @@ VM estava TERMINATED desde ~24/06 — bot offline, cron parado. Sessão focada e
 
 ---
 
-## Pendências prioritárias (2026-06-26)
+## Pendências prioritárias (2026-06-26, 3ª)
 
 - [ ] **[CRÍTICO] Migrar WhatsApp p/ Cloud API** (D-41) — bot não entrega; número restrito. Ver BLOQUEIO Nº 1.
-- [ ] **Deploy da Fase 1.1 na VM** — repo `main` (`2dd94f1`) à frente; VM em `3e138b5` (ainda com `print`).
+- [ ] **Mergear o frontend F1–F3** (`feat/design-system-react-query-f1-f3` → `main`) e **deployar** (scp+build).
+      ⚠️ O Inbox (`/admin/conversas`) exige migrations `0010/0011` — produção já está em `0011` (ok).
+- [ ] **Deploy do backend na VM** — `main` (`469f784`, com Fase 1.1 + CLAUDE.md + reagendar) à frente; VM em `3e138b5`.
       `git pull` + rebuild backend (ver PROJECT_CONTEXT §2).
-- [ ] **Commitar `DECISIONS.md`** (D-40/D-41 estão no working tree, não commitados).
+- [ ] **(opcional) Toast de erro no drag da Agenda** — hoje o reagendar inválido (serviço não executado/conflito) reverte silencioso.
 - [ ] **Fase 1.3 — limpar histórico git** de `credentials.json` (`git filter-repo` + force-push). Seguro
       agora (chave já revogada).
 - [ ] **HTTPS + domínio** — nginx pronto; falta registrar domínio + certbot. Depois mover 8000/3000 p/ trás do nginx.
@@ -133,8 +152,9 @@ VM estava TERMINATED desde ~24/06 — bot offline, cron parado. Sessão focada e
 - [ ] **Frontend git remoto** — remote morto (`DoctorDCombo/...`); mover p/ repo vivo (risco de perda de histórico).
 - [ ] **`workflows.json` local diverge da VM** — exportar da VM antes de editar.
 
-> Frentes de produto saudáveis para avançar em paralelo (ver `CLAUDE.md` §8): Frontend F3 (quebrar
-> monólitos CRM 1389/Agenda 720), Caixa, Pacotes/Assinaturas, Dashboard executivo.
+> Frentes de produto saudáveis para avançar em paralelo (ver `CLAUDE.md` §8): **Frontend F1–F3 ✅ concluído**
+> (falta mergear/deployar). Próximo no frontend: **F4 — acessibilidade + polish**. Produto: Caixa,
+> Pacotes/Assinaturas, Dashboard executivo, Estoque/Consumo.
 
 ---
 
