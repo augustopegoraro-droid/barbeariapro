@@ -15,6 +15,7 @@ from app.core.rbac import check_appointment_ownership
 from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
 from app.services.calendar_sync import push_appointment
 from app.services.loyalty import recalculate as _recalculate_loyalty
+from app.services.membership import revert_usage, usage_for_appointment
 from models import Appointment, AppointmentItem, Payment, User
 from models.enums import AppointmentStatus, PaymentMethod
 
@@ -47,8 +48,10 @@ def _require_agendado(appt: Appointment) -> None:
 # ─── schemas ─────────────────────────────────────────────────────────────────
 
 class ConcluirRequest(BaseModel):
-    method: str = Field(..., description="dinheiro | cartao | pix")
-    amount: float = Field(..., ge=0, description="Valor cobrado")
+    # method/amount são opcionais em atendimentos pagos por mensalidade (sem
+    # dinheiro); obrigatórios no fluxo normal (validado no endpoint).
+    method: Optional[str] = Field(None, description="dinheiro | cartao | pix")
+    amount: Optional[float] = Field(None, ge=0, description="Valor cobrado")
     tip_amount: Optional[float] = Field(None, ge=0, description="Gorjeta (opcional)")
 
 
@@ -68,17 +71,43 @@ async def concluir_atendimento(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AtendimentoOut:
-    if body.method not in _VALID_METHODS:
-        raise HTTPException(
-            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Método inválido. Use: {sorted(_VALID_METHODS)}",
-        )
-
     role, my_barber_id = await resolve_current_role_with_barber(db, current_user)
 
     appt = await _load_appointment(db, appt_id)
     check_appointment_ownership(appt, role, my_barber_id)
     _require_agendado(appt)
+
+    usage = await usage_for_appointment(db, appt_id)
+
+    if usage is not None:
+        # Atendimento pago por mensalidade: a receita já está rateada nos
+        # AppointmentItem.price_charged (reconhecida no uso). NÃO cria Payment
+        # (sem dinheiro) e NÃO sobrescreve price_charged. A gorjeta, se houver,
+        # ainda é dinheiro e vai para Payment.
+        tip = Decimal(str(body.tip_amount)) if body.tip_amount else None
+        if tip is not None:
+            db.add(Payment(
+                organization_id=current_user.organization_id,
+                appointment_id=appt.id,
+                amount=Decimal("0"),
+                tip_amount=tip,
+                method=PaymentMethod(body.method) if body.method in _VALID_METHODS else PaymentMethod.dinheiro,
+            ))
+        appt.status = AppointmentStatus.concluido
+        await db.flush()
+        await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
+        await db.commit()
+
+        background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
+        final_total = float(appt.total_amount) + float(tip or Decimal("0"))
+        return AtendimentoOut(id=appt_id, status="concluido", total_amount=final_total)
+
+    # ── fluxo normal (pagamento em dinheiro/cartão/pix) ──────────────────────
+    if body.method not in _VALID_METHODS or body.amount is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Informe method ({sorted(_VALID_METHODS)}) e amount.",
+        )
 
     amount = Decimal(str(body.amount))
     tip = Decimal(str(body.tip_amount)) if body.tip_amount else None
@@ -126,6 +155,8 @@ async def faltou_atendimento(
 
     orig_total = float(appt.total_amount)
     appt.status = AppointmentStatus.faltou
+    # Se o atendimento consumia um pacote de mensalidade, devolve o saldo.
+    await revert_usage(db, appt_id)
     await db.commit()
 
     background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "delete")
@@ -147,6 +178,8 @@ async def cancelar_atendimento(
 
     orig_total = float(appt.total_amount)
     appt.status = AppointmentStatus.cancelado
+    # Se o atendimento consumia um pacote de mensalidade, devolve o saldo.
+    await revert_usage(db, appt_id)
     await db.commit()
 
     background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "delete")

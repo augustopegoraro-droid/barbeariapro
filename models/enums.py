@@ -32,6 +32,17 @@ class SubscriptionStatus(str, enum.Enum):
     canceled = "canceled"
 
 
+class MembershipStatus(str, enum.Enum):
+    """Estado da assinatura/mensalidade do CLIENTE FINAL.
+
+    Não confundir com `SubscriptionStatus` (billing do tenant SaaS).
+    """
+
+    ativa = "ativa"
+    vencida = "vencida"
+    cancelada = "cancelada"
+
+
 class UnitRole(str, enum.Enum):
     owner = "owner"
     manager = "manager"
