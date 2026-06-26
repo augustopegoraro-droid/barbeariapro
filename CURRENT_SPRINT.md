@@ -29,6 +29,30 @@ até 2.4.0-rc2 com LID**). Falha global (2 números testados, `status: ERROR`).
 - Diagnóstico rápido p/ revalidar: `POST /message/sendText/Barbearia` direto na Evolution (via SSH) → se
   `status: ERROR` global, segue restrito.
 
+## 🟢 Sessão 2026-06-26 (4ª) — Mensalidade/Assinatura do cliente final (D-44)
+
+> Feature nova, full-stack, **só no staging** — não mergeada/deployada. Detalhes em **D-44**.
+> Plano: `/Users/apleandro/.claude/plans/glimmering-greeting-gem.md`.
+
+- **Modelagem:** `models/membership.py` (4 tabelas + enum `MembershipStatus`); migrations `0012_memberships`
+  (tabelas + RLS) e `0013_grant_membership_tables` (GRANT ao `barber_app`). Aplicadas no staging com
+  `ADMIN_DATABASE_URL` (o app `barber_app` não tem DDL). **Produção pendente.**
+- **Regra de negócio:** `app/services/membership.py` (venda, consumo com baixa atômica anti-double-spend,
+  rateio de receita, reversão idempotente, expiração). Combo fixo; receita rateada no uso (deferred);
+  `appointments` **não** alterada (vínculo via `membership_usages.appointment_id UNIQUE`).
+- **API:** `app/api/memberships.py` (CRUD de planos [manager], venda/consumo/cancelar/renovar/leitura
+  [admin], `/internal/memberships/expirar` [cron]). Integração mínima em `app/api/barbeiro.py` (concluir
+  por mensalidade não cria Payment; cancelar/faltou estorna o saldo).
+- **Frontend:** `/admin/assinaturas` (abas Planos|Assinaturas) + `hooks/use-assinaturas.ts` +
+  `components/assinaturas/*` (plano CRUD com combo, `MembershipCard` com avisos de vencimento/último pacote,
+  histórico de uso, venda) + item de sidebar "Assinaturas". `tsc`/`eslint`/`build` limpos.
+- **Testes:** `tests/test_membership_unit.py` (10) + `tests/test_membership_integration.py` (5). Suíte
+  backend **226 pass / 3 fail ambientais / 1 skip**.
+- **Pendente:** mergear/deployar; rodar migrations 0012/0013 em produção; validação no browser; consumo do
+  pacote pela tela da Agenda (toggle "usar mensalidade", opcional) e linha "Mensalidade" no financeiro (E8).
+
+---
+
 ## 🟢 Sessão 2026-06-26 (3ª) — Rearquitetura de Frontend (F1–F3) + backend reagendar
 
 > Frontend no branch `feat/design-system-react-query-f1-f3` (`3399587`); backend reagendar mergeado em `main` (PR #2).

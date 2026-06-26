@@ -58,15 +58,15 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
   host · n8n + Evolution API como serviços do bot. Detalhes operacionais em `PROJECT_CONTEXT.md §4`.
 
 ### Estrutura de pastas (backend)
-- `app/api/*` — 17 routers (auth, agenda, barbeiro, bot, clientes, conversations, crm, dashboard,
-  equipe, financeiro, health, integracoes, loyalty, reminders, servicos, wa_webhook).
+- `app/api/*` — 18 routers (auth, agenda, barbeiro, bot, clientes, conversations, crm, dashboard,
+  equipe, financeiro, health, integracoes, loyalty, memberships, reminders, servicos, wa_webhook).
 - `app/core/*` — `config`, `security`, `rbac`, `crypto`, `dates`, `phone`.
 - `app/services/*` — `scheduling`, `conversation`, `sse_broker`, `whatsapp`, `reminders`,
-  `reactivation`, `loyalty`, `google_calendar`, `calendar_sync`.
+  `reactivation`, `loyalty`, `google_calendar`, `calendar_sync`, `membership`.
 - `app/db/session.py` — engine async + `set_current_org()` (ativa RLS por transação).
 - `app/deps.py` — dependências de request (auth + sessão com tenant).
 - `models/*` — modelos SQLAlchemy (organization, plan, subscription, unit, user, barber, client,
-  appointment, payment, expense, service, lead, conversation, message, attachment, integration, enums).
+  appointment, payment, expense, service, lead, conversation, message, attachment, integration, membership, enums).
 - `barbearia-frontend/` — **repo git aninhado separado** (ver §7, remote morto).
 
 ---
@@ -150,13 +150,15 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
 **Implementado:** Login/RBAC · Agenda (CRUD + conflito + Google Calendar) · Clientes/CRM Kanban ·
 Inbox WhatsApp em tempo real (SSE) · Financeiro (resumo diário/mensal, despesas, comissões) ·
 Serviços · Equipe · Integrações (WhatsApp status/QR, Google Calendar OAuth) · Bot IA "Raquel" (n8n) ·
-Lembrete 24h e reativação de clientes.
+Lembrete 24h e reativação de clientes · **Mensalidade/Assinatura do cliente final** (planos com combo
+fixo + N usos/ilimitado, vigência, venda, consumo de pacote, renovação manual, expiração; receita
+rateada no uso — ver D-44).
 
 **Placeholders ("Em breve") no frontend:** `fidelidade`, `campanhas`, `empresa`, `usuarios`,
 `conversas` (redireciona p/ CRM inbox).
 
 **Pendente (visão do produto):** Caixa · Consumo de produtos no atendimento · Estoque/Produtos ·
-Pacotes/Assinaturas (saldo, validade, renovação, inadimplência) · Fidelização · Dashboard executivo
+Renovação **automática** de mensalidade (a manual já existe — D-44) · Fidelização · Dashboard executivo
 (comercial, financeiro, operacional, **leads fora do horário comercial / faturamento gerado pela IA**) ·
 Multi-tenant real no frontend · Arquitetura de múltiplos agentes.
 

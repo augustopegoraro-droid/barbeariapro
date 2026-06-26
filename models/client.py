@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .appointment import Appointment
     from .integration import MessageLog
     from .loyalty import ClientLoyalty
+    from .membership import ClientMembership
     from .organization import Organization
 
 
@@ -72,6 +73,9 @@ class Client(Base):
     messages: Mapped[List["MessageLog"]] = relationship(back_populates="client")
     loyalty: Mapped[Optional["ClientLoyalty"]] = relationship(
         back_populates="client", uselist=False
+    )
+    memberships: Mapped[List["ClientMembership"]] = relationship(
+        back_populates="client"
     )
 
 

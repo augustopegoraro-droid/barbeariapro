@@ -20,6 +20,7 @@ from .enums import (
     LoyaltyCategoria,
     LoyaltyNivel,
     LoyaltyStatus,
+    MembershipStatus,
     MessageDirection,
     MessageSenderType,
     MessageType,
@@ -41,6 +42,12 @@ from .integration import CalendarSync, IntegrationAccount, MessageLog
 from .loyalty import ClientLoyalty
 from .lead import Lead, LeadEvent
 from .conversation import Attachment, Conversation, Message
+from .membership import (
+    ClientMembership,
+    MembershipPlan,
+    MembershipPlanItem,
+    MembershipUsage,
+)
 
 __all__ = [
     "Base",
@@ -53,6 +60,7 @@ __all__ = [
     "DeliveryStatus",
     "IntegrationProvider",
     "IntegrationStatus",
+    "MembershipStatus",
     "MessageDirection",
     "MessageSenderType",
     "MessageType",
@@ -103,4 +111,9 @@ __all__ = [
     "Conversation",
     "Message",
     "Attachment",
+    # mensalidade / assinatura do cliente final
+    "MembershipPlan",
+    "MembershipPlanItem",
+    "ClientMembership",
+    "MembershipUsage",
 ]
