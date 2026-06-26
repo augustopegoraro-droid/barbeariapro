@@ -192,7 +192,10 @@ frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i1
     `SECRET_KEY` da VM **verificado 2026-06-26: forte** (64 chars, ~hex 256 bits) — o placeholder
     estava só no `.env` local, não em produção. **Não rotacionar** (sem ganho; derruba sessões).
   - 1.3 — limpar histórico git (`git filter-repo`) + force-push coordenado.
-  - 1.4 — fechar portas no firewall GCP; domínio + HTTPS; tornar webhook secret obrigatório.
+  - 1.4 ⏳ parcial *(2026-06-26)* — firewall GCP: removidas `allow-n8n` (5678) e `allow-evolution`
+    (8080); 5432 já estava fechada. Bot não afetado (fluxo interno). n8n/Evolution Manager agora só por
+    SSH tunnel (ver D-40). **Falta:** domínio + HTTPS (mover 8000/3000 para trás do nginx); tornar
+    webhook secret obrigatório (provisionar nos 2 lados).
 - **Fase 2 — Fundação de escala:** SSE → Postgres LISTEN/NOTIFY (ou Redis); pool/PgBouncer; `org_id`
   dinâmico no frontend; backups automatizados; mover frontend p/ remote vivo.
 - **Fase 3 — Qualidade:** React Query; extrair componentes reutilizáveis; quebrar páginas-monolito;
