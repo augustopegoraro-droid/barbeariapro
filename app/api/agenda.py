@@ -42,6 +42,7 @@ class AppointmentOut(BaseModel):
     id: int
     public_id: str
     client_name: Optional[str]
+    barber_id: int
     barber_name: str
     service_name: Optional[str]
     start_at: str
@@ -74,15 +75,17 @@ class AgendaCriarIn(BaseModel):
 
 class AgendaReagendar(BaseModel):
     start_at: datetime
+    barber_id: Optional[int] = None  # None = mantém o profissional atual
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
-def _appt_out(appt: Appointment, client_name: str, barber_name: str, service_name: str) -> AppointmentOut:
+def _appt_out(appt: Appointment, client_name: str, barber_id: int, barber_name: str, service_name: str) -> AppointmentOut:
     return AppointmentOut(
         id=appt.id,
         public_id=str(appt.public_id),
         client_name=client_name,
+        barber_id=barber_id,
         barber_name=barber_name,
         service_name=service_name,
         start_at=appt.start_at.isoformat(),
@@ -121,6 +124,7 @@ async def get_agenda(
             (i for i in sorted(appt.items, key=lambda x: x.position)),
             None,
         )
+        barber_id = primary.barber_id if primary else 0
         barber_name = primary.barber.name if primary else "—"
         service_name = primary.service.name if primary else None
 
@@ -134,6 +138,7 @@ async def get_agenda(
                 id=appt.id,
                 public_id=str(appt.public_id),
                 client_name=appt.client.name,
+                barber_id=barber_id,
                 barber_name=barber_name,
                 service_name=service_name,
                 start_at=appt.start_at.isoformat(),
@@ -147,6 +152,7 @@ async def get_agenda(
                 id=appt.id,
                 public_id=str(appt.public_id),
                 client_name=None,
+                barber_id=barber_id,
                 barber_name=barber_name,
                 service_name=None,
                 start_at=appt.start_at.isoformat(),
@@ -337,6 +343,7 @@ async def criar_agendamento(
         id=appt_id,
         public_id=public_id,
         client_name=client.name,
+        barber_id=barber.id,
         barber_name=barber.name,
         service_name=svc.name,
         start_at=start_iso,
@@ -383,19 +390,45 @@ async def reagendar_agendamento(
     duration = int((appt.end_at - appt.start_at).total_seconds() / 60)
     end_utc = start_utc + timedelta(minutes=duration)
 
-    # Verificar conflito para o mesmo barbeiro no novo horário (excluindo o próprio)
     primary_item = next((i for i in sorted(appt.items, key=lambda x: x.position)), None)
-    if primary_item:
-        if await barber_has_conflict(
-            db, primary_item.barber_id, start_utc, end_utc, exclude_appointment_id=appt_id
-        ):
-            raise HTTPException(http_status.HTTP_409_CONFLICT, "Conflito de horário: barbeiro já tem agendamento ou folga neste período.")
+    if not primary_item:
+        raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, "Agendamento sem item.")
+
+    # Trocar de profissional (drag entre colunas). None/0 = mantém o atual.
+    new_barber_id = body.barber_id or primary_item.barber_id
+    new_barber_name = primary_item.barber.name
+    if new_barber_id != primary_item.barber_id:
+        new_barber = (
+            await db.execute(select(Barber).where(Barber.id == new_barber_id))
+        ).scalar_one_or_none()
+        if not new_barber or new_barber.deleted_at is not None:
+            raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Barbeiro não encontrado.")
+        # O novo profissional precisa executar o mesmo serviço do item
+        bs_link = (
+            await db.execute(
+                select(BarberService)
+                .where(BarberService.barber_id == new_barber_id)
+                .where(BarberService.service_id == primary_item.service_id)
+            )
+        ).scalar_one_or_none()
+        if not bs_link:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Este profissional não realiza este serviço.",
+            )
+        new_barber_name = new_barber.name
+
+    # Verificar conflito no NOVO barbeiro no novo horário (excluindo o próprio)
+    if await barber_has_conflict(
+        db, new_barber_id, start_utc, end_utc, exclude_appointment_id=appt_id
+    ):
+        raise HTTPException(http_status.HTTP_409_CONFLICT, "Conflito de horário: barbeiro já tem agendamento ou folga neste período.")
 
     appt.start_at = start_utc
     appt.end_at = end_utc
+    primary_item.barber_id = new_barber_id
     await db.commit()
 
     background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
-    barber_name = primary_item.barber.name if primary_item else "—"
-    service_name = primary_item.service.name if primary_item else None
-    return _appt_out(appt, appt.client.name, barber_name, service_name)
+    service_name = primary_item.service.name
+    return _appt_out(appt, appt.client.name, new_barber_id, new_barber_name, service_name)
