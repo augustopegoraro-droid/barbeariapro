@@ -329,8 +329,30 @@ gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-ea
 # Evolution Manager → http://localhost:8080/manager
 gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a -- -L 8080:localhost:8080
 ```
-**Pendente:** rotacionar credencial OpenAI/n8n exposta em `credentials.json` (histórico git) + limpar
-histórico (`git filter-repo`); HTTPS/domínio; tornar webhook secret obrigatório (provisionar nos 2 lados).
+**Atualização (mesmo dia):** ✅ **chave OpenAI rotacionada e a antiga REVOGADA** (validado end-to-end; n8n
+usa OpenAI na credencial `openAiApi` E em `$env.OPENAI_API_KEY`).
+**Pendente:** limpar histórico git de `credentials.json` (`git filter-repo` + force-push — seguro, chave já
+revogada); HTTPS/domínio; tornar webhook secret obrigatório (provisionar nos 2 lados); **deploy do Fase 1.1
+na VM** (VM ainda em `3e138b5`).
+
+### D-41 — Bot WhatsApp não entrega: número restrito → migrar para Cloud API oficial
+**Data:** 2026-06-26
+**Contexto:** Bot recebia mensagens mas NÃO entregava as respostas. Diagnóstico exaustivo isolou a causa.
+**Descartado (tudo verificado OK):** OpenAI (rotacionada), CRM, n8n, webhook, firewall, sessão Signal
+(instância recriada do zero), e **versão da Evolution** (upgrade testado até `2.4.0-rc2` com suporte a LID
++ licença ativada — mesmo erro `Closing session/pendingPreKey` → `status: ERROR`). Falha **global** (2
+números distintos testados).
+**Conclusão:** o número do bot **`5563920001734` está restrito pelo WhatsApp** (recebe, descarta a saída).
+Nenhuma mudança de software resolve.
+**Decisões:**
+1. **Rollback da Evolution para 2.3.7** (estável; a 2.4.0-rc exige licença Evolution Foundation + heartbeat
+   5min = dependência externa indesejada). Imagem fixada na digest `@sha256:966625532d90...`.
+2. **Correção real escolhida: migrar para a WhatsApp Cloud API oficial (Meta)** — sem Baileys/ban/LID.
+   Requer: Meta Business verificado + número DEDICADO limpo + templates aprovados (p/ lembrete/reativação,
+   que são proativos >24h). Trabalho no nosso lado: reescrever `app/services/whatsapp.py` (Graph API),
+   novo parser de webhook (formato Meta + verificação de assinatura), repontar envio no n8n, templates, mídia.
+**Backups (rollback Evolution):** `/opt/barbeariapro/backups/evolution_db_20260626_1221.sql` +
+`docker-compose.yml.bak-2.3.7`.
 
 ---
 

@@ -1,10 +1,46 @@
 # PROJECT_CONTEXT.md
 > Fonte de verdade para novas sessões de desenvolvimento.
-> Verificado contra o código E contra a VM de produção em **2026-06-25** (2ª sessão: auditoria bot + integracoes WhatsApp).
+> Verificado contra o código E contra a VM de produção em **2026-06-26** (auditoria arquitetural + segurança + incidente WhatsApp).
+> **Leia também `CLAUDE.md`** (raiz) — memória técnica viva criada em 2026-06-26 (arquitetura, fluxos, convenções, roadmap).
 
 ---
 
-## 0. LEIA PRIMEIRO — o que mudou em 2026-06-25 (2ª sessão)
+## 0. LEIA PRIMEIRO — o que mudou em 2026-06-26
+
+### 🔴 BLOQUEIO CRÍTICO ATIVO — Bot WhatsApp NÃO ENTREGA respostas
+O bot **recebe** mensagens (CRM/Inbox OK) mas **não entrega** as respostas no WhatsApp.
+Diagnóstico **exaustivo e conclusivo** (ver `DECISIONS.md` D-41): descartado TODO o software —
+OpenAI, CRM, n8n, webhook, firewall, sessão Signal (instância recriada do zero) e **versão da Evolution**
+(testado upgrade até `2.4.0-rc2` com suporte a LID + licença ativada → mesmo erro `Closing
+session/pendingPreKey` → `status: ERROR`, **global** em 2 números distintos).
+**Causa raiz: o número do bot `5563920001734` está RESTRITO pelo WhatsApp** (recebe, descarta a saída).
+**Nenhuma mudança de código resolve.** Decisão: **migrar para a WhatsApp Cloud API oficial (Meta)** com
+um **número DEDICADO novo**. Evolução = projeto à parte (pré-requisitos Meta + reescrever
+`app/services/whatsapp.py` p/ Graph API + novo parser de webhook + templates). NÃO insistir em Evolution/Baileys.
+
+### 🟢 Segurança — Fase 1 (parcial)
+1. **`CLAUDE.md` criado** (commit `15692b4`) = memória técnica viva.
+2. **Fase 1.1 commitada** (`13822a1`): helper `secrets_match()` (`app/core/security.py`, comparação
+   tempo-constante) usado em `app/deps.py` (X-Bot-Token) e `app/api/wa_webhook.py` (X-Webhook-Secret);
+   `print` de debug do webhook → `_logger.debug`. **⚠️ AINDA NÃO DEPLOYADO na VM** (VM roda `3e138b5`,
+   ainda com o `print`). Deploy pendente: `git pull` + rebuild backend.
+3. **Firewall GCP endurecido** (D-40): removidas `allow-n8n` (5678) e `allow-evolution` (8080); 5432 já
+   estava fechada. **n8n e Evolution Manager agora só por SSH tunnel** (ver §12). Restam abertas 8000/3000.
+4. **`SECRET_KEY` de produção verificado: FORTE** (256 bits) — NÃO rotacionar (placeholder estava só no `.env` local).
+5. **Chave OpenAI rotacionada** — a antiga (vazada em `credentials.json` no histórico git) foi **revogada**;
+   nova validada end-to-end. n8n usa OpenAI em 2 lugares (credencial `openAiApi` + `$env.OPENAI_API_KEY`).
+6. **Pendente:** 1.3 limpar histórico git (`credentials.json` ainda no histórico, mas a chave que ele
+   protegia já está revogada) · 1.4b HTTPS/domínio · deploy do 1.1 na VM.
+
+### Evolution — estado após o incidente
+- Rollback para **v2.3.7** concluído; instância `Barbearia` `open` (sobreviveu ao rollback).
+- `docker-compose.yml` **da VM** agora fixa a imagem na **digest** `@sha256:966625532d90...` (NÃO `:latest`,
+  para não puxar a 2.4 de novo). **Diverge do repo** (que ainda tem `:latest`).
+- Backups do incidente em `/opt/barbeariapro/backups/` (`evolution_db_20260626_1221.sql` + `docker-compose.yml.bak-2.3.7`).
+
+---
+
+## 0.1 Sessão anterior — o que mudou em 2026-06-25 (2ª sessão)
 
 1. **Bot corrigido** — system prompt do AI Agent atualizado: Marciana (id=3), Sandra (id=4) e Pablo (id=5)
    adicionados à seção `OS BARBEIROS`. O prompt anterior listava apenas Taylor e Thedy, causando o bot
@@ -50,8 +86,10 @@ Objetivo comercial: vender para mais barbearias; concorre com Trinks.
 > `https://github.com/DoctorDCombo/barbearia-frontend.git` — **este repo NÃO EXISTE mais**.
 > Commits locais existem mas não têm push remoto funcional. Deploy é feito via scp+SSH+docker build na VM.
 
-**Estado git (2026-06-25, 2ª sessão):**
-- Backend (`main`): commit `3e138b5` — local e VM em sync.
+**Estado git (2026-06-26):**
+- Backend repo (`main`): commit **`2dd94f1`** (+ `DECISIONS.md` com D-40/D-41 **ainda não commitado**).
+- Backend **na VM**: commit **`3e138b5`** — **ATRÁS do repo** pelos commits de segurança (Fase 1.1 + CLAUDE.md).
+  Deploy do 1.1 na VM ainda **pendente** (`git pull` + rebuild backend).
 - Frontend (`main`): commit `f5397a8` — apenas local (push remoto falha; deploy via scp+build na VM).
 
 **Procedimento de deploy backend (sem mudança de dependências):**
@@ -142,14 +180,16 @@ n8n                         :5678   Up        n8n v2.27.3
 ### Acessos
 - **App frontend:** `http://34.95.199.134` (porta 80 via nginx) ou `:3000` direto
 - **App backend:** `http://34.95.199.134:8000`
-- **n8n editor:** `http://34.95.199.134:5678` — login: `admin@barbearia.com` / `Barbearia2026`
-- **Evolution manager:** `http://34.95.199.134:8080/manager`
+- **n8n editor:** **só via SSH tunnel** → `gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a -- -N -L 5678:localhost:5678` então `http://localhost:5678` — login: `admin@barbearia.com` / `Barbearia2026` (mantenha UM único túnel por porta)
+- **Evolution manager:** **só via SSH tunnel** → `... -- -N -L 8080:localhost:8080` então `http://localhost:8080/manager`
 - **Postgres (admin):** `docker exec barbeariapro-postgres psql -U postgres -d barbeariapro`
 - **Página integrações (conectar WhatsApp):** `http://34.95.199.134:3000/admin/integracoes`
 
-### Firewall (target-tag `http-server`)
-`allow-evolution` (8080), `allow-n8n` (5678), `allow-backend` (8000), `allow-frontend` (3000), porta 80 aberta.
-> ⚠️ Todas as portas abertas ao mundo. HTTPS ainda NÃO configurado (domínio não registrado).
+### Firewall (target-tag `http-server`) — endurecido em 2026-06-26 (D-40)
+Abertas: `allow-backend` (8000), `allow-frontend` (3000), porta 80, 443, 22.
+**FECHADAS:** `allow-n8n` (5678) e `allow-evolution` (8080) removidas; 5432 (Postgres) já estava fechada.
+> ⚠️ n8n editor e Evolution Manager **NÃO são mais acessíveis pela internet** — só por **SSH tunnel** (ver §12).
+> HTTPS ainda NÃO configurado (domínio não registrado). 8000/3000 ainda abertas (browser chama direto).
 
 ---
 
@@ -190,7 +230,8 @@ GET  /integracoes/whatsapp/qr                     — { qr: "data:image/png;base
 - **`messages.upsert`** (fromMe=false): grava mensagem do cliente (`sender_type=client`) → SSE imediato
 - **`send.message`**: evento para msgs enviadas pelo bot; grava como `sender_type=bot`; NÃO encaminha ao n8n
 - Outros eventos: encaminhados ao n8n em background (retry 3× com backoff)
-- Debug temporário: `print(f"[WA_WEBHOOK] event=...")` — **REMOVER** após confirmar `send.message`
+- ~~Debug `print(f"[WA_WEBHOOK]...")`~~ → trocado por `_logger.debug` no repo (commit `13822a1`).
+  ⚠️ A VM ainda roda `3e138b5` (com o `print`) até o deploy do Fase 1.1.
 
 ### Endpoints `/crm/*` (JWT, conversations.py) — Inbox em tempo real
 `GET /crm/conversations`, `GET /crm/conversations/search?q=`,
@@ -312,8 +353,16 @@ se `EVOLUTION_API_URL` **ou** `EVOLUTION_INSTANCE_NAME` estiverem vazios.
 
 ## 12. Bot WhatsApp / n8n (produção)
 
-- **Evolution:** v2.3.7, instância **`Barbearia`** (B maiúsculo). WhatsApp pareado ao número `5563920001734`.
-- **instanceId Evolution:** `6c3d8682-7d76-49cb-b0b4-e05893764c78` (recriada em 2026-06-25)
+> 🔴 **ENVIO BLOQUEADO (2026-06-26):** o bot **recebe** mas **não entrega** respostas — número
+> `5563920001734` restrito pelo WhatsApp (ver §0 e D-41). IA gera a resposta e grava no CRM, mas a
+> Evolution emite `send.message` com `status: ERROR` (`Closing session/pendingPreKey`). Confirmado global
+> (não é versão/LID/sessão). **Correção = migrar p/ WhatsApp Cloud API com número novo dedicado.**
+
+- **Evolution:** **v2.3.7** fixada na **digest** `@sha256:966625532d90...` no `docker-compose.yml` da VM
+  (após rollback do upgrade 2.4.0-rc2 que NÃO resolveu). Instância **`Barbearia`** (B maiúsculo), número `5563920001734`.
+- **instanceId Evolution:** recriado em 2026-06-26 (a instância foi deletada e recriada do zero durante o
+  diagnóstico; o id muda a cada recriação — consultar via `GET /instance/fetchInstances`).
+- **Acesso à Evolution/n8n:** só por **SSH tunnel** (portas 8080/5678 fechadas no firewall — D-40/D-35).
 - **Webhook Evolution:** `http://host.docker.internal:8000/bot/wa-webhook` ← FASTAPI, não n8n
 - **Eventos webhook:** `MESSAGES_UPSERT`, `MESSAGES_UPDATE`, `SEND_MESSAGE`, `CONNECTION_UPDATE`, `QRCODE_UPDATED`
 - **n8n v2.27.3** — login: `admin@barbearia.com` / `Barbearia2026`

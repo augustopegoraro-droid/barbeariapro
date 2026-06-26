@@ -1,31 +1,40 @@
 # CURRENT_SPRINT.md
-> Estado do desenvolvimento em **2026-06-25**. Atualizar a cada sessão.
+> Estado do desenvolvimento em **2026-06-26**. Atualizar a cada sessão.
+> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-41), `CLAUDE.md` (memória técnica).
 
 ---
 
 ## Branch ativo
 
-- **Backend** (`main`): commit `3e138b5` — local e VM em sync.
+- **Backend repo** (`main`): commit **`2dd94f1`** (+ `DECISIONS.md` com D-40/D-41 **não commitado**).
+- **Backend na VM**: commit **`3e138b5`** — **atrás do repo**; deploy da Fase 1.1 **pendente**.
 - **Frontend** (`main`): commit `f5397a8` — local. Deploy na VM via scp+build (repo remoto não existe).
 
 ---
 
-## 🔴 TAREFA EM ABERTO — Bot responses no CRM Inbox
+## 🔴 BLOQUEIO Nº 1 — Bot WhatsApp NÃO ENTREGA respostas (número restrito)
 
-**Status:** Mensagens de **cliente** aparecem no Inbox ✅. Mensagens do **bot** NÃO confirmadas ❌.
+**Status:** recebe ✅ / **não envia ❌**. Causa raiz **confirmada** (D-41): número `5563920001734`
+**restrito pelo WhatsApp**. Descartado todo o software (OpenAI/CRM/n8n/webhook/sessão/**versão Evolution
+até 2.4.0-rc2 com LID**). Falha global (2 números testados, `status: ERROR`).
 
-**PRÓXIMO PASSO OBRIGATÓRIO (primeiro ato da próxima sessão de backend):**
-```bash
-# 1. Enviar mensagem WhatsApp de teste para o número da barbearia
-# 2. Aguardar resposta do bot
-# 3. Ler logs do backend:
-gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a --command=\
-  "docker logs barbeariapro-app-backend --since=5m 2>&1 | grep -v health"
-```
-O log mostrará `[WA_WEBHOOK] event=...` para todos os eventos recebidos.
-Após confirmar que `send.message` é recebido e bot messages aparecem no DB:
-- Substituir `print` por `_logger.debug` em `wa_webhook.py`
-- Marcar como ✅ aqui
+**PRÓXIMO PASSO (decisão tomada):** **migrar para WhatsApp Cloud API oficial (Meta)** com **número novo dedicado**.
+- Pré-requisitos do usuário: Meta Business verificado + número limpo dedicado + templates aprovados (lembrete/reativação).
+- Trabalho nosso: reescrever `app/services/whatsapp.py` (Graph API `POST /{phone_id}/messages`); novo parser
+  de webhook (formato Meta + verificação `X-Hub-Signature-256` + handshake `hub.challenge`); repontar envio
+  no n8n; templates; mídia. Manter Evolution como fallback até validar.
+- **NÃO** insistir em Evolution/Baileys nem em upgrade de versão (já testado e descartado).
+- Diagnóstico rápido p/ revalidar: `POST /message/sendText/Barbearia` direto na Evolution (via SSH) → se
+  `status: ERROR` global, segue restrito.
+
+## 🟢 Sessão 2026-06-26 — Auditoria arquitetural + Segurança (Fase 1) + incidente WhatsApp
+
+- **Auditoria completa** do projeto + **`CLAUDE.md`** criado (memória técnica viva) — commit `15692b4`.
+- **Fase 1.1 segurança** (commit `13822a1`): `secrets_match()` (tempo-constante) em `security.py`, usado em
+  `deps.py`/`wa_webhook.py`; `print` debug → `_logger.debug`. **Falta deploy na VM.**
+- **Firewall** (D-40): 5678/8080 fechadas (n8n/Evolution só por SSH tunnel). **`SECRET_KEY` prod: forte** (não rotacionar).
+- **Chave OpenAI rotacionada e antiga revogada** (vazara em `credentials.json` no histórico git).
+- **Incidente WhatsApp** (D-41): upgrade Evolution 2.4.0-rc2 testado e **revertido p/ 2.3.7** (digest pinada na VM).
 
 ---
 
@@ -110,16 +119,22 @@ VM estava TERMINATED desde ~24/06 — bot offline, cron parado. Sessão focada e
 
 ---
 
-## Pendências prioritárias
+## Pendências prioritárias (2026-06-26)
 
-- [ ] **[CRÍTICO] Confirmar bot responses no Inbox** — debug print ativo; ver "TAREFA EM ABERTO" acima
-- [ ] **Remover debug logging** (`print [WA_WEBHOOK]`) após confirmar evento Evolution
-- [ ] **HTTPS + domínio** — nginx configurado; falta registrar `taylorethedy.app` e rodar certbot
-- [ ] **Fechar portas** ao mundo após HTTPS (5678/8000/3000/8080 abertas)
-- [ ] **Backup automatizado** dos volumes Docker (VM já foi zerada uma vez; ficou TERMINATED em 2026-06-25)
-- [ ] **Configurar auto-restart** da VM ou alerta quando VM cair (WhatsApp cai junto)
-- [ ] **`workflows.json` local diverge da VM** — exportar da VM antes de qualquer edição local
-- [ ] **Frontend git remoto** — `DoctorDCombo/barbearia-frontend` não existe; considerar mover para `augustopegoraro-droid/barbeariapro` ou criar novo repo
+- [ ] **[CRÍTICO] Migrar WhatsApp p/ Cloud API** (D-41) — bot não entrega; número restrito. Ver BLOQUEIO Nº 1.
+- [ ] **Deploy da Fase 1.1 na VM** — repo `main` (`2dd94f1`) à frente; VM em `3e138b5` (ainda com `print`).
+      `git pull` + rebuild backend (ver PROJECT_CONTEXT §2).
+- [ ] **Commitar `DECISIONS.md`** (D-40/D-41 estão no working tree, não commitados).
+- [ ] **Fase 1.3 — limpar histórico git** de `credentials.json` (`git filter-repo` + force-push). Seguro
+      agora (chave já revogada).
+- [ ] **HTTPS + domínio** — nginx pronto; falta registrar domínio + certbot. Depois mover 8000/3000 p/ trás do nginx.
+- [ ] **Reconciliar `docker-compose.yml`** repo vs VM (VM fixou Evolution na digest 2.3.7; repo tem `:latest`).
+- [ ] **Backup automatizado** dos volumes/DB Docker · **auto-restart da VM** (WhatsApp cai quando a VM reinicia).
+- [ ] **Frontend git remoto** — remote morto (`DoctorDCombo/...`); mover p/ repo vivo (risco de perda de histórico).
+- [ ] **`workflows.json` local diverge da VM** — exportar da VM antes de editar.
+
+> Frentes de produto saudáveis para avançar em paralelo (ver `CLAUDE.md` §8): Frontend F3 (quebrar
+> monólitos CRM 1389/Agenda 720), Caixa, Pacotes/Assinaturas, Dashboard executivo.
 
 ---
 
