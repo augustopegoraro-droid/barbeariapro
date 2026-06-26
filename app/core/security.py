@@ -3,13 +3,25 @@
 
 from __future__ import annotations
 
+import hmac
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional
 
 import bcrypt
 from jose import jwt
 
 from app.core.config import settings
+
+
+def secrets_match(provided: Optional[str], expected: str) -> bool:
+    """Compara dois segredos em tempo constante (resistente a timing attack).
+
+    Retorna False se o valor recebido for vazio/ausente. Use para validar
+    tokens estáticos como X-Bot-Token e X-Webhook-Secret.
+    """
+    if not provided or not expected:
+        return False
+    return hmac.compare_digest(provided, expected)
 
 
 def hash_password(plain: str) -> str:

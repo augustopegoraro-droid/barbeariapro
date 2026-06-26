@@ -306,6 +306,54 @@ SELECT id, name FROM barbers WHERE organization_id=1 AND deleted_at IS NULL;
 ### D-25 — `Dockerfile.migrate.dockerignore` para builds de migration
 **Motivo:** `.dockerignore` principal exclui `alembic/`; builds de migration precisam dele.
 
+### D-40 — Auditoria arquitetural + endurecimento de segurança (Fase 1)
+**Data:** 2026-06-26
+**Contexto:** Início do trabalho de evolução para plataforma SaaS multi-tenant. Auditoria completa
+salva em `~/.claude/plans/partitioned-greeting-stearns.md`; memória técnica viva criada em `CLAUDE.md`.
+**Decisões:**
+1. **`CLAUDE.md`** passa a ser a memória técnica viva do repo (referencia, não duplica, este arquivo).
+2. **IA continua no n8n** (expandir tools REST `/bot/*`); não construir camada de agentes no backend agora.
+3. **Prioridade = Segurança primeiro.** Fase 1.1 aplicada (commit `13822a1`): `print` de debug do
+   webhook trocado por `logger.debug`; comparação de `X-Bot-Token`/`X-Webhook-Secret` agora é
+   tempo-constante via `app.core.security.secrets_match()`.
+4. **`SECRET_KEY` de produção verificado: forte** (64 chars ~hex 256 bits). **NÃO rotacionar** — o
+   placeholder `troque-isto...` existia só no `.env` local, nunca em produção.
+5. **Firewall GCP endurecido:** removidas as regras `allow-n8n` (5678) e `allow-evolution` (8080).
+   Postgres 5432 já estava fechado (sem regra de allow). Bot/WhatsApp **não afetados** (fluxo interno
+   via `host.docker.internal`): Evolution `state=open`, n8n 200, backend 200 após a mudança.
+**Consequências:** n8n editor e Evolution Manager **não são mais acessíveis direto pela internet**.
+Acesso agora só por SSH tunnel:
+```bash
+# n8n editor → http://localhost:5678
+gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a -- -L 5678:localhost:5678
+# Evolution Manager → http://localhost:8080/manager
+gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a -- -L 8080:localhost:8080
+```
+**Atualização (mesmo dia):** ✅ **chave OpenAI rotacionada e a antiga REVOGADA** (validado end-to-end; n8n
+usa OpenAI na credencial `openAiApi` E em `$env.OPENAI_API_KEY`).
+**Pendente:** limpar histórico git de `credentials.json` (`git filter-repo` + force-push — seguro, chave já
+revogada); HTTPS/domínio; tornar webhook secret obrigatório (provisionar nos 2 lados); **deploy do Fase 1.1
+na VM** (VM ainda em `3e138b5`).
+
+### D-41 — Bot WhatsApp não entrega: número restrito → migrar para Cloud API oficial
+**Data:** 2026-06-26
+**Contexto:** Bot recebia mensagens mas NÃO entregava as respostas. Diagnóstico exaustivo isolou a causa.
+**Descartado (tudo verificado OK):** OpenAI (rotacionada), CRM, n8n, webhook, firewall, sessão Signal
+(instância recriada do zero), e **versão da Evolution** (upgrade testado até `2.4.0-rc2` com suporte a LID
++ licença ativada — mesmo erro `Closing session/pendingPreKey` → `status: ERROR`). Falha **global** (2
+números distintos testados).
+**Conclusão:** o número do bot **`5563920001734` está restrito pelo WhatsApp** (recebe, descarta a saída).
+Nenhuma mudança de software resolve.
+**Decisões:**
+1. **Rollback da Evolution para 2.3.7** (estável; a 2.4.0-rc exige licença Evolution Foundation + heartbeat
+   5min = dependência externa indesejada). Imagem fixada na digest `@sha256:966625532d90...`.
+2. **Correção real escolhida: migrar para a WhatsApp Cloud API oficial (Meta)** — sem Baileys/ban/LID.
+   Requer: Meta Business verificado + número DEDICADO limpo + templates aprovados (p/ lembrete/reativação,
+   que são proativos >24h). Trabalho no nosso lado: reescrever `app/services/whatsapp.py` (Graph API),
+   novo parser de webhook (formato Meta + verificação de assinatura), repontar envio no n8n, templates, mídia.
+**Backups (rollback Evolution):** `/opt/barbeariapro/backups/evolution_db_20260626_1221.sql` +
+`docker-compose.yml.bak-2.3.7`.
+
 ---
 
 ## Dívida técnica conhecida (não resolver sem discussão)
@@ -313,11 +361,11 @@ SELECT id, name FROM barbers WHERE organization_id=1 AND deleted_at IS NULL;
 | Item | Arquivo | Severidade | Observação |
 |---|---|---|---|
 | Sem backup dos volumes Docker da VM | infra VM | ⚠️ Alto | VM ficou TERMINATED em 2026-06-25 |
-| Debug print temporário no webhook | `app/api/wa_webhook.py` | ⚠️ Médio | Remover após confirmar send.message |
+| ~~Debug print temporário no webhook~~ | `app/api/wa_webhook.py` | ✅ Resolvido | D-40: trocado por `logger.debug` (commit `13822a1`) |
 | Bot responses não confirmadas no CRM | fluxo n8n + Evolution | ⚠️ Alto | Pendente confirmação end-to-end |
 | Frontend sem remote git funcional | `barbearia-frontend/.git` | ⚠️ Médio | DoctorDCombo/barbearia-frontend não existe |
 | HTTPS / domínio não configurado | infra VM | Médio | nginx pronto; falta registrar taylorethedy.app |
-| Portas abertas ao mundo na VM | firewall GCP | Médio | 5678/8000/3000/8080 públicas; fechar após HTTPS |
+| Portas abertas ao mundo na VM | firewall GCP | Médio (reduzido) | D-40: 5678/8080 fechadas; 5432 já fechada. Restam 8000/3000 (uso direto do browser) — mover p/ nginx+HTTPS |
 | Estado do bot em memória (debounce) | `app/api/bot.py` | Médio | Restart perde estado. Aguarda Redis. |
 | SSE single-process | `app/services/sse_broker.py` | Baixo | Não funciona com múltiplos workers |
 | Token JWT visível em query string do SSE | `GET /crm/stream?token=` | Baixo | Aceitável para MVP interno |

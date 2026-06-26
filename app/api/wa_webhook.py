@@ -20,6 +20,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.security import secrets_match
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.services import conversation as conv_svc
 from app.services.conversation import MediaIn
@@ -42,8 +43,13 @@ _MSG_TYPE_MAP: dict[str, MessageType] = {
 async def _get_webhook_db(
     x_webhook_secret: Annotated[Optional[str], Header(alias="X-Webhook-Secret")] = None,
 ) -> AsyncIterator[AsyncSession]:
-    """Sessão DB para o webhook da Evolution. Valida X-Webhook-Secret se configurado."""
-    if settings.wa_webhook_secret and x_webhook_secret != settings.wa_webhook_secret:
+    """Sessão DB para o webhook da Evolution. Valida X-Webhook-Secret se configurado.
+
+    Comparação em tempo constante. Enquanto WA_WEBHOOK_SECRET estiver vazio o
+    header é opcional (comportamento atual de produção). Tornar obrigatório
+    exige antes provisionar o segredo na Evolution e no .env da VM (Fase 1.4).
+    """
+    if settings.wa_webhook_secret and not secrets_match(x_webhook_secret, settings.wa_webhook_secret):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Webhook secret inválido")
     if not settings.bot_organization_id:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -137,8 +143,10 @@ async def evolution_webhook(
     """
     payload: dict = await request.json()
     event: str = payload.get("event", "")
-    data_keys = list(payload.get("data", {}).keys())
-    print(f"[WA_WEBHOOK] event={event!r} instance={payload.get('instance')} data_keys={data_keys}", flush=True)
+    _logger.debug(
+        "wa_webhook recebido event=%r instance=%r data_keys=%s",
+        event, payload.get("instance"), list(payload.get("data", {}).keys()),
+    )
 
     # Não encaminha send.message ao n8n para evitar loop (bot responde, n8n recebe, gera outra resposta...)
     if event != "send.message":

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.rbac import resolve_role, resolve_role_with_barber
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, secrets_match
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.schemas.auth import TokenData
 from models import Unit, User, UserUnit
@@ -57,7 +57,7 @@ async def get_bot_db(
     x_bot_token: Annotated[Optional[str], Header(alias="X-Bot-Token")] = None,
 ) -> AsyncIterator[AsyncSession]:
     """Sessão para o chatbot: autentica via X-Bot-Token header."""
-    if not settings.bot_api_key or x_bot_token != settings.bot_api_key:
+    if not secrets_match(x_bot_token, settings.bot_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Bot token inválido ou ausente",
