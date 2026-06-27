@@ -594,6 +594,39 @@ Backups pré-deploy: `backups/predeploy_0015_*.sql` (DB) + `backups/frontend_src
 
 ---
 
+### D-49 — CRM/atendimento via Chatwoot (VM nova) + WhatsApp Cloud API; backend = sistema de registro
+
+**Data:** 2026-06-27 (7ª sessão)
+**Contexto:** o pedido inicial ("integrar Supabase ao Chatwoot p/ criar o CRM") embolava três decisões
+distintas. Após esclarecer a motivação (multi-operador, omnichannel, sair da VM única, insatisfação com o
+CRM custom e **Evolution quebrada**) e revalidar o D-41 (número restrito; conserto da Evolution **esgotado**,
+testado até 2.4.0-rc2), a rota foi redesenhada.
+
+**Decisões:**
+1. **Chatwoot self-hosted em VM nova** assume Inbox conversacional + atendimento humano multi-operador
+   (atribuição/transferência) + omnichannel (WhatsApp/Instagram/e-mail/site). **Aposenta as Fases 4/5/6** de
+   `CRM_WHATSAPP_EVOLUCAO_ROADMAP.md` (Inbox 3 painéis, SSE, envio humano) — Chatwoot entrega isso pronto.
+2. **WhatsApp via Cloud API oficial (Meta) + número novo dedicado.** Abandona Evolution/Baileys no fluxo do
+   bot (alinhado ao D-41; Cloud API é nativo no Chatwoot). Lembrete/reativação (proativos >24h) exigem
+   **templates aprovados**.
+3. **Backend FastAPI/Postgres permanece o sistema de registro** — funil/Kanban, agenda, financeiro, clientes,
+   assinaturas **não** migram. RLS multi-tenant continua sendo do backend (Chatwoot não tem RLS; hoje é org 1).
+4. **Raquel (IA) vira Agent Bot do Chatwoot:** n8n acionado por webhook do Chatwoot, responde pela API dele;
+   handoff bot↔humano nativo (substitui `clients.bot_paused`). Tools `/bot/*` preservadas.
+5. **Supabase fora do escopo** — "Postgres gerenciado" é decisão de infra separada (avaliar depois: Supabase
+   vs Cloud SQL vs Neon, com LGPD).
+
+**Impacto no código (localizado):** saída = repontar `app/services/whatsapp.py::send_text` (hoje POST à
+Evolution) p/ Graph API/Chatwoot; entrada = o parser Evolution de `app/api/wa_webhook.py` sai do caminho;
+surge webhook novo Chatwoot→FastAPI (upsert lead/cliente + avanço de funil). Containers `evolution_*`
+arquivados após cutover.
+
+**Plano:** `CHATWOOT_CLOUD_API_ARQUITETURA.md` (visão + roadmap F0–F5) e
+`CHATWOOT_FASE1_FASE4_SPEC.md` (provisionamento da VM/compose + contrato do webhook). **Status:** plano —
+nada implementado. **Começar pela Fase 0** (Meta Business + número novo — gargalo externo de prazo).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

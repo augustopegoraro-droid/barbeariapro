@@ -19,6 +19,7 @@ from app.core.dates import local_tz
 from app.core.phone import normalize_phone
 from app.deps import get_bot_db
 from app.services.scheduling import barber_has_conflict
+from app.services.lead_funnel import advance_lead_on_inbound
 from app.services.loyalty import recalculate as _recalculate_loyalty
 import app.services.conversation as _conv_svc
 from app.services.conversation import MediaIn as _MediaIn
@@ -295,37 +296,9 @@ async def log_message(body: _MessageLogIn, db: BotDB, _auth: _BotAuth = None):
         await db.commit()
         return {"ok": True, "duplicate": True}
 
-    # ── avanço de estágio do funil — INALTERADO (só quando há cliente+lead) ──
+    # ── avanço de estágio do funil — caminho ÚNICO (helper compartilhado com /chatwoot) ──
     if direction == MessageDirection.inbound and client is not None:
-        lead = (
-            await db.execute(
-                select(Lead)
-                .where(Lead.client_id == client.id)
-                .where(Lead.organization_id == org_id)
-                .where(Lead.stage.in_({LeadStage.novo_contato, LeadStage.conversando}))
-                .order_by(Lead.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
-        if lead is not None:
-            lead.last_contact_at = now
-            lead.updated_at = now
-            if lead.stage == LeadStage.novo_contato:
-                old_stage = lead.stage
-                lead.stage = LeadStage.conversando
-                db.add(
-                    LeadEvent(
-                        lead_id=lead.id,
-                        organization_id=org_id,
-                        event_type="stage_changed",
-                        from_stage=old_stage,
-                        to_stage=LeadStage.conversando,
-                    )
-                )
-                _logger.info(
-                    "conversation_log lead_id=%d stage novo_contato→conversando", lead.id
-                )
+        await advance_lead_on_inbound(db, org_id=org_id, client_id=client.id, now=now)
 
     await db.commit()
     _logger.info("conversation_log saved direction=%s phone=%s", direction.value, phone)
