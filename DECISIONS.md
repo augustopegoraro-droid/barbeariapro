@@ -442,6 +442,42 @@ pendentes em produção — rodar como `postgres`/`ADMIN_DATABASE_URL`, app não
 
 ---
 
+### D-45 — Tela `/admin/empresa`: configuração do negócio (cadastro, funcionamento, plano)
+
+**Contexto:** `/admin/empresa` era placeholder "Em breve". A `Organization` só tinha `name` — faltava o
+cadastro do negócio (razão social, CNPJ, contato, logo), base para o white-label "Taylor & Thedy" e para o
+SaaS multi-empresa. Endereço/timezone e horário de funcionamento já existiam em `Unit`/`BusinessHours` mas
+sem endpoints. Implementados os eixos 1 (cadastrais), 2 (endereço/horário) e 4 (plano) — eixo 3 (integrações)
+ficou de fora por já existir em `/admin/integracoes`.
+
+**Decisões de design:**
+- **Aditivo/retrocompat:** migration `0014_organization_profile` adiciona 7 colunas nullable em `organizations`
+  (`legal_name, cnpj, phone, email, website, instagram, logo_url`). GRANT defensivo idempotente (`SELECT, UPDATE`)
+  — o seed já concede CRUD ao `barber_app`, mas alinha com a postura de 0011/0013. Migration roda como
+  `ADMIN_DATABASE_URL` (app não é owner da tabela → "must be owner of table organizations").
+- **Router único `app/api/empresa.py`** (owner/manager via `require_manager_access`): `GET /empresa` agrega
+  org + unidade principal + horários + assinatura + uso (`usage`); `PATCH /empresa` (cadastrais, string vazia→NULL);
+  `PATCH /empresa/unidade` (endereço/timezone); `PUT /empresa/horarios` (**replace-all** da grade semanal).
+- **Unidade principal** = primeira `Unit` não-deletada da org (`_primary_unit`). Premissa: 1 unidade ativa por
+  org hoje. Multi-unidade fica para depois.
+- **Plano é read-only** — sem billing/escrita de `Subscription`. `selectinload(Subscription.plan)` evita
+  `MissingGreenlet` (lazy-load de relacionamento fora do contexto async).
+- **Horário MVP:** 1 faixa por dia (estrutura aceita N faixas — `bh_unique_slot` permite intervalo de almoço
+  no futuro). Validação `close>open` no Pydantic e no router (além do CheckConstraint do banco).
+
+**Frontend:** página enxuta (`app/admin/empresa/page.tsx`) compõe `AsyncState` + `Panel`s; hook
+`hooks/use-empresa.ts` (React Query: query + 3 mutations com `invalidateQueries(["empresa"])`); componentes de
+domínio em `components/empresa/` (cadastro-form, unidade-form, horarios-editor, plano-card); tipos em
+`types/index.ts`. Forms inline na página (não dialogs), com estado "dirty" e feedback "salvo ✓".
+
+**Estado:** implementado e testado no **staging**. Migration aplicada (`alembic upgrade head` via
+`ADMIN_DATABASE_URL`). Suíte backend **230 pass / 3 fail ambientais / 3 skip**; novo
+`tests/test_empresa_integration.py` (6: estrutura, round-trip cadastral, replace de horários, 422, RBAC barber).
+Frontend `tsc`/`eslint` limpos (`next build` só falha no fetch da fonte Inter — ambiental/sandbox sem rede).
+**Falta:** verificação no browser + deploy na VM (migration 0014 pendente em produção).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -462,3 +498,4 @@ pendentes em produção — rodar como `postgres`/`ADMIN_DATABASE_URL`, app não
 | Frontend F1–F3 não mergeado/deployado | `barbearia-frontend` branch | ⚠️ Médio | Branch `feat/design-system-react-query-f1-f3`; mergear + deployar (D-42). Inbox exige migrations 0010/0011 (prod já ok). |
 | System prompt do bot hardcoda barbeiros | n8n AI Agent node | Médio | Ao cadastrar novo barbeiro, atualizar manualmente (D-38) |
 | VM sem política de reinício automático | GCP VM | ⚠️ Alto | WhatsApp cai toda vez que VM reinicia; usar /admin/integracoes |
+| Migrations 0012–0014 + telas novas não deployadas | VM / `barbearia-frontend` | ⚠️ Médio | `/admin/assinaturas` (D-44) e `/admin/empresa` (D-45) só no staging; aplicar 0012/0013/0014 em prod via `ADMIN_DATABASE_URL` |
