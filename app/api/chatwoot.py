@@ -30,9 +30,9 @@ from app.core.phone import normalize_phone
 from app.core.security import secrets_match
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.services import conversation as conv_svc
-from app.services.lead_funnel import advance_lead_on_inbound
+from app.services.lead_funnel import advance_lead_on_inbound, upsert_client_and_lead
 from models import Client
-from models.enums import MessageSenderType, MessageType
+from models.enums import ContactChannel, MessageSenderType, MessageType
 
 _logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ class ParsedChatwootMessage:
     sender_type: MessageSenderType
     is_incoming: bool
     raw_phone: Optional[str]
+    sender_name: Optional[str]
     body: Optional[str]
     conversation_id: Optional[int]
     conversation_status: Optional[str]
@@ -99,6 +100,7 @@ def parse_chatwoot_message(payload: dict) -> Optional[ParsedChatwootMessage]:
         sender_type=sender_type,
         is_incoming=is_incoming,
         raw_phone=_extract_phone_raw(payload),
+        sender_name=(payload.get("sender") or {}).get("name"),
         body=payload.get("content"),
         conversation_id=conv.get("id"),
         conversation_status=conv.get("status"),
@@ -160,6 +162,9 @@ async def chatwoot_webhook(
         parsed.conversation_id, parsed.chatwoot_message_id,
     )
 
+    is_client_inbound = (parsed.is_incoming
+                         and parsed.sender_type == MessageSenderType.client)
+
     try:
         client = (
             await db.execute(
@@ -168,6 +173,16 @@ async def chatwoot_webhook(
                 .where(Client.phone_e164 == phone)
             )
         ).scalar_one_or_none()
+        was_existing = client is not None
+
+        # 1º contato de cliente: garante Client + Lead no funil (caminho ÚNICO de
+        # criação, compartilhado com /bot/clients). Mensagens do bot/atendente não
+        # criam cadastro — apenas são registradas na conversa.
+        if is_client_inbound:
+            client = await upsert_client_and_lead(
+                db, org_id=org_id, phone=phone, name=parsed.sender_name,
+                channel=ContactChannel.whatsapp,
+            )
 
         msg = await conv_svc.record_message(
             db,
@@ -184,11 +199,10 @@ async def chatwoot_webhook(
             await db.commit()
             return {"ok": True, "duplicate": True}
 
-        # Avanço de estágio só no inbound de cliente — caminho ÚNICO (não duplica).
-        # TODO(Fase 4 completa): upsert de cliente/lead p/ 1º contato vindo do Chatwoot.
-        if (parsed.is_incoming
-                and parsed.sender_type == MessageSenderType.client
-                and client is not None):
+        # Avanço de estágio — caminho ÚNICO (não duplica). Número novo permanece em
+        # `novo_contato` (o lead acabou de ser criado por este contato); inbound de
+        # cliente JÁ existente avança novo_contato → conversando.
+        if is_client_inbound and was_existing:
             await advance_lead_on_inbound(db, org_id=org_id, client_id=client.id, now=now)
 
         await db.commit()

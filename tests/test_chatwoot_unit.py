@@ -107,6 +107,30 @@ def test_extract_phone_none_when_absent():
     assert _extract_phone_raw(payload) is None
 
 
+def test_parse_captures_sender_name_for_first_contact_upsert():
+    """O nome do contato alimenta o upsert de 1º contato (Client.name)."""
+    from app.api.chatwoot import parse_chatwoot_message
+    assert parse_chatwoot_message(_incoming_payload()).sender_name == "João"
+    # sem nome → None (o upsert usa o telefone como fallback)
+    p = parse_chatwoot_message(_incoming_payload(
+        sender={"type": "contact", "phone_number": "+5563999368196"}))
+    assert p.sender_name is None
+
+
+def test_upsert_helper_exposed_and_signature():
+    import inspect
+    from app.services.lead_funnel import upsert_client_and_lead
+    params = list(inspect.signature(upsert_client_and_lead).parameters)
+    assert params[0] == "db"
+    assert {"org_id", "phone", "name"}.issubset(set(params))
+
+
+def test_bot_uses_shared_upsert_helper():
+    """bot.py deve delegar a criação de cliente/lead ao helper compartilhado."""
+    import app.api.bot as bot_module
+    assert hasattr(bot_module, "upsert_client_and_lead")
+
+
 # ────────────────────────────────────────────────────────────
 # _resolve_sender — fallback pela direção quando sender.type ausente
 # ────────────────────────────────────────────────────────────
