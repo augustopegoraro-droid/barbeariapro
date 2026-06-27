@@ -510,6 +510,37 @@ campo não fica "dirty" e o PATCH não inclui o valor — usar **digitação por
 
 ---
 
+### D-47 — Consumo de pacote (usar mensalidade) na UI: card + Agenda
+
+**Data:** 2026-06-27 (5ª sessão)
+**Contexto:** o backend de mensalidade (D-44) já tinha `consume_membership` + endpoint
+`POST /memberships/{id}/usos` (1 uso = combo inteiro: 1 horário + 1 profissional por serviço), mas **não
+havia opção na UI** para utilizar o pacote. Pendência registrada em D-44/CURRENT_SPRINT.
+
+**Decisão:** expor o consumo em **dois lugares** (escolha do usuário), **reusando um único diálogo**:
+1. **Card da assinatura** (`/admin/assinaturas`): botão **"Usar pacote"** no `MembershipCard` → `UsePackageDialog`
+   (data/hora + um profissional por serviço do combo) → `useConsumirPacote` (`POST /usos`). Desabilitado quando
+   inativa / sem saldo / sem combo.
+2. **Agenda** (novo agendamento): ao selecionar um cliente com **assinatura ativa e saldo**
+   (`useClienteAssinaturas`), aparece um banner **"Usar pacote"** que abre o **mesmo** `UsePackageDialog`
+   (pré-preenchido com a data/hora do formulário); ao consumir, fecha o diálogo de novo agendamento.
+
+**Design:** sem backend novo — só frontend. `useConsumirPacote` invalida `["membership-cliente"]` **e**
+`["agenda"]` (o consumo cria o agendamento do combo). Barbeiros: lista todos os ativos por serviço e confia na
+validação do backend (422 se o profissional não executa o serviço) — não há endpoint "barbeiros por serviço".
+`UsePackageDialog` ganhou props `initialStart`/`onConsumed` para o reuso na Agenda.
+
+**Arquivos (frontend):** `hooks/use-assinaturas.ts` (`useConsumirPacote`), `components/assinaturas/use-package-dialog.tsx`
+(novo), `components/assinaturas/membership-card.tsx`, `components/agenda/novo-agendamento-dialog.tsx`.
+Commits frontend `877a957` (card) + `884d6cf` (agenda).
+
+**Verificação:** `tsc`/`eslint`/`build` limpos (21 rotas). **Contrato validado end-to-end** contra o DB de staging
+(login→criar plano→vender→`POST /usos` com o payload exato do frontend → 201, agendamento criado, saldo 2→1).
+**Deploy:** ✅ ambas as etapas em prod 2026-06-27 (frontend-only, sem migration). **Pendente:** demo visual no
+browser (prod não tem assinaturas vendidas ainda — recurso fica dormente até o cliente cadastrar planos/vender).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

@@ -14,6 +14,21 @@
 
 ---
 
+## 🟢 Sessão 2026-06-27 (5ª) — Consumo de pacote na UI (D-47) + deploy empresa/assinaturas
+
+> Feature D-47: opção de **utilizar o pacote** (consumir 1 uso da mensalidade) em **dois lugares**, reusando
+> um único diálogo. **✅ Deployada em prod** (frontend-only). Detalhes em **D-47**.
+
+- **Card da assinatura** (`/admin/assinaturas`): botão "Usar pacote" → `UsePackageDialog` (data/hora + 1
+  profissional por serviço do combo) → `POST /memberships/{id}/usos`. Commit `877a957`.
+- **Agenda** (novo agendamento): banner "Usar pacote" quando o cliente tem assinatura ativa com saldo →
+  reabre o mesmo diálogo (data/hora pré-preenchida). Commit `884d6cf`.
+- **Sem backend novo.** `useConsumirPacote` invalida `["membership-cliente"]` + `["agenda"]`.
+- **Verificado:** tsc/eslint/build limpos; contrato validado end-to-end no staging (criar plano→vender→`POST
+  /usos` → 201, agendamento + saldo 2→1). **Pendente:** demo visual (prod sem assinaturas vendidas ainda).
+
+---
+
 ## 🟢 Sessão 2026-06-27 (5ª) — Deploy `/admin/empresa` (D-45) + `/admin/assinaturas` em produção
 
 > ✅ **DEPLOYADO 2026-06-27 ~01:40** (containers healthy). Backend `main` em **`9b945c7`** (PR #4 empresa).
