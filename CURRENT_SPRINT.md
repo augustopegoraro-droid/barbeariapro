@@ -14,6 +14,22 @@
 
 ---
 
+## 🟢 Sessão 2026-06-27 (5ª) — Deploy `/admin/empresa` (D-45) + `/admin/assinaturas` em produção
+
+> ✅ **DEPLOYADO 2026-06-27 ~01:40** (containers healthy). Backend `main` em **`9b945c7`** (PR #4 empresa).
+
+- **Auditoria** acusou que prod já estava à frente dos docs: migration **`0013`** (não `0011`), backend
+  mensalidade (D-44) **já live**; faltava só a **tela `/admin/assinaturas`** (VM rodava só F1–F3).
+- **D-45 empresa commitada/mergeada** (backend PR #4 `9b945c7`; frontend `1e39857`). Backup do DB de prod
+  (`backups/barbeariapro_predeploy_0014_*.sql`) **antes** da migration.
+- **Migration `0014`** aplicada em prod (admin via `Dockerfile.migrate`). Head agora `0014`.
+- **Frontend** redeployado com **assinaturas + empresa** (`git archive`→tar→scp→build).
+- **Verificado** (API/infra): openapi `/empresa`+`/memberships`; `/empresa` sem auth → 401; rotas
+  compiladas no container; containers healthy.
+- **Pendente:** smoke test visual no browser (login de prod); limpar `.md` untracked na raiz.
+
+---
+
 ## 🔴 BLOQUEIO Nº 1 — Bot WhatsApp NÃO ENTREGA respostas (número restrito)
 
 **Status:** recebe ✅ / **não envia ❌**. Causa raiz **confirmada** (D-41): número `5563920001734`
@@ -168,8 +184,9 @@ VM estava TERMINATED desde ~24/06 — bot offline, cron parado. Sessão focada e
 - [ ] **Mergear o frontend F1–F3 no `main` do repo frontend** (`feat/design-system-react-query-f1-f3` → `main`)
       — higiene git: produção já roda esse código, mas o `main` do frontend ainda é `f5397a8`.
 - [x] **Tela `/admin/empresa` (D-45)** — cadastro + endereço/horário + plano (read-only). Backend `empresa.py`
-      + migration `0014` (aplicada no staging). 230 testes pass / 3 ambientais. **Falta:** deploy na VM
-      (migration 0014 via `ADMIN_DATABASE_URL`) + verificação no browser.
+      + migration `0014`. **✅ DEPLOYADA em prod 2026-06-27** (PR #4 `9b945c7`; migration 0014 aplicada).
+      **Falta:** smoke test visual no browser com login de prod.
+- [x] **Frontend `/admin/assinaturas` (D-44)** — **✅ DEPLOYADA em prod 2026-06-27** (backend já estava live).
 - [ ] **(opcional) Toast de erro no drag da Agenda** — hoje o reagendar inválido (serviço não executado/conflito) reverte silencioso.
 - [ ] **Fase 1.3 — limpar histórico git** de `credentials.json` (`git filter-repo` + force-push). Seguro
       agora (chave já revogada).

@@ -5,6 +5,34 @@
 
 ---
 
+## 0.00 SESSÃO 2026-06-27 (5ª) — Deploy `/admin/empresa` (D-45) + `/admin/assinaturas` em produção
+
+> ✅ **DEPLOYADO em produção 2026-06-27 ~01:40** (containers `app-backend`/`app-frontend` healthy).
+
+**Auditoria revelou divergências dos docs (corrigidas abaixo):**
+- Produção já estava em **migration `0013`** (não `0011`): `0012`/`0013` (memberships) **já tinham sido
+  aplicadas**. Backend mensalidade (D-44) **já estava live** (`/memberships` no openapi). Só faltava o
+  **frontend `/admin/assinaturas`** (a VM rodava só F1–F3, sem a tela).
+- VM backend estava em **`4b87e2f`** (merge mensalidade PR #3), não `469f784`.
+
+**O que foi feito nesta sessão:**
+- **Commit + merge de D-45** (empresa): backend PR #4 → **`9b945c7`** em `main`; frontend commit
+  **`1e39857`** (branch `feat/mensalidade-cliente-final`). `next build` limpo (21 rotas), suíte
+  **232 pass / 3 fail ambientais / 1 skip**.
+- **Migration `0014_organization_profile`** aplicada em prod via imagem `Dockerfile.migrate` com
+  `DATABASE_URL=postgres://postgres:***@host.docker.internal:5432/...` (admin; `barber_app` não tem DDL).
+  **Head agora `0014`**; 7 colunas em `organizations`; GRANT SELECT/UPDATE ao `barber_app` OK.
+- **Frontend** copiado via `git archive HEAD` → tar → scp → extração sobre `/opt/barbeariapro/barbearia-frontend`
+  (backup em `backups/frontend_src_*.tgz`), depois `docker compose -f docker-compose.app.yml up -d --build`
+  reconstruiu **backend (empresa) + frontend (assinaturas+empresa)**.
+- **Verificado:** `/empresa` (3 endpoints) e `/memberships` no openapi live; `/empresa` sem auth → 401
+  (router são, sem 500); rotas `assinaturas`/`empresa` compiladas no container; backup pré-deploy do DB em
+  `backups/barbeariapro_predeploy_0014_*.sql`.
+- **Pendente:** smoke test visual no browser com login de produção (sem credenciais de prod nesta sessão);
+  higiene dos `.md` untracked na raiz (docs CRM superados).
+
+---
+
 ## 0.0 SESSÃO 2026-06-26 (3ª) — Rearquitetura de Frontend (F1–F3) + backend reagendar
 
 > ✅ **DEPLOYADO em produção em 2026-06-26 ~16:43** (containers `app-backend`/`app-frontend` rebuildados, healthy).
@@ -212,9 +240,9 @@ gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-ea
 ### Containers em produção (verificado 2026-06-26, 3ª sessão)
 
 ```
-barbeariapro-app-backend    :8000   healthy   FastAPI   — git 469f784 (build 2026-06-26 16:43, reagendar+Fase1.1)
-barbeariapro-app-frontend   :3000   healthy   Next.js   — F1–F3 (build 2026-06-26 16:43, branch design-system-react-query)
-barbeariapro-postgres       :5432   healthy   Postgres  — migration HEAD: 0011_grant_crm_tables
+barbeariapro-app-backend    :8000   healthy   FastAPI   — git 9b945c7 (build 2026-06-27 ~01:40, empresa D-45 + mensalidade D-44)
+barbeariapro-app-frontend   :3000   healthy   Next.js   — F1–F3 + assinaturas + empresa (build 2026-06-27 ~01:40)
+barbeariapro-postgres       :5432   healthy   Postgres  — migration HEAD: 0014_organization_profile
 evolution_api               :8080   Up        Evolution API v2.3.7 — instância Barbearia (open)
 evolution_postgres          (interno)
 evolution_redis             (interno)
@@ -336,14 +364,16 @@ active nav: rgba(245,158,11,0.11) + border-l-2 border-amber-500
 
 ## 8. Migrations Alembic
 
-Head atual (verificado na VM **e no staging**): **`0011_grant_crm_tables`**.
-> Staging foi subido de `0009`→`0011` nesta sessão (3ª) para validar o Inbox conversacional localmente.
+Head atual: **`0014_organization_profile`** (prod **e** staging, verificado 2026-06-27).
+> Prod: `0012`/`0013` (memberships) foram aplicadas antes da sessão 5ª; `0014` (empresa) aplicada em 2026-06-27.
+> Migrations de DDL rodam como **admin** (`postgres`/`ADMIN_DATABASE_URL`) — `barber_app` não tem privilégio.
 
 ```
 0001_initial → 0002_loyalty → 0002_client_last_photo → 0003_client_photo_description
 → 0005_barber_services → 0006_client_blocked → 0007_crm_leads
 → 0008_client_bot_paused → 0009_conversation_log → 0010_conversations
-→ 0011_grant_crm_tables  ← HEAD
+→ 0011_grant_crm_tables → 0012_memberships → 0013_grant_membership_tables
+→ 0014_organization_profile  ← HEAD
 ```
 
 > ⚠️ Migrations precisam de superuser postgres — `barber_app` não tem privilégio CREATE TYPE/TABLE.
