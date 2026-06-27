@@ -167,6 +167,9 @@ VM estava TERMINATED desde ~24/06 — bot offline, cron parado. Sessão focada e
 - [x] **F1–F3 + reagendar DEPLOYADOS** na VM (2026-06-26 16:43, containers healthy). Verificado: Inbox/`barber_id` live.
 - [ ] **Mergear o frontend F1–F3 no `main` do repo frontend** (`feat/design-system-react-query-f1-f3` → `main`)
       — higiene git: produção já roda esse código, mas o `main` do frontend ainda é `f5397a8`.
+- [x] **Tela `/admin/empresa` (D-45)** — cadastro + endereço/horário + plano (read-only). Backend `empresa.py`
+      + migration `0014` (aplicada no staging). 230 testes pass / 3 ambientais. **Falta:** deploy na VM
+      (migration 0014 via `ADMIN_DATABASE_URL`) + verificação no browser.
 - [ ] **(opcional) Toast de erro no drag da Agenda** — hoje o reagendar inválido (serviço não executado/conflito) reverte silencioso.
 - [ ] **Fase 1.3 — limpar histórico git** de `credentials.json` (`git filter-repo` + force-push). Seguro
       agora (chave já revogada).

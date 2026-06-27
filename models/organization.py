@@ -72,6 +72,14 @@ class Organization(Base):
         Uuid, nullable=False, unique=True, server_default=text("gen_random_uuid()")
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    # Dados cadastrais (tela /admin/empresa). Todos opcionais — retrocompat.
+    legal_name: Mapped[Optional[str]] = mapped_column(Text)
+    cnpj: Mapped[Optional[str]] = mapped_column(Text)
+    phone: Mapped[Optional[str]] = mapped_column(Text)
+    email: Mapped[Optional[str]] = mapped_column(Text)
+    website: Mapped[Optional[str]] = mapped_column(Text)
+    instagram: Mapped[Optional[str]] = mapped_column(Text)
+    logo_url: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

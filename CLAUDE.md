@@ -58,8 +58,8 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
   host · n8n + Evolution API como serviços do bot. Detalhes operacionais em `PROJECT_CONTEXT.md §4`.
 
 ### Estrutura de pastas (backend)
-- `app/api/*` — 18 routers (auth, agenda, barbeiro, bot, clientes, conversations, crm, dashboard,
-  equipe, financeiro, health, integracoes, loyalty, memberships, reminders, servicos, wa_webhook).
+- `app/api/*` — 19 routers (auth, agenda, barbeiro, bot, clientes, conversations, crm, dashboard,
+  empresa, equipe, financeiro, health, integracoes, loyalty, memberships, reminders, servicos, wa_webhook).
 - `app/core/*` — `config`, `security`, `rbac`, `crypto`, `dates`, `phone`.
 - `app/services/*` — `scheduling`, `conversation`, `sse_broker`, `whatsapp`, `reminders`,
   `reactivation`, `loyalty`, `google_calendar`, `calendar_sync`, `membership`.
@@ -154,8 +154,8 @@ Lembrete 24h e reativação de clientes · **Mensalidade/Assinatura do cliente f
 fixo + N usos/ilimitado, vigência, venda, consumo de pacote, renovação manual, expiração; receita
 rateada no uso — ver D-44).
 
-**Placeholders ("Em breve") no frontend:** `fidelidade`, `campanhas`, `empresa`, `usuarios`,
-`conversas` (redireciona p/ CRM inbox).
+**Placeholders ("Em breve") no frontend:** `fidelidade`, `campanhas`, `usuarios`.
+(`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
 **Pendente (visão do produto):** Caixa · Consumo de produtos no atendimento · Estoque/Produtos ·
 Renovação **automática** de mensalidade (a manual já existe — D-44) · Fidelização · Dashboard executivo
