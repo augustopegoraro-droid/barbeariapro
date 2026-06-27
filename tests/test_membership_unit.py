@@ -17,10 +17,12 @@ from types import SimpleNamespace
 import pytest
 
 from app.services.membership import (
+    _combo_matches,
     build_combo_snapshot,
     compute_end_at,
     compute_unit_value,
     rateio_price_charged,
+    validate_combo_shape,
 )
 
 
@@ -103,3 +105,41 @@ def test_rateio_item_unico_recebe_tudo():
     combo = _combo((7, "99.99", 1))
     r = rateio_price_charged(Decimal("50.00"), combo)
     assert r[7] == Decimal("50.00")
+
+
+# ─── validate_combo_shape (regra do catálogo: corte/barba/corte+barba) ───────
+
+@pytest.mark.parametrize(
+    "cats",
+    [["cabelo"], ["barba"], ["combo"], ["cabelo", "barba"], ["barba", "cabelo"]],
+)
+def test_combo_shape_aceita_formas_validas(cats):
+    validate_combo_shape(cats)  # não levanta
+
+
+@pytest.mark.parametrize(
+    "cats",
+    [
+        [],
+        ["quimica"],
+        ["estetica"],
+        ["cabelo", "quimica"],
+        ["cabelo", "cabelo"],
+        ["barba", "barba"],
+        ["cabelo", "combo"],
+        ["cabelo", "barba", "barba"],
+    ],
+)
+def test_combo_shape_rejeita_formas_invalidas(cats):
+    with pytest.raises(ValueError):
+        validate_combo_shape(cats)
+
+
+# ─── _combo_matches ──────────────────────────────────────────────────────────
+
+def test_combo_matches_igualdade_de_conjunto_ignora_ordem():
+    combo = _combo((1, "10.00", 1), (2, "20.00", 2))
+    assert _combo_matches(combo, [2, 1]) is True
+    assert _combo_matches(combo, [1]) is False
+    assert _combo_matches(combo, [1, 2, 3]) is False
+    assert _combo_matches(combo, [1, 3]) is False

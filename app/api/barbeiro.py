@@ -15,8 +15,13 @@ from app.core.rbac import check_appointment_ownership
 from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
 from app.services.calendar_sync import push_appointment
 from app.services.loyalty import recalculate as _recalculate_loyalty
-from app.services.membership import revert_usage, usage_for_appointment
-from models import Appointment, AppointmentItem, Payment, User
+from app.services.membership import (
+    active_membership_for_client,
+    apply_membership_to_appointment,
+    revert_usage,
+    usage_for_appointment,
+)
+from models import Appointment, AppointmentItem, ClientMembership, Payment, User
 from models.enums import AppointmentStatus, PaymentMethod
 
 router = APIRouter(prefix="/barbeiro", tags=["barbeiro"])
@@ -53,6 +58,12 @@ class ConcluirRequest(BaseModel):
     method: Optional[str] = Field(None, description="dinheiro | cartao | pix")
     amount: Optional[float] = Field(None, ge=0, description="Valor cobrado")
     tip_amount: Optional[float] = Field(None, ge=0, description="Gorjeta (opcional)")
+    # Pagar este atendimento com a assinatura do cliente (baixa 1 uso). None =
+    # resolve a assinatura ativa do cliente. Atômico com a conclusão.
+    membership_id: Optional[int] = Field(None, gt=0)
+    usar_assinatura: Optional[bool] = Field(
+        None, description="true → paga com a assinatura ativa do cliente"
+    )
 
 
 class AtendimentoOut(BaseModel):
@@ -76,6 +87,35 @@ async def concluir_atendimento(
     appt = await _load_appointment(db, appt_id)
     check_appointment_ownership(appt, role, my_barber_id)
     _require_agendado(appt)
+
+    # Checkout pago com assinatura: anexa o uso ANTES (atômico com a conclusão);
+    # o fluxo abaixo então detecta o usage e conclui sem Payment.
+    if (
+        body.membership_id is not None or body.usar_assinatura
+    ) and await usage_for_appointment(db, appt_id) is None:
+        if body.membership_id is not None:
+            membership = (
+                await db.execute(
+                    select(ClientMembership).where(
+                        ClientMembership.id == body.membership_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if membership is None:
+                raise HTTPException(
+                    status_code=http_status.HTTP_404_NOT_FOUND,
+                    detail="Assinatura não encontrada.",
+                )
+        else:
+            membership = await active_membership_for_client(db, appt.client_id)
+            if membership is None:
+                raise HTTPException(
+                    status_code=http_status.HTTP_404_NOT_FOUND,
+                    detail="Cliente não tem assinatura ativa.",
+                )
+        await apply_membership_to_appointment(
+            db, appointment=appt, membership=membership, created_by_user_id=current_user.id
+        )
 
     usage = await usage_for_appointment(db, appt_id)
 

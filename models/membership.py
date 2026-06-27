@@ -164,10 +164,12 @@ class ClientMembership(Base):
         BigInteger, ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False
     )
     # Referência ao catálogo; a imutabilidade vem dos snapshots abaixo.
-    plan_id: Mapped[int] = mapped_column(
+    # NULL = pacote personalizado (montado direto para o cliente, sem plano de
+    # catálogo). A imutabilidade segue garantida pelos snapshots abaixo.
+    plan_id: Mapped[Optional[int]] = mapped_column(
         BigInteger,
         ForeignKey("membership_plans.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[MembershipStatus] = mapped_column(
         pg_enum(MembershipStatus, "membership_status"),
@@ -198,7 +200,7 @@ class ClientMembership(Base):
 
     organization: Mapped["Organization"] = relationship()
     client: Mapped["Client"] = relationship(back_populates="memberships")
-    plan: Mapped["MembershipPlan"] = relationship(back_populates="memberships")
+    plan: Mapped[Optional["MembershipPlan"]] = relationship(back_populates="memberships")
     sold_by: Mapped[Optional["User"]] = relationship()
     usages: Mapped[List["MembershipUsage"]] = relationship(
         back_populates="membership", cascade="all, delete-orphan"

@@ -150,9 +150,11 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
 **Implementado:** Login/RBAC · Agenda (CRUD + conflito + Google Calendar) · Clientes/CRM Kanban ·
 Inbox WhatsApp em tempo real (SSE) · Financeiro (resumo diário/mensal, despesas, comissões) ·
 Serviços · Equipe · Integrações (WhatsApp status/QR, Google Calendar OAuth) · Bot IA "Raquel" (n8n) ·
-Lembrete 24h e reativação de clientes · **Mensalidade/Assinatura do cliente final** (planos com combo
-fixo + N usos/ilimitado, vigência, venda, consumo de pacote, renovação manual, expiração; receita
-rateada no uso — ver D-44).
+Lembrete 24h e reativação de clientes · **Mensalidade/Assinatura do cliente final** (planos de catálogo
++ **pacotes personalizáveis por cliente** com combo/usos/preço/duração livres, `plan_id` nullable;
+vigência, venda, **renovação clonando o snapshot**, expiração; receita rateada no uso. Consumo flexível:
+agendar o combo, **usar agora** (avulso), ou **pagar com a assinatura no checkout**/anexar a um
+agendamento existente. Combo de **catálogo** restrito a corte/barba/corte+barba — ver D-44/D-48).
 
 **Placeholders ("Em breve") no frontend:** `fidelidade`, `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

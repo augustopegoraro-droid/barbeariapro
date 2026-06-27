@@ -541,6 +541,52 @@ browser (prod não tem assinaturas vendidas ainda — recurso fica dormente até
 
 ---
 
+### D-48 — Assinatura: pacotes personalizáveis por cliente + usar sem agendar + combo do catálogo restrito
+
+**Data:** 2026-06-27 (6ª sessão)
+**Contexto:** três pedidos da operação sobre a mensalidade (D-44/D-47): (1) o consumo obrigava marcar
+data/hora futura + profissional por serviço e sempre criava um agendamento novo; (2) faltava montar
+pacotes **sob medida por cliente**; (3) "cada uso deve dar direito a 1 serviço: corte, barba ou
+corte+barba".
+
+**Decisão e implementação:**
+1. **Pacotes personalizáveis por cliente.** `client_memberships.plan_id` agora **nullable** (migration
+   `0015`, ORM Optional). Venda generalizada em `create_membership(spec)` que monta o snapshot a partir
+   de uma spec (combo/usos/preço/duração) **com ou sem plano de base** — catálogo (com override) e
+   personalizado do zero convergem. `unit_recognized_value` **sempre recomputado** da spec final.
+   `sell_membership` virou wrapper. **Renovação** (`renew_membership`) passou a **clonar o snapshot da
+   própria assinatura** (preserva personalização, funciona sem plano).
+2. **Usar pacote sem agendar.** Helper compartilhado `apply_membership_to_appointment` (baixa 1 uso +
+   reprecifica os itens + grava `MembershipUsage`), com dois pontos de entrada: **(a)** `POST
+   /memberships/usos/attach` (anexa a um agendamento existente, fica `agendado`); **(b)** no **checkout**
+   — `ConcluirRequest.membership_id`/`usar_assinatura` aplica o uso e conclui na **mesma transação**
+   (atômico). **Avulso "usar agora":** `ConsumeIn.start_at` opcional (default agora) + a UI encadeia a
+   conclusão. Reusa o caminho canônico (`usage_for_appointment`→conclusão sem `Payment`→`revert_usage`).
+3. **Combo do catálogo restrito** (`validate_combo_shape`): plano só pode ser corte (`cabelo`), barba,
+   `combo`, ou exatamente corte+barba — sem química/estética/combos arbitrários. Aplica **só** em
+   `criar_plano`/`atualizar_plano`; **pacote personalizado tem combo livre**. `AppointmentOut` ganhou
+   `client_id` (gate da opção "usar assinatura" no checkout; oculto p/ não-próprios).
+
+**Design:** sem mudança em consumo/estorno/expiração/financeiro/fidelidade/bot (tudo lê o snapshot, não
+o plano). Helpers DRY extraídos: `_decrement_balance`, `_combo_matches`. UI de venda reescrita como
+**formulário único adaptativo** (escolher plano só preenche; combo livre; "valor por uso" ao vivo).
+Checkout: diálogo Concluir ganhou alternância **Pagamento / Usar assinatura** (gate por assinatura ativa;
+combo validado no backend). Decisão: **não** adicionar botão de attach avulso em `appointment-actions`
+(redundante com o checkout; endpoint `/usos/attach` fica para uso futuro/n8n).
+
+**Arquivos:** `alembic/versions/0015_*`, `models/membership.py`, `app/services/membership.py`,
+`app/api/memberships.py`, `app/api/barbeiro.py`, `app/api/agenda.py`; frontend `types/index.ts`,
+`hooks/use-assinaturas.ts`, `hooks/use-agenda.ts`, `components/assinaturas/{sell-membership-dialog,
+plan-form-dialog,use-package-dialog}.tsx`, `components/agenda/concluir-dialog.tsx`.
+
+**Verificação:** backend **252 pass / 1 skip / 3 falhas ambientais conhecidas** (n8n `bypass_hours`, RLS
+isolation, e2e link — idênticas ao baseline); novos testes unit (`validate_combo_shape`/`_combo_matches`)
++ integração (venda custom/override, renovação custom, attach, checkout atômico, avulso, combo de catálogo
+inválido). Frontend `tsc`/`eslint`/`next build` limpos (21 rotas). **Migration aplicada no staging** (admin
+URL). **Pendente:** aplicar `0015` em produção (`ADMIN_DATABASE_URL`) + demo no browser.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

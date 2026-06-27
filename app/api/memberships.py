@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status as http_status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -26,6 +26,7 @@ from app.deps import (
 )
 from app.services import membership as svc
 from models import (
+    Appointment,
     Client,
     ClientMembership,
     MembershipPlan,
@@ -85,9 +86,34 @@ class PlanUpdate(BaseModel):
 
 
 class SellIn(BaseModel):
+    """Venda de assinatura. ``plan_id`` = a partir do catálogo (com override
+    opcional); sem ``plan_id`` = pacote personalizado do zero (spec completa)."""
+
     client_id: int = Field(..., gt=0)
-    plan_id: int = Field(..., gt=0)
+    plan_id: Optional[int] = Field(None, gt=0)
     start_at: Optional[datetime] = None
+    # spec personalizada / override do plano
+    combo_service_ids: Optional[list[int]] = Field(None, min_length=1)
+    included_uses: Optional[int] = Field(None, gt=0)
+    set_unlimited: Optional[bool] = Field(
+        None, description="true → pacote ilimitado (exige unlimited_use_value)"
+    )
+    unlimited_use_value: Optional[Decimal] = Field(None, ge=Decimal("0"))
+    price: Optional[Decimal] = Field(None, ge=Decimal("0"))
+    duration_days: Optional[int] = Field(None, gt=0)
+
+    @model_validator(mode="after")
+    def _check_spec(self) -> "SellIn":
+        if self.plan_id is None:
+            if not self.combo_service_ids or self.price is None or self.duration_days is None:
+                raise ValueError(
+                    "Pacote personalizado exige combo_service_ids, price e duration_days."
+                )
+            if not self.set_unlimited and self.included_uses is None:
+                raise ValueError("Informe included_uses ou set_unlimited (ilimitado).")
+        if self.set_unlimited and self.unlimited_use_value is None:
+            raise ValueError("Pacote ilimitado exige unlimited_use_value.")
+        return self
 
 
 class AssignmentIn(BaseModel):
@@ -96,8 +122,15 @@ class AssignmentIn(BaseModel):
 
 
 class ConsumeIn(BaseModel):
-    start_at: datetime
+    start_at: Optional[datetime] = None  # ausente = agora (consumo avulso)
     assignments: list[AssignmentIn] = Field(..., min_length=1)
+
+
+class AttachIn(BaseModel):
+    appointment_id: int = Field(..., gt=0)
+    membership_id: Optional[int] = Field(
+        None, gt=0, description="None = assinatura ativa do cliente do agendamento"
+    )
 
 
 class UsageOut(BaseModel):
@@ -114,7 +147,7 @@ class MembershipOut(BaseModel):
     public_id: str
     client_id: int
     client_name: Optional[str]
-    plan_id: int
+    plan_id: Optional[int]  # None = pacote personalizado
     status: str
     start_at: str
     end_at: str
@@ -277,23 +310,33 @@ async def listar_planos(
 async def _validate_combo_services(
     db: AsyncSession, service_ids: list[int]
 ) -> None:
+    """Valida o combo de um PLANO DE CATÁLOGO: existência + forma corte/barba/
+    corte+barba (regra de negócio em ``svc.validate_combo_shape``). Pacotes
+    personalizados NÃO passam por aqui (combo livre)."""
     if len(set(service_ids)) != len(service_ids):
         raise HTTPException(
             http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             "Serviço repetido no combo.",
         )
-    found = (
+    rows = (
         await db.execute(
-            select(Service.id)
+            select(Service.id, Service.category)
             .where(Service.id.in_(service_ids))
             .where(Service.deleted_at.is_(None))
         )
-    ).scalars().all()
-    if set(found) != set(service_ids):
+    ).all()
+    if {r.id for r in rows} != set(service_ids):
         raise HTTPException(
             http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             "Combo referencia serviço inexistente nesta organização.",
         )
+    categories = [
+        r.category.value if hasattr(r.category, "value") else r.category for r in rows
+    ]
+    try:
+        svc.validate_combo_shape(categories)
+    except ValueError as exc:
+        raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
 
 
 @router.post("/planos", response_model=PlanOut, status_code=http_status.HTTP_201_CREATED)
@@ -438,13 +481,30 @@ async def vender_assinatura(
 ) -> MembershipOut:
     require_full_access(await resolve_current_role(db, current_user))
 
-    membership = await svc.sell_membership(
+    # Traduz a spec da venda nos overrides de create_membership (catálogo +
+    # personalizado convergem na mesma função).
+    kwargs: dict = {}
+    if body.combo_service_ids is not None:
+        kwargs["combo_service_ids"] = body.combo_service_ids
+    if body.price is not None:
+        kwargs["price"] = body.price
+    if body.duration_days is not None:
+        kwargs["duration_days"] = body.duration_days
+    if body.set_unlimited:
+        kwargs["included_uses"] = None
+        kwargs["unlimited_use_value"] = body.unlimited_use_value
+    elif body.included_uses is not None:
+        kwargs["included_uses"] = body.included_uses
+        kwargs["unlimited_use_value"] = None
+
+    membership = await svc.create_membership(
         db,
         organization_id=current_user.organization_id,
         client_id=body.client_id,
-        plan_id=body.plan_id,
         sold_by_user_id=current_user.id,
         start_at=body.start_at,
+        plan_id=body.plan_id,
+        **kwargs,
     )
     await db.refresh(membership, ["usages"])
     out = await _membership_out_full(db, membership)
@@ -543,14 +603,7 @@ async def renovar_assinatura(
     """
     require_full_access(await resolve_current_role(db, current_user))
     old = await _load_membership(db, membership_id)
-    new = await svc.sell_membership(
-        db,
-        organization_id=current_user.organization_id,
-        client_id=old.client_id,
-        plan_id=old.plan_id,
-        sold_by_user_id=current_user.id,
-        start_at=None,
-    )
+    new = await svc.renew_membership(db, old, sold_by_user_id=current_user.id)
     await db.refresh(new, ["usages"])
     out = await _membership_out_full(db, new)
     await db.commit()
@@ -586,6 +639,64 @@ async def consumir_pacote(
         status=appt.status.value,
         total_amount=float(appt.total_amount),
         membership_id=membership_id,
+    )
+    await db.commit()
+    return out
+
+
+@router.post(
+    "/usos/attach",
+    response_model=ConsumeOut,
+    status_code=http_status.HTTP_201_CREATED,
+)
+async def aplicar_pacote_em_agendamento(
+    body: AttachIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> ConsumeOut:
+    """Marca um agendamento já existente como pago por assinatura (baixa 1 uso e
+    reprecifica os itens). A conclusão posterior reconhece a receita sem Payment."""
+    require_full_access(await resolve_current_role(db, current_user))
+
+    appt = (
+        await db.execute(
+            select(Appointment)
+            .where(Appointment.id == body.appointment_id)
+            .options(selectinload(Appointment.items))
+        )
+    ).scalar_one_or_none()
+    if appt is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Agendamento não encontrado.")
+
+    if body.membership_id is not None:
+        membership = (
+            await db.execute(
+                select(ClientMembership).where(
+                    ClientMembership.id == body.membership_id
+                )
+            )
+        ).scalar_one_or_none()
+        if membership is None:
+            raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Assinatura não encontrada.")
+    else:
+        membership = await svc.active_membership_for_client(db, appt.client_id)
+        if membership is None:
+            raise HTTPException(
+                http_status.HTTP_404_NOT_FOUND,
+                "Cliente não tem assinatura ativa.",
+            )
+
+    await svc.apply_membership_to_appointment(
+        db, appointment=appt, membership=membership, created_by_user_id=current_user.id
+    )
+    out = ConsumeOut(
+        appointment_id=appt.id,
+        public_id=str(appt.public_id),
+        start_at=appt.start_at.isoformat(),
+        end_at=appt.end_at.isoformat(),
+        status=appt.status.value,
+        total_amount=float(appt.total_amount),
+        membership_id=membership.id,
     )
     await db.commit()
     return out

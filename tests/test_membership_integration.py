@@ -35,15 +35,22 @@ _RUN_MINUTE = _NS // 1000 % 50
 
 # ─── helpers de descoberta de dados semeados ─────────────────────────────────
 
+def _corte_barba(svcs):
+    """(corte, barba) válidos p/ combo de catálogo: 1 cabelo + 1 barba."""
+    corte = next((s for s in svcs if s.get("category") == "cabelo"), None)
+    barba = next((s for s in svcs if s.get("category") == "barba"), None)
+    if not corte or not barba:
+        pytest.skip("Seed precisa de 1 serviço 'cabelo' e 1 'barba' ativos.")
+    return corte, barba
+
+
 async def _two_services(client, auth_headers):
-    """Dois serviços ativos quaisquer (para testes que não consomem)."""
+    """(corte, barba) ativos — combo de catálogo válido (corte+barba)."""
     resp = await client.get("/servicos", headers=auth_headers)
     if resp.status_code != 200:
         pytest.skip("Serviços indisponíveis no seed.")
     svcs = [s for s in resp.json() if s["is_active"]]
-    if len(svcs) < 2:
-        pytest.skip("Seed precisa de ao menos 2 serviços ativos.")
-    return svcs[0], svcs[1]
+    return _corte_barba(svcs)
 
 
 async def _fresh_barber_and_two_services(client, auth_headers):
@@ -59,15 +66,14 @@ async def _fresh_barber_and_two_services(client, auth_headers):
     if svcs.status_code != 200:
         pytest.skip("Serviços indisponíveis no seed.")
     active = [s for s in svcs.json() if s["is_active"]]
-    if len(active) < 2:
-        pytest.skip("Seed precisa de ao menos 2 serviços ativos.")
+    corte, barba = _corte_barba(active)
     b = await client.post(
         "/equipe/barbeiros",
         json={"name": "Barbeiro Teste Mensalidade", "commission_pct": 0.5},
         headers=auth_headers,
     )
     assert b.status_code == 201, b.text
-    return b.json(), active[0], active[1]
+    return b.json(), corte, barba
 
 
 async def _make_client(client, auth_headers, phone):
@@ -303,3 +309,242 @@ async def test_consumo_conclusao_limite_e_reversao(client, auth_headers):
             client, auth_headers, plan_id=plan["id"], client_id=cid,
             barber_id=barber["id"], membership_ids=[mid], appointment_ids=appt_ids,
         )
+
+
+# ─── pacote personalizado (sem plano) + override de plano ────────────────────
+
+async def test_venda_personalizada_do_zero(client, auth_headers):
+    corte, _ = await _two_services(client, auth_headers)
+    cid = await _make_client(client, auth_headers, _uniq_phone())
+    sell = await client.post(
+        "/memberships",
+        json={
+            "client_id": cid,
+            "combo_service_ids": [corte["id"]],
+            "included_uses": 4,
+            "price": "200.00",
+            "duration_days": 30,
+        },
+        headers=auth_headers,
+    )
+    try:
+        assert sell.status_code == 201, sell.text
+        m = sell.json()
+        assert m["plan_id"] is None  # pacote personalizado
+        assert m["included_uses"] == 4
+        assert m["unit_recognized_value"] == 50.0  # 200 / 4
+        assert [c["service_id"] for c in m["combo"]] == [corte["id"]]
+    finally:
+        await _cleanup(
+            client, auth_headers, client_id=cid,
+            membership_ids=[sell.json()["id"]] if sell.status_code == 201 else [],
+        )
+
+
+async def test_venda_a_partir_de_plano_com_override(client, auth_headers):
+    corte, barba = await _two_services(client, auth_headers)
+    plan = await _create_plan(client, auth_headers, [corte["id"], barba["id"]], price="120.00")
+    cid = await _make_client(client, auth_headers, _uniq_phone())
+    # override: mesmo plano, mas preço 300 e 3 usos → unit = 100 (não 60 do plano)
+    sell = await client.post(
+        "/memberships",
+        json={
+            "client_id": cid,
+            "plan_id": plan["id"],
+            "price": "300.00",
+            "included_uses": 3,
+        },
+        headers=auth_headers,
+    )
+    try:
+        assert sell.status_code == 201, sell.text
+        m = sell.json()
+        assert m["plan_id"] == plan["id"]
+        assert m["unit_recognized_value"] == 100.0  # 300 / 3 (override)
+        assert m["included_uses"] == 3
+        assert {c["service_id"] for c in m["combo"]} == {corte["id"], barba["id"]}
+    finally:
+        await _cleanup(
+            client, auth_headers, plan_id=plan["id"], client_id=cid,
+            membership_ids=[sell.json()["id"]] if sell.status_code == 201 else [],
+        )
+
+
+async def test_personalizado_combo_invalido_pode_ser_livre(client, auth_headers):
+    """Pacote personalizado tem combo LIVRE — química é aceita (≠ catálogo)."""
+    svcs = await client.get("/servicos", headers=auth_headers)
+    quimica = next(
+        (s for s in svcs.json() if s["is_active"] and s.get("category") == "quimica"),
+        None,
+    )
+    if not quimica:
+        pytest.skip("Seed sem serviço 'quimica' ativo.")
+    cid = await _make_client(client, auth_headers, _uniq_phone())
+    sell = await client.post(
+        "/memberships",
+        json={
+            "client_id": cid,
+            "combo_service_ids": [quimica["id"]],
+            "included_uses": 2,
+            "price": "100.00",
+            "duration_days": 30,
+        },
+        headers=auth_headers,
+    )
+    try:
+        assert sell.status_code == 201, sell.text
+    finally:
+        await _cleanup(
+            client, auth_headers, client_id=cid,
+            membership_ids=[sell.json()["id"]] if sell.status_code == 201 else [],
+        )
+
+
+async def test_renovacao_custom_clona_snapshot(client, auth_headers):
+    corte, _ = await _two_services(client, auth_headers)
+    cid = await _make_client(client, auth_headers, _uniq_phone())
+    sell = await client.post(
+        "/memberships",
+        json={
+            "client_id": cid,
+            "combo_service_ids": [corte["id"]],
+            "included_uses": 2,
+            "price": "80.00",
+            "duration_days": 30,
+        },
+        headers=auth_headers,
+    )
+    assert sell.status_code == 201, sell.text
+    mid = sell.json()["id"]
+    new_id = None
+    try:
+        renov = await client.post(f"/memberships/{mid}/renovar", headers=auth_headers)
+        assert renov.status_code == 201, renov.text
+        n = renov.json()
+        new_id = n["id"]
+        assert n["plan_id"] is None  # clona snapshot, não relê plano
+        assert n["included_uses"] == 2
+        assert n["used_uses"] == 0
+        assert n["unit_recognized_value"] == 40.0  # 80 / 2
+        assert [c["service_id"] for c in n["combo"]] == [corte["id"]]
+    finally:
+        await _cleanup(
+            client, auth_headers, client_id=cid,
+            membership_ids=[x for x in [mid, new_id] if x],
+        )
+
+
+# ─── aplicar pacote em agendamento existente (attach) + checkout + avulso ────
+
+async def test_attach_checkout_e_avulso(client, auth_headers):
+    barber, corte, _barba = await _fresh_barber_and_two_services(client, auth_headers)
+    cid = await _make_client(client, auth_headers, _uniq_phone())
+    # pacote personalizado de 1 serviço (corte) — casa com agendamento normal
+    sell = await client.post(
+        "/memberships",
+        json={
+            "client_id": cid,
+            "combo_service_ids": [corte["id"]],
+            "included_uses": 3,
+            "price": "150.00",  # unit = 50
+            "duration_days": 30,
+        },
+        headers=auth_headers,
+    )
+    assert sell.status_code == 201, sell.text
+    mid = sell.json()["id"]
+    appt_ids = []
+    over = {"price_override": 80.0} if corte.get("has_variable_price") else {}
+    try:
+        # ── attach standalone: cria agendamento normal e paga com assinatura ──
+        a1 = await client.post(
+            "/agenda",
+            json={"client_id": cid, "barber_id": barber["id"],
+                  "service_id": corte["id"], "start_at": _future(10, 9), **over},
+            headers=auth_headers,
+        )
+        assert a1.status_code == 201, a1.text
+        appt1 = a1.json()["id"]
+        appt_ids.append(appt1)
+        assert a1.json()["client_id"] == cid  # AppointmentOut expõe client_id
+
+        att = await client.post(
+            "/memberships/usos/attach", json={"appointment_id": appt1},
+            headers=auth_headers,
+        )
+        assert att.status_code == 201, att.text
+        assert att.json()["total_amount"] == 50.0  # reprecificado p/ unit_value
+        det = await client.get(f"/memberships/{mid}", headers=auth_headers)
+        assert det.json()["remaining_uses"] == 2
+
+        # attach repetido no mesmo agendamento → 409
+        att2 = await client.post(
+            "/memberships/usos/attach", json={"appointment_id": appt1},
+            headers=auth_headers,
+        )
+        assert att2.status_code == 409, att2.text
+
+        # concluir (sem method/amount) reconhece receita sem Payment
+        conc = await client.patch(
+            f"/barbeiro/atendimento/{appt1}/concluir", json={}, headers=auth_headers
+        )
+        assert conc.status_code == 200, conc.text
+
+        # ── checkout: concluir já pagando com a assinatura (atômico) ──────────
+        a2 = await client.post(
+            "/agenda",
+            json={"client_id": cid, "barber_id": barber["id"],
+                  "service_id": corte["id"], "start_at": _future(11, 9), **over},
+            headers=auth_headers,
+        )
+        assert a2.status_code == 201, a2.text
+        appt2 = a2.json()["id"]
+        appt_ids.append(appt2)
+        conc2 = await client.patch(
+            f"/barbeiro/atendimento/{appt2}/concluir",
+            json={"membership_id": mid}, headers=auth_headers,
+        )
+        assert conc2.status_code == 200, conc2.text
+        det = await client.get(f"/memberships/{mid}", headers=auth_headers)
+        assert det.json()["remaining_uses"] == 1
+
+        # ── avulso "usar agora": /usos sem start_at ──────────────────────────
+        av = await client.post(
+            f"/memberships/{mid}/usos",
+            json={"assignments": [{"service_id": corte["id"], "barber_id": barber["id"]}]},
+            headers=auth_headers,
+        )
+        assert av.status_code == 201, av.text
+        appt_ids.append(av.json()["appointment_id"])
+        det = await client.get(f"/memberships/{mid}", headers=auth_headers)
+        assert det.json()["remaining_uses"] == 0
+    finally:
+        await _cleanup(
+            client, auth_headers, client_id=cid, barber_id=barber["id"],
+            membership_ids=[mid], appointment_ids=appt_ids,
+        )
+
+
+async def test_plano_catalogo_combo_invalido_422(client, auth_headers):
+    svcs = await client.get("/servicos", headers=auth_headers)
+    active = [s for s in svcs.json() if s["is_active"]]
+    corte = next((s for s in active if s.get("category") == "cabelo"), None)
+    quimica = next((s for s in active if s.get("category") == "quimica"), None)
+    if not corte or not quimica:
+        pytest.skip("Seed sem 'cabelo' e 'quimica' ativos.")
+    # química sozinha no catálogo → 422
+    r1 = await client.post(
+        "/memberships/planos",
+        json={"name": "Plano Inválido Q", "price": "100.00", "included_uses": 2,
+              "duration_days": 30, "service_ids": [quimica["id"]]},
+        headers=auth_headers,
+    )
+    assert r1.status_code == 422, r1.text
+    # corte + química → 422 (combo de 2 deve ser exatamente corte+barba)
+    r2 = await client.post(
+        "/memberships/planos",
+        json={"name": "Plano Inválido CQ", "price": "100.00", "included_uses": 2,
+              "duration_days": 30, "service_ids": [corte["id"], quimica["id"]]},
+        headers=auth_headers,
+    )
+    assert r2.status_code == 422, r2.text

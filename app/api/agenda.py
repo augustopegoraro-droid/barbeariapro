@@ -41,6 +41,7 @@ router = APIRouter(prefix="/agenda", tags=["agenda"])
 class AppointmentOut(BaseModel):
     id: int
     public_id: str
+    client_id: Optional[int]
     client_name: Optional[str]
     barber_id: int
     barber_name: str
@@ -84,6 +85,7 @@ def _appt_out(appt: Appointment, client_name: str, barber_id: int, barber_name: 
     return AppointmentOut(
         id=appt.id,
         public_id=str(appt.public_id),
+        client_id=appt.client_id,
         client_name=client_name,
         barber_id=barber_id,
         barber_name=barber_name,
@@ -137,6 +139,7 @@ async def get_agenda(
             out.append(AppointmentOut(
                 id=appt.id,
                 public_id=str(appt.public_id),
+                client_id=appt.client_id,
                 client_name=appt.client.name,
                 barber_id=barber_id,
                 barber_name=barber_name,
@@ -151,6 +154,7 @@ async def get_agenda(
             out.append(AppointmentOut(
                 id=appt.id,
                 public_id=str(appt.public_id),
+                client_id=None,
                 client_name=None,
                 barber_id=barber_id,
                 barber_name=barber_name,
@@ -342,6 +346,7 @@ async def criar_agendamento(
     return AppointmentOut(
         id=appt_id,
         public_id=public_id,
+        client_id=client.id,
         client_name=client.name,
         barber_id=barber.id,
         barber_name=barber.name,

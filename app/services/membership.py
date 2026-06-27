@@ -17,6 +17,7 @@ RLS (org corrente definida pelo ``get_tenant_db``/``get_bot_db``).
 
 from __future__ import annotations
 
+from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional, Sequence
@@ -44,8 +45,45 @@ from models import (
 
 _CENTS = Decimal("0.01")
 
+# Sentinela p/ distinguir "campo não informado" de "definido como None" nos
+# overrides da venda (ex.: tornar o plano ilimitado = included_uses None).
+_UNSET = object()
+
+# Item leve p/ reusar build_combo_snapshot com um combo arbitrário (custom).
+_ComboItem = namedtuple("_ComboItem", ["service_id", "position"])
+
+# Categorias que um pacote do CATÁLOGO pode cobrir (corte/barba/corte+barba).
+# `combo` = um único serviço que já representa corte+barba.
+_COMBO_BASE_CATEGORIES = {"cabelo", "barba", "combo"}
+
 
 # ─── cálculos puros ──────────────────────────────────────────────────────────
+
+
+def validate_combo_shape(categories: Sequence[str]) -> None:
+    """Valida que o combo de um PLANO DE CATÁLOGO é corte, barba ou corte+barba.
+
+    Regra (cada uso = 1 serviço): 1 serviço ∈ {cabelo, barba, combo}; ou 2
+    serviços que sejam exatamente {cabelo, barba}. Química/estética e combos
+    arbitrários são rejeitados. NÃO se aplica a pacotes personalizados (combo
+    livre). Levanta ``ValueError`` (o router traduz p/ HTTP 422).
+    """
+    cats = list(categories)
+    if not cats:
+        raise ValueError("Combo do plano não pode ser vazio.")
+    if any(c not in _COMBO_BASE_CATEGORIES for c in cats):
+        raise ValueError(
+            "Combo do plano só pode conter corte, barba ou corte+barba "
+            "(sem química/estética)."
+        )
+    if len(cats) == 1:
+        return
+    if len(cats) == 2 and set(cats) == {"cabelo", "barba"}:
+        return
+    raise ValueError(
+        "Combo do plano deve ser um serviço (corte, barba ou corte+barba) "
+        "ou exatamente corte + barba."
+    )
 
 def compute_unit_value(
     price: Decimal,
@@ -146,6 +184,156 @@ async def _default_unit(db: AsyncSession, organization_id: int) -> Unit:
 
 # ─── venda / leitura ─────────────────────────────────────────────────────────
 
+async def create_membership(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    client_id: int,
+    sold_by_user_id: Optional[int],
+    start_at: Optional[datetime] = None,
+    plan_id: Optional[int] = None,
+    combo_service_ids: Optional[Sequence[int]] = None,
+    included_uses=_UNSET,
+    unlimited_use_value=_UNSET,
+    price=_UNSET,
+    duration_days=_UNSET,
+) -> ClientMembership:
+    """Cria uma assinatura gravando os snapshots imutáveis a partir de uma spec.
+
+    Dois caminhos convergentes:
+    - **Catálogo (com override opcional):** passe ``plan_id``; os campos da spec
+      presentes sobrescrevem os do plano (combo/usos/preço/duração).
+    - **Personalizado (do zero):** ``plan_id=None`` + ``combo_service_ids`` +
+      ``price`` + ``duration_days`` + (``included_uses`` ou ``unlimited_use_value``).
+
+    ``unit_recognized_value`` é SEMPRE recomputado da spec final (nunca herdado
+    do plano). Sem restrição de forma do combo aqui — isso é só do catálogo.
+    """
+    client = (
+        await db.execute(select(Client).where(Client.id == client_id))
+    ).scalar_one_or_none()
+    if not client or client.deleted_at is not None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Cliente não encontrado.")
+
+    plan: Optional[MembershipPlan] = None
+    if plan_id is not None:
+        plan = (
+            await db.execute(
+                select(MembershipPlan)
+                .where(MembershipPlan.id == plan_id)
+                .options(selectinload(MembershipPlan.items))
+            )
+        ).scalar_one_or_none()
+        if not plan or plan.deleted_at is not None or not plan.is_active:
+            raise HTTPException(
+                http_status.HTTP_404_NOT_FOUND, "Plano não encontrado ou inativo."
+            )
+        if not plan.items:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Plano sem combo configurado (nenhum serviço).",
+            )
+
+    # ── resolve a spec final (override > plano) ──────────────────────────────
+    if combo_service_ids is not None:
+        final_combo_ids = list(combo_service_ids)
+    elif plan is not None:
+        final_combo_ids = [
+            i.service_id for i in sorted(plan.items, key=lambda i: i.position)
+        ]
+    else:
+        final_combo_ids = []
+    if not final_combo_ids:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Pacote sem combo (nenhum serviço).",
+        )
+    if len(set(final_combo_ids)) != len(final_combo_ids):
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY, "Serviço repetido no combo."
+        )
+
+    final_price = price if price is not _UNSET else (plan.price if plan else None)
+    final_duration = (
+        duration_days if duration_days is not _UNSET
+        else (plan.duration_days if plan else None)
+    )
+    if included_uses is not _UNSET or unlimited_use_value is not _UNSET:
+        final_included = included_uses if included_uses is not _UNSET else None
+        final_unit_value = (
+            unlimited_use_value if unlimited_use_value is not _UNSET else None
+        )
+    elif plan is not None:
+        final_included = plan.included_uses
+        final_unit_value = plan.unlimited_use_value
+    else:
+        final_included = None
+        final_unit_value = None
+
+    if final_price is None or final_duration is None:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Pacote personalizado exige preço e duração.",
+        )
+
+    # ── carrega/valida serviços do combo e monta o snapshot ──────────────────
+    services = (
+        await db.execute(select(Service).where(Service.id.in_(final_combo_ids)))
+    ).scalars().all()
+    services_by_id = {s.id: s for s in services}
+    missing = [sid for sid in final_combo_ids if sid not in services_by_id]
+    if missing:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Combo referencia serviço inexistente nesta organização.",
+        )
+    for sid in final_combo_ids:
+        if not services_by_id[sid].is_active:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Combo referencia serviço inativo.",
+            )
+
+    try:
+        unit_value = compute_unit_value(final_price, final_included, final_unit_value)
+    except ValueError as exc:
+        raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    combo_items = [
+        _ComboItem(service_id=sid, position=pos)
+        for pos, sid in enumerate(final_combo_ids, start=1)
+    ]
+    combo = build_combo_snapshot(combo_items, services_by_id)
+
+    start = start_at or _now_utc()
+    if start.tzinfo is None:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "start_at deve incluir fuso horário.",
+        )
+    start = start.astimezone(timezone.utc)
+    end = compute_end_at(start, final_duration)
+
+    membership = ClientMembership(
+        organization_id=organization_id,
+        client_id=client_id,
+        plan_id=plan.id if plan else None,
+        status=MembershipStatus.ativa,
+        start_at=start,
+        end_at=end,
+        price_paid=Decimal(final_price),
+        included_uses=final_included,
+        used_uses=0,
+        unit_recognized_value=unit_value,
+        combo_snapshot=combo,
+        duration_days=final_duration,
+        sold_by_user_id=sold_by_user_id,
+    )
+    db.add(membership)
+    await db.flush()
+    return membership
+
+
 async def sell_membership(
     db: AsyncSession,
     *,
@@ -155,72 +343,38 @@ async def sell_membership(
     sold_by_user_id: Optional[int],
     start_at: Optional[datetime] = None,
 ) -> ClientMembership:
-    """Contrata um plano para um cliente, gravando os snapshots imutáveis."""
-    client = (
-        await db.execute(select(Client).where(Client.id == client_id))
-    ).scalar_one_or_none()
-    if not client or client.deleted_at is not None:
-        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Cliente não encontrado.")
-
-    plan = (
-        await db.execute(
-            select(MembershipPlan)
-            .where(MembershipPlan.id == plan_id)
-            .options(selectinload(MembershipPlan.items))
-        )
-    ).scalar_one_or_none()
-    if not plan or plan.deleted_at is not None or not plan.is_active:
-        raise HTTPException(
-            http_status.HTTP_404_NOT_FOUND, "Plano não encontrado ou inativo."
-        )
-    if not plan.items:
-        raise HTTPException(
-            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Plano sem combo configurado (nenhum serviço).",
-        )
-
-    service_ids = [i.service_id for i in plan.items]
-    services = (
-        await db.execute(select(Service).where(Service.id.in_(service_ids)))
-    ).scalars().all()
-    services_by_id = {s.id: s for s in services}
-    missing = [sid for sid in service_ids if sid not in services_by_id]
-    if missing:
-        raise HTTPException(
-            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Combo referencia serviço inexistente.",
-        )
-
-    try:
-        unit_value = compute_unit_value(
-            plan.price, plan.included_uses, plan.unlimited_use_value
-        )
-    except ValueError as exc:
-        raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
-
-    combo = build_combo_snapshot(plan.items, services_by_id)
-    start = start_at or _now_utc()
-    if start.tzinfo is None:
-        raise HTTPException(
-            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "start_at deve incluir fuso horário.",
-        )
-    start = start.astimezone(timezone.utc)
-    end = compute_end_at(start, plan.duration_days)
-
-    membership = ClientMembership(
+    """Contrata um plano de catálogo (caso particular de ``create_membership``)."""
+    return await create_membership(
+        db,
         organization_id=organization_id,
         client_id=client_id,
-        plan_id=plan.id,
+        sold_by_user_id=sold_by_user_id,
+        start_at=start_at,
+        plan_id=plan_id,
+    )
+
+
+async def renew_membership(
+    db: AsyncSession, old: ClientMembership, *, sold_by_user_id: Optional[int]
+) -> ClientMembership:
+    """Renova clonando os snapshots da própria assinatura (preserva a
+    personalização e funciona sem plano de catálogo). Nova vigência a partir de
+    agora; saldo zerado."""
+    start = _now_utc()
+    end = compute_end_at(start, old.duration_days)
+    membership = ClientMembership(
+        organization_id=old.organization_id,
+        client_id=old.client_id,
+        plan_id=old.plan_id,
         status=MembershipStatus.ativa,
         start_at=start,
         end_at=end,
-        price_paid=Decimal(plan.price),
-        included_uses=plan.included_uses,
+        price_paid=Decimal(old.price_paid),
+        included_uses=old.included_uses,
         used_uses=0,
-        unit_recognized_value=unit_value,
-        combo_snapshot=combo,
-        duration_days=plan.duration_days,
+        unit_recognized_value=Decimal(old.unit_recognized_value),
+        combo_snapshot=old.combo_snapshot,
+        duration_days=old.duration_days,
         sold_by_user_id=sold_by_user_id,
     )
     db.add(membership)
@@ -253,29 +407,15 @@ def remaining_uses(membership: ClientMembership) -> Optional[int]:
 
 # ─── consumo de pacote ───────────────────────────────────────────────────────
 
-async def consume_membership(
-    db: AsyncSession,
-    *,
-    organization_id: int,
-    membership_id: int,
-    start_at: datetime,
-    assignments: Sequence[dict],
-    created_by_user_id: Optional[int],
-) -> Appointment:
-    """Consome 1 pacote: baixa o saldo e cria o agendamento do combo.
 
-    ``assignments`` = ``[{"service_id": int, "barber_id": int}]`` — um por serviço
-    do combo (nem mais, nem menos). Tudo roda na transação única do request: se
-    qualquer passo após a baixa falhar, o rollback devolve o saldo.
+async def _decrement_balance(
+    db: AsyncSession, membership_id: int
+) -> tuple[Decimal, list]:
+    """Baixa atômica de 1 uso (impede double-spend, limite e uso vencido).
+
+    Retorna ``(unit_recognized_value, combo_snapshot)``. 404 se a assinatura não
+    existe; 409 se está sem saldo/vencida/cancelada.
     """
-    if start_at.tzinfo is None:
-        raise HTTPException(
-            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "start_at deve incluir fuso horário.",
-        )
-    start_utc = start_at.astimezone(timezone.utc)
-
-    # 1) Baixa atômica de saldo (impede double-spend, limite e uso vencido).
     row = (
         await db.execute(
             text(
@@ -289,7 +429,6 @@ async def consume_membership(
         )
     ).first()
     if row is None:
-        # Distingue inexistente (404) de indisponível (409).
         exists = (
             await db.execute(
                 select(ClientMembership.id).where(
@@ -305,14 +444,46 @@ async def consume_membership(
             http_status.HTTP_409_CONFLICT,
             "Assinatura sem saldo, vencida ou cancelada.",
         )
+    return Decimal(row.unit_recognized_value), list(row.combo_snapshot)
 
-    unit_value = Decimal(row.unit_recognized_value)
-    combo = list(row.combo_snapshot)
+
+def _combo_matches(combo: Sequence[dict], service_ids: Sequence[int]) -> bool:
+    """True se ``service_ids`` corresponde exatamente ao combo do snapshot."""
+    sids = list(service_ids)
+    return len(sids) == len(combo) and set(sids) == {c["service_id"] for c in combo}
+
+
+async def consume_membership(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    membership_id: int,
+    start_at: Optional[datetime] = None,
+    assignments: Sequence[dict],
+    created_by_user_id: Optional[int],
+) -> Appointment:
+    """Consome 1 pacote: baixa o saldo e cria o agendamento do combo.
+
+    ``assignments`` = ``[{"service_id": int, "barber_id": int}]`` — um por serviço
+    do combo (nem mais, nem menos). ``start_at`` ausente = agora (consumo avulso).
+    Tudo roda na transação única do request: se qualquer passo após a baixa
+    falhar, o rollback devolve o saldo.
+    """
+    start_src = start_at or _now_utc()
+    if start_src.tzinfo is None:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "start_at deve incluir fuso horário.",
+        )
+    start_utc = start_src.astimezone(timezone.utc)
+
+    # 1) Baixa atômica de saldo.
+    unit_value, combo = await _decrement_balance(db, membership_id)
 
     # 2) O combo é fixo: os serviços do agendamento devem bater com o snapshot.
     combo_service_ids = {c["service_id"] for c in combo}
     assign_service_ids = [a["service_id"] for a in assignments]
-    if len(assign_service_ids) != len(combo) or set(assign_service_ids) != combo_service_ids:
+    if not _combo_matches(combo, assign_service_ids):
         raise HTTPException(
             http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             "Os serviços informados não correspondem ao combo do plano.",
@@ -423,6 +594,65 @@ async def consume_membership(
     )
     await db.flush()
     return appt
+
+
+async def apply_membership_to_appointment(
+    db: AsyncSession,
+    *,
+    appointment: Appointment,
+    membership: ClientMembership,
+    created_by_user_id: Optional[int],
+) -> Appointment:
+    """Marca um agendamento JÁ existente como pago por assinatura.
+
+    Baixa 1 uso, reprecifica os itens do agendamento com o rateio do valor
+    reconhecido e grava o ``MembershipUsage`` (1:1). NÃO conclui o atendimento —
+    a conclusão posterior detecta o uso e não cria ``Payment``. ``appointment``
+    deve vir com ``items`` carregados. Atômico na transação do request.
+    """
+    if appointment.client_id != membership.client_id:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "O agendamento não pertence ao cliente desta assinatura.",
+        )
+    if appointment.status != AppointmentStatus.agendado:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Só é possível usar a assinatura em um agendamento 'agendado'.",
+        )
+    if await usage_for_appointment(db, appointment.id) is not None:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Este atendimento já está pago por assinatura.",
+        )
+
+    # Baixa de saldo ANTES do combo-match: se não casar, a exceção faz rollback
+    # e devolve o saldo (transação única do request).
+    unit_value, combo = await _decrement_balance(db, membership.id)
+
+    item_service_ids = [it.service_id for it in appointment.items]
+    if not _combo_matches(combo, item_service_ids):
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Os serviços do agendamento não correspondem ao combo da assinatura.",
+        )
+
+    rateio = rateio_price_charged(unit_value, combo)
+    for it in appointment.items:
+        it.price_charged = rateio[it.service_id]
+    appointment.total_amount = unit_value
+
+    db.add(
+        MembershipUsage(
+            organization_id=membership.organization_id,
+            membership_id=membership.id,
+            appointment_id=appointment.id,
+            recognized_value=unit_value,
+            created_by_user_id=created_by_user_id,
+        )
+    )
+    await db.flush()
+    return appointment
 
 
 async def usage_for_appointment(
