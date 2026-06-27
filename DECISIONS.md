@@ -582,8 +582,15 @@ plan-form-dialog,use-package-dialog}.tsx`, `components/agenda/concluir-dialog.ts
 **Verificação:** backend **252 pass / 1 skip / 3 falhas ambientais conhecidas** (n8n `bypass_hours`, RLS
 isolation, e2e link — idênticas ao baseline); novos testes unit (`validate_combo_shape`/`_combo_matches`)
 + integração (venda custom/override, renovação custom, attach, checkout atômico, avulso, combo de catálogo
-inválido). Frontend `tsc`/`eslint`/`next build` limpos (21 rotas). **Migration aplicada no staging** (admin
-URL). **Pendente:** aplicar `0015` em produção (`ADMIN_DATABASE_URL`) + demo no browser.
+inválido). Frontend `tsc`/`eslint`/`next build` limpos (21 rotas).
+
+**Deploy:** ✅ **produção 2026-06-27** (VM backend HEAD `693fa94`; frontend archive `7d8c88d`). Migration
+`0015` aplicada (head=0015, `client_memberships.plan_id` nullable=YES) via `Dockerfile.migrate` com URL
+admin **construída inline** do `.env` (POSTGRES_USER/PASSWORD/DB) — a VM **ainda não tem `ADMIN_DATABASE_URL`
+no `.env`** (logo `deploy/update.sh` falharia na migração; rodei pull+migrate+`compose up --build` à mão).
+Backups pré-deploy: `backups/predeploy_0015_*.sql` (DB) + `backups/frontend_src_*.tgz`. Containers healthy;
+`/memberships/usos/attach`, `SellIn.combo_service_ids`, `ConcluirRequest.membership_id` no openapi live.
+**Pendente:** adicionar `ADMIN_DATABASE_URL` ao `.env` da VM (p/ `deploy/update.sh` futuro) + demo no browser.
 
 ---
 
