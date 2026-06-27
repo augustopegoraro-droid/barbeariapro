@@ -25,11 +25,13 @@
 - **Frontend** copiado via `git archive HEAD` → tar → scp → extração sobre `/opt/barbeariapro/barbearia-frontend`
   (backup em `backups/frontend_src_*.tgz`), depois `docker compose -f docker-compose.app.yml up -d --build`
   reconstruiu **backend (empresa) + frontend (assinaturas+empresa)**.
-- **Verificado:** `/empresa` (3 endpoints) e `/memberships` no openapi live; `/empresa` sem auth → 401
+- **Verificado (API/infra):** `/empresa` (3 endpoints) e `/memberships` no openapi live; `/empresa` sem auth → 401
   (router são, sem 500); rotas `assinaturas`/`empresa` compiladas no container; backup pré-deploy do DB em
   `backups/barbeariapro_predeploy_0014_*.sql`.
-- **Pendente:** smoke test visual no browser com login de produção (sem credenciais de prod nesta sessão);
-  higiene dos `.md` untracked na raiz (docs CRM superados).
+- **✅ Smoke test no browser (prod, org 1):** `/admin/empresa` renderiza e carrega dados reais (org, unidade,
+  horários Seg–Sáb, plano MVP + uso 5/20 profissionais); `/admin/assinaturas` renderiza (abas Planos|Assinaturas,
+  empty state do backend). **Write round-trip validado**: PATCH em `legal_name` persistiu no DB e foi **revertido p/ NULL**.
+- **Pendente:** higiene dos `.md` untracked na raiz (docs CRM superados).
 
 ---
 

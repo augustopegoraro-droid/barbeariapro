@@ -502,8 +502,11 @@ defasados quanto ao estado de produção**:
 
 **Verificação (API/infra):** openapi com `/empresa`(3)+`/memberships`; `/empresa` sem auth → 401 (sem 500);
 rotas `assinaturas`/`empresa` compiladas no container; containers healthy; head `0014` + 7 colunas + GRANT.
-**Pendente:** smoke test visual no browser com login de produção (credenciais de prod não disponíveis nesta
-sessão).
+**Smoke test no browser (prod, org 1):** ✅ `/admin/empresa` e `/admin/assinaturas` renderizam com dados reais
+(org/unidade/horários/plano+uso); **write round-trip** validado (PATCH `legal_name` persistiu e foi revertido p/
+NULL — confirma o mapeamento "string vazia→NULL" e que `name` não é afetado).
+**Nota de harness:** `form_input` (extensão Chrome) seta o DOM mas **não dispara o `onChange` do React**, então o
+campo não fica "dirty" e o PATCH não inclui o valor — usar **digitação por teclado** (`type`) para exercitar saves.
 
 ---
 

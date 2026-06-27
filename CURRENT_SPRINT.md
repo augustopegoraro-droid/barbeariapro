@@ -26,7 +26,9 @@
 - **Frontend** redeployado com **assinaturas + empresa** (`git archive`→tar→scp→build).
 - **Verificado** (API/infra): openapi `/empresa`+`/memberships`; `/empresa` sem auth → 401; rotas
   compiladas no container; containers healthy.
-- **Pendente:** smoke test visual no browser (login de prod); limpar `.md` untracked na raiz.
+- **✅ Smoke test no browser (prod):** `/admin/empresa` e `/admin/assinaturas` renderizam com dados reais;
+  **write round-trip** (PATCH `legal_name` → persistiu → revertido p/ NULL).
+- **Pendente:** limpar `.md` untracked na raiz.
 
 ---
 
