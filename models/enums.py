@@ -133,6 +133,24 @@ class LoyaltyCategoria(str, enum.Enum):
     diamante = "diamante"
 
 
+class LoyaltyLedgerType(str, enum.Enum):
+    """Tipo de lançamento no ledger de pontos (append-only)."""
+
+    earn = "earn"
+    redeem = "redeem"
+    expire = "expire"
+    adjust = "adjust"
+    reversal = "reversal"
+
+
+class LoyaltyVoucherStatus(str, enum.Enum):
+    """Estado de um voucher/crédito gerado por resgate de pontos."""
+
+    ativo = "ativo"
+    consumido = "consumido"
+    cancelado = "cancelado"
+
+
 class LeadStage(str, enum.Enum):
     """Estágios do funil/Kanban do CRM."""
 

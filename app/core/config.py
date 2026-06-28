@@ -46,6 +46,15 @@ class Settings(BaseSettings):
     n8n_webhook_url: str = ""
     wa_webhook_secret: str = ""
 
+    # Chatwoot (D-49 — camada de atendimento/omnichannel). Defaults vazios: inerte.
+    # CHATWOOT_WEBHOOK_TOKEN: segredo do header X-Chatwoot-Token em /chatwoot/webhook
+    #   (obrigatório p/ o endpoint operar; vazio → 503).
+    # Os demais (api_url/account_id/api_token) servem ao envio reverso (Fase 4 completa).
+    chatwoot_webhook_token: str = ""
+    chatwoot_api_url: str = ""
+    chatwoot_account_id: int = 0
+    chatwoot_api_token: str = ""
+
     # Google Calendar (Fase 2 — OAuth2 + sync de eventos). Default vazio:
     # sem credenciais, o módulo de integração fica inerte (não afeta produção).
     google_client_id: str = ""

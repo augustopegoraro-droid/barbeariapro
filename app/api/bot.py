@@ -19,6 +19,7 @@ from app.core.dates import local_tz
 from app.core.phone import normalize_phone
 from app.deps import get_bot_db
 from app.services.scheduling import barber_has_conflict
+from app.services.lead_funnel import advance_lead_on_inbound, upsert_client_and_lead
 from app.services.loyalty import recalculate as _recalculate_loyalty
 import app.services.conversation as _conv_svc
 from app.services.conversation import MediaIn as _MediaIn
@@ -295,37 +296,9 @@ async def log_message(body: _MessageLogIn, db: BotDB, _auth: _BotAuth = None):
         await db.commit()
         return {"ok": True, "duplicate": True}
 
-    # ── avanço de estágio do funil — INALTERADO (só quando há cliente+lead) ──
+    # ── avanço de estágio do funil — caminho ÚNICO (helper compartilhado com /chatwoot) ──
     if direction == MessageDirection.inbound and client is not None:
-        lead = (
-            await db.execute(
-                select(Lead)
-                .where(Lead.client_id == client.id)
-                .where(Lead.organization_id == org_id)
-                .where(Lead.stage.in_({LeadStage.novo_contato, LeadStage.conversando}))
-                .order_by(Lead.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
-        if lead is not None:
-            lead.last_contact_at = now
-            lead.updated_at = now
-            if lead.stage == LeadStage.novo_contato:
-                old_stage = lead.stage
-                lead.stage = LeadStage.conversando
-                db.add(
-                    LeadEvent(
-                        lead_id=lead.id,
-                        organization_id=org_id,
-                        event_type="stage_changed",
-                        from_stage=old_stage,
-                        to_stage=LeadStage.conversando,
-                    )
-                )
-                _logger.info(
-                    "conversation_log lead_id=%d stage novo_contato→conversando", lead.id
-                )
+        await advance_lead_on_inbound(db, org_id=org_id, client_id=client.id, now=now)
 
     await db.commit()
     _logger.info("conversation_log saved direction=%s phone=%s", direction.value, phone)
@@ -493,114 +466,14 @@ async def list_barbers(db: BotDB) -> list:
 @router.post("/clients", response_model=ClientOut, status_code=status.HTTP_200_OK)
 async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
     phone = _normalize_phone(body.phone)
-    org_id = settings.bot_organization_id
-
-    existing = (
-        await db.execute(
-            select(Client)
-            .where(Client.organization_id == org_id)
-            .where(Client.phone_e164 == phone)
-        )
-    ).scalar_one_or_none()
-
-    _active_lead_stages = {LeadStage.novo_contato, LeadStage.conversando}
-
-    if existing:
-        # Só atualiza se o novo nome for mais informativo (mais caracteres)
-        if len(body.name) > len(existing.name or ""):
-            existing.name = body.name
-        client = existing
-
-        # Cliente existente: criar lead se não tiver um ativo recente (últimos 7 dias)
-        from datetime import timedelta
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        recent_lead = (
-            await db.execute(
-                select(Lead)
-                .where(Lead.client_id == client.id)
-                .where(Lead.organization_id == org_id)
-                .where(Lead.stage.in_(_active_lead_stages))
-                .where(Lead.created_at >= cutoff)
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
-        if recent_lead is None:
-            max_pos = (
-                await db.execute(
-                    select(func.max(Lead.position)).where(
-                        Lead.organization_id == org_id,
-                        Lead.stage == LeadStage.novo_contato,
-                    )
-                )
-            ).scalar_one_or_none()
-            lead = Lead(
-                organization_id=org_id,
-                client_id=client.id,
-                name=client.name,
-                phone_e164=phone,
-                source=ContactChannel.whatsapp,
-                stage=LeadStage.novo_contato,
-                position=(max_pos + 1) if max_pos is not None else 0,
-                last_contact_at=datetime.now(timezone.utc),
-            )
-            db.add(lead)
-            await db.flush()
-            db.add(LeadEvent(
-                lead_id=lead.id,
-                organization_id=org_id,
-                event_type="created",
-                to_stage=LeadStage.novo_contato,
-            ))
-        else:
-            # Lead ativo já existe: atualizar timestamp de contato.
-            recent_lead.last_contact_at = datetime.now(timezone.utc)
-            recent_lead.updated_at = datetime.now(timezone.utc)
-    else:
-        client = Client(
-            organization_id=org_id,
-            name=body.name,
-            phone_e164=phone,
-            acquisition_channel=ContactChannel.whatsapp,
-        )
-        db.add(client)
-        await db.flush()
-        db.add(
-            ClientConsent(
-                client_id=client.id,
-                channel=ContactChannel.whatsapp,
-                status=ConsentStatus.opt_in,
-                source="chatbot_first_contact",
-            )
-        )
-
-        # Novo contato via WhatsApp → criar lead no funil
-        max_pos = (
-            await db.execute(
-                select(func.max(Lead.position)).where(
-                    Lead.organization_id == org_id,
-                    Lead.stage == LeadStage.novo_contato,
-                )
-            )
-        ).scalar_one_or_none()
-        lead = Lead(
-            organization_id=org_id,
-            client_id=client.id,
-            name=client.name,
-            phone_e164=phone,
-            source=ContactChannel.whatsapp,
-            stage=LeadStage.novo_contato,
-            position=(max_pos + 1) if max_pos is not None else 0,
-        )
-        db.add(lead)
-        await db.flush()
-        db.add(LeadEvent(
-            lead_id=lead.id,
-            organization_id=org_id,
-            event_type="created",
-            to_stage=LeadStage.novo_contato,
-        ))
-
+    # Caminho ÚNICO de criação de cliente/lead (compartilhado com /chatwoot/webhook).
+    client = await upsert_client_and_lead(
+        db,
+        org_id=settings.bot_organization_id,
+        phone=phone,
+        name=body.name,
+        channel=ContactChannel.whatsapp,
+    )
     return ClientOut(id=client.id, name=client.name, phone_e164=client.phone_e164)
 
 

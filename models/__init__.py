@@ -18,8 +18,10 @@ from .enums import (
     IntegrationProvider,
     IntegrationStatus,
     LoyaltyCategoria,
+    LoyaltyLedgerType,
     LoyaltyNivel,
     LoyaltyStatus,
+    LoyaltyVoucherStatus,
     MembershipStatus,
     MessageDirection,
     MessageSenderType,
@@ -39,7 +41,13 @@ from .service import Service
 from .appointment import Appointment, AppointmentItem
 from .payment import Expense, ExpenseCategory, Payment
 from .integration import CalendarSync, IntegrationAccount, MessageLog
-from .loyalty import ClientLoyalty
+from .loyalty import (
+    ClientLoyalty,
+    LoyaltyPointEntry,
+    LoyaltyRule,
+    LoyaltyTier,
+    LoyaltyVoucher,
+)
 from .lead import Lead, LeadEvent
 from .conversation import Attachment, Conversation, Message
 from .membership import (
@@ -101,9 +109,15 @@ __all__ = [
     "MessageLog",
     # fidelidade
     "ClientLoyalty",
+    "LoyaltyTier",
+    "LoyaltyRule",
+    "LoyaltyVoucher",
+    "LoyaltyPointEntry",
     "LoyaltyNivel",
     "LoyaltyStatus",
     "LoyaltyCategoria",
+    "LoyaltyLedgerType",
+    "LoyaltyVoucherStatus",
     # CRM / funil
     "Lead",
     "LeadEvent",
