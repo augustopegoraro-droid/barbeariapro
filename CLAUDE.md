@@ -162,11 +162,18 @@ vigência, venda, **renovação clonando o snapshot**, expiração; receita rate
 agendar o combo, **usar agora** (avulso), ou **pagar com a assinatura no checkout**/anexar a um
 agendamento existente. Combo de **catálogo** restrito a corte/barba/corte+barba — ver D-44/D-48).
 
-**Placeholders ("Em breve") no frontend:** `fidelidade`, `campanhas`, `usuarios`.
+**Fidelização por pontos** (D-50, **deployada em prod 2026-06-28**): ledger append-only
+(`loyalty_point_ledger`) + tiers/regras configuráveis por org (`loyalty_tiers`/`loyalty_rules`) + resgate
+gerando voucher (`loyalty_vouchers`); `client_loyalty.points_balance`/`current_tier_id` derivados. Ladder único
+(Bronze0/Prata150/Ouro500/Diamante1000/Black2000), 1 pt/R$ + 10/visita, resgate 1pt=R$1. Tela `/admin/fidelidade`
+(abas Clientes/Configuração). Rollout 100% aditivo (nivel/categoria + API legada mantidos). Migrations `0016`/`0017`
+(head=`0017`). **Falta (PR-C):** badges/filtro de tier em Clientes + slice no Dashboard.
+
+**Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
 **Pendente (visão do produto):** Caixa · Consumo de produtos no atendimento · Estoque/Produtos ·
-Renovação **automática** de mensalidade (a manual já existe — D-44) · Fidelização · Dashboard executivo
+Renovação **automática** de mensalidade (a manual já existe — D-44) · Dashboard executivo
 (comercial, financeiro, operacional, **leads fora do horário comercial / faturamento gerado pela IA**) ·
 Multi-tenant real no frontend · Arquitetura de múltiplos agentes.
 

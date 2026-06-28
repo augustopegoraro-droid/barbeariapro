@@ -1,6 +1,30 @@
 # CURRENT_SPRINT.md
-> Estado do desenvolvimento em **2026-06-26**. Atualizar a cada sessão.
-> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-43), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
+> Estado do desenvolvimento em **2026-06-28**. Atualizar a cada sessão.
+> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-50), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
+
+---
+
+## 🟢 Sessão 2026-06-28 (8ª) — Fidelidade por Pontos (Fase 2, D-50) DEPLOYADA em prod
+
+> Módulo de fidelidade points-driven (ledger + tiers/regras configuráveis + resgate), **full-stack e
+> DEPLOYADO em produção** (backend PR-A + frontend PR-B), validado no browser. Detalhes em **D-50**.
+
+- **Backend (PR #6 → `main`, merge `1896d53`):** migrations `0016_loyalty_points` + `0017_grant_loyalty_points`
+  (4 tabelas + RLS + GRANT); `app/services/loyalty.py` (seed lazy, `recalculate` idempotente, resgate/ajuste);
+  `app/api/loyalty.py` (`/ledger`, `/points`, `/redeem`, `/vouchers`, `GET /tiers`, `GET|PUT /rules`);
+  `scripts/backfill_loyalty_points.py`. 10 testes novos. **100% aditivo** (nivel/categoria + API legada mantidos).
+- **Frontend (commit local `d0cb7b9`, repo aninhado; remote morto):** tela `/admin/fidelidade` (era placeholder)
+  — abas **Clientes** (saldo/nível/próximo + extrato/ledger + vouchers + resgate/ajuste) e **Configuração**
+  (regra + ladder). `hooks/use-loyalty.ts` + `components/loyalty/*`. Escopo: só a tela.
+- **Defaults (D-50):** ladder Bronze0/Prata150/Ouro500/Diamante1000/Black2000 (0/5/10/15/20% off);
+  1 pt/R$ + 10/visita; resgate 1 pt = R$ 1.
+- **Deploy prod (2026-06-28):** migration `0015 → 0017` (head `0017`) via container efêmero com credencial admin
+  do container `barbeariapro-postgres` (sem expor segredo); backfill (1 cliente, 0 piso) **antes** de subir o
+  código → sem janela de quebra; backend rebuildado `healthy`; frontend por scp+build.
+- **✅ Smoke autenticado no browser:** Augusto = 1.440 pts / Diamante (15% off) / 560 p/ Black + extrato coerente;
+  aba Configuração com os defaults; sem erros no console. (Sem mutação em prod.)
+- **Pendente:** **PR-C** (tier em Clientes/Dashboard — mexe em telas vivas + `clientes.py`/`dashboard.py`);
+  auditor adversarial (opcional); renovações automáticas / `system_events` / Agenda↔checkout (consumir voucher).
 
 ---
 

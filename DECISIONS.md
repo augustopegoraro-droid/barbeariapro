@@ -627,6 +627,48 @@ nada implementado. **Começar pela Fase 0** (Meta Business + número novo — ga
 
 ---
 
+### D-50 — Fidelidade por Pontos (Fase 2): ledger append-only + tiers/regras configuráveis — DEPLOYADO em prod
+
+**Data:** 2026-06-28 (8ª sessão)
+**Contexto:** a fidelidade existente era **snapshot-only** (nível derivado de visitas/gasto, enum fixo,
+benefícios hardcoded) — sem ledger, sem configuração por org, sem resgate. A Fase 1 (PR #5) já tinha
+prototipado o `MembershipAgent` points-driven no `AI Kernel/`. Esta fase leva o modelo para o backend +
+frontend, **100% aditivo** (nivel/categoria e API legada preservados; drop só em cleanup futuro).
+
+**Decisões (confirmadas pelo usuário):**
+1. **Ladder único de pontos** (aposenta nível×categoria como eixo): tiers **Bronze 0 / Prata 150 / Ouro 500 /
+   Diamante 1.000 / Black 2.000**, com desconto 0/5/10/15/20%.
+2. **Pontos por R$ gasto + por visita**, configuráveis por org: default **1 pt/R$ + 10 pts/visita**.
+3. **Resgate de pontos** gera voucher de crédito: default **1 pt = R$ 1**.
+4. **Ledger append-only** (`loyalty_point_ledger`, CHECK `balance_after>=0`, earn idempotente por
+   appointment via UNIQUE partial) é a fonte de verdade; `client_loyalty.points_balance`/`current_tier_id`
+   são derivados.
+
+**Implementação:**
+- **Backend (PR #6 → `main`, merge `1896d53`):** migrations `0016_loyalty_points` (4 tabelas
+  `loyalty_tiers`/`loyalty_rules`/`loyalty_vouchers`/`loyalty_point_ledger` + `client_loyalty.points_balance`/
+  `current_tier_id` + RLS) e `0017_grant_loyalty_points` (GRANT ao `barber_app`). `app/services/loyalty.py`
+  (seed lazy de tiers/regras, `recalculate` idempotente, `redeem_points`, `adjust_points`). `app/api/loyalty.py`
+  (endpoints `/ledger`, `/points`, `/redeem`, `/vouchers`, `GET /tiers`, `GET|PUT /rules`).
+  `scripts/backfill_loyalty_points.py` (idempotente, sem regressão de tier). 10 testes novos.
+- **Frontend (commit local `d0cb7b9` no repo aninhado; remote morto → sem PR):** tela `/admin/fidelidade`
+  (era placeholder) com abas **Clientes** (saldo/nível/próximo + extrato/ledger + vouchers + resgate/ajuste)
+  e **Configuração** (regra + ladder). `hooks/use-loyalty.ts` + `components/loyalty/*`. Escopo restrito à
+  tela (badges/filtro de Clientes e slice do Dashboard por tier ficam para um **PR-C** futuro, pois mexem em
+  telas vivas + `clientes.py`/`dashboard.py`).
+
+**Deploy em produção (2026-06-28):** PR #6 mergeado na `main`; VM `git pull`; migration `0015 → 0017`
+aplicada (head `0017`) via container efêmero montando o código do host com credencial admin obtida do
+container `barbeariapro-postgres` (sem expor segredo); `backfill` rodado (1 cliente, 0 piso); backend
+rebuildado (`healthy`). Frontend deployado por scp+build (remote morto). **Smoke autenticado validado no
+browser** (Augusto: 1.440 pts / Diamante / 560 p/ Black + extrato coerente; Configuração com defaults; sem
+erros no console). Backfill **antes** de subir o código novo → sem janela de quebra (aditivo).
+
+**Pendente:** PR-C (tier em Clientes/Dashboard); auditor adversarial (opcional); renovações automáticas,
+`system_events`/`audit_logs`, integração Agenda↔checkout (consumir voucher) — fases futuras.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
