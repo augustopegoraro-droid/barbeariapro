@@ -18,12 +18,18 @@
   `vencida` derivado em leitura; auditoria `canceled_by`/`reverted_by`. **RBAC:** recepção agora lista planos.
 - **Frontend (`/admin/assinaturas`):** confirmação inline + erro em Cancelar/Renovar/Excluir; **Reativar** no
   histórico; aviso ao vender com vigência aberta; confirmação no "Usar agora".
-- **Migration `0018_membership_corrections`** (aditiva, head `0018`) — **só staging**; **prod pendente**
-  (`ADMIN_DATABASE_URL`).
+- **Migration `0018_membership_corrections`** (aditiva, head `0018`) — **aplicada em prod 2026-06-28** (URL admin
+  construída do password do container `barbeariapro-postgres`; a VM não tem `ADMIN_DATABASE_URL` no `.env`).
 - **Testes:** `tests/test_membership_corrections.py` (10 novos ✅). Suíte **289 pass / 3 falhas ambientais
   pré-existentes**. Frontend: `tsc` limpo + lint sem problemas no módulo.
-- **Pendente:** smoke autenticado no browser (prod); Tier 3 (pausar,
-  trocar de plano, renovação automática, reembolso, expiração multi-org, caixa na venda) — planos próprios.
+- **✅ Smoke somente-leitura no browser (prod, org 1):** `/admin/assinaturas` renderiza; cartão do cliente Augusto
+  (Ativa) com layout de ações novo + botões **Estornar** no histórico de uso; **confirmação inline ao Cancelar**
+  validada (clicado → prompt → "Não", **sem mutação**); console sem erros. Nenhuma ação destrutiva disparada.
+- **🧹 Higiene git (frontend):** `feat/assinaturas-correcoes-d51` mergeado no **`main` do frontend**
+  (fast-forward `f5397a8` → `b628dca`). O `main` do repo aninhado **deixou de divergir da produção** — agora
+  inclui F1–F3 + D-48 + Fidelidade(PR-B) + D-51. Sem push (remote `DoctorDCombo/...` morto).
+- **Pendente:** Tier 3 (pausar, trocar de plano, renovação automática, reembolso, expiração multi-org, caixa na
+  venda) — planos próprios; registrar `taylorethedy.app`/HTTPS (nginx pronto).
 
 ---
 
