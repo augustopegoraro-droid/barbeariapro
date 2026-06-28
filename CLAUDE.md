@@ -161,7 +161,7 @@ Lembrete 24h e reativação de clientes · **Mensalidade/Assinatura do cliente f
 vigência, venda, **renovação clonando o snapshot**, expiração; receita rateada no uso. Consumo flexível:
 agendar o combo, **usar agora** (avulso), ou **pagar com a assinatura no checkout**/anexar a um
 agendamento existente. Combo de **catálogo** restrito a corte/barba/corte+barba — ver D-44/D-48).
-**Correção/reversão (D-51, staging — prod pendente):** reativar (desfaz cancelamento na vigência), editar
+**Correção/reversão (D-51, DEPLOYADO em prod 2026-06-28, head `0018`):** reativar (desfaz cancelamento na vigência), editar
 (`PATCH`)/excluir (`DELETE`) venda **sem uso**, **estornar uso** de atendimento concluído pago por assinatura;
 `renew` fecha a anterior (≤1 ativa); auto-pick 409 em múltiplas ativas; `revert_usage` atômico + `FOR UPDATE`
 na conclusão (sem Payment duplicado); status `vencida` derivado; auditoria `canceled_by`/`reverted_by`

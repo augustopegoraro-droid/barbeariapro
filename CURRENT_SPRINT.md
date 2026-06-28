@@ -7,8 +7,8 @@
 ## 🟢 Sessão 2026-06-28 (8ª, cont.) — Assinaturas: auditoria + ferramentas de correção (D-51)
 
 > Auditoria crítica multiagente do módulo Assinaturas (foco: erros da recepcionista que ficavam "presos") +
-> implementação das ferramentas de reversão/correção. **Backend + frontend implementados e testados no staging;
-> deploy em produção pendente.** Detalhes em **D-51**.
+> implementação das ferramentas de reversão/correção. **DEPLOYADO em produção 2026-06-28** (PR #8 `dc64e5c`;
+> migration `0018` head; backend+frontend `healthy`; endpoints novos no openapi). Detalhes em **D-51**.
 
 - **Novos endpoints (reversão/correção):** `POST /memberships/{id}/reativar`; `PATCH`/`DELETE /memberships/{id}`
   (corrigir/excluir venda **sem uso**); `PATCH /barbeiro/atendimento/{id}/estornar-uso` (estorna uso de
@@ -22,7 +22,7 @@
   (`ADMIN_DATABASE_URL`).
 - **Testes:** `tests/test_membership_corrections.py` (10 novos ✅). Suíte **289 pass / 3 falhas ambientais
   pré-existentes**. Frontend: `tsc` limpo + lint sem problemas no módulo.
-- **Pendente:** deploy em prod (migration `0018` + backend rebuild + frontend scp/build); Tier 3 (pausar,
+- **Pendente:** smoke autenticado no browser (prod); Tier 3 (pausar,
   trocar de plano, renovação automática, reembolso, expiração multi-org, caixa na venda) — planos próprios.
 
 ---

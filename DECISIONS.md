@@ -703,8 +703,11 @@ risco de inconsistência. **100% aditivo e retrocompatível.**
    Cancelar/Renovar/Excluir; botão **Reativar** no histórico; aviso ao vender com assinatura vigente;
    confirmação no "Usar agora". Sem lib de toast nova (padrão de erro inline do app).
 
-**Migrations:** `0018_membership_corrections` (aditiva) — `down_revision=0017`. **Aplicada só no staging**
-(head `0018`); **produção pendente** (rodar com `ADMIN_DATABASE_URL`).
+**Migrations:** `0018_membership_corrections` (aditiva) — `down_revision=0017`. **DEPLOYADO em produção
+2026-06-28** (PR #8 → `main` `dc64e5c`; head `0018`; backup `predeploy_0018_*.sql`; backend+frontend
+rebuildados `healthy`; endpoints novos no openapi; smoke sem-auth 401). A VM não tem `ADMIN_DATABASE_URL` no
+`.env` — migration rodada via imagem `Dockerfile.migrate` com URL admin construída do password do container
+`barbeariapro-postgres` (superuser `postgres`).
 **Testes:** `tests/test_membership_corrections.py` (10 novos, todos verdes); suíte **289 pass / 3 falhas
 ambientais pré-existentes** (provadas pré-existentes via `git stash`). Frontend: `tsc --noEmit` limpo e lint
 sem problemas nos arquivos do módulo.
