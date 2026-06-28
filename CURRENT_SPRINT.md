@@ -1,6 +1,29 @@
 # CURRENT_SPRINT.md
 > Estado do desenvolvimento em **2026-06-28**. Atualizar a cada sessão.
-> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-50), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
+> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-51), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
+
+---
+
+## 🟢 Sessão 2026-06-28 (8ª, cont.) — Assinaturas: auditoria + ferramentas de correção (D-51)
+
+> Auditoria crítica multiagente do módulo Assinaturas (foco: erros da recepcionista que ficavam "presos") +
+> implementação das ferramentas de reversão/correção. **Backend + frontend implementados e testados no staging;
+> deploy em produção pendente.** Detalhes em **D-51**.
+
+- **Novos endpoints (reversão/correção):** `POST /memberships/{id}/reativar`; `PATCH`/`DELETE /memberships/{id}`
+  (corrigir/excluir venda **sem uso**); `PATCH /barbeiro/atendimento/{id}/estornar-uso` (estorna uso de
+  atendimento **concluído** pago por assinatura — fecha o trap do "Usar agora").
+- **Endurecimento:** `revert_usage` atômico; `FOR UPDATE` na conclusão (sem Payment duplicado); `renew` fecha a
+  anterior (≤1 ativa); auto-pick 409 em múltiplas ativas; `IntegrityError`→409; índice único parcial; status
+  `vencida` derivado em leitura; auditoria `canceled_by`/`reverted_by`. **RBAC:** recepção agora lista planos.
+- **Frontend (`/admin/assinaturas`):** confirmação inline + erro em Cancelar/Renovar/Excluir; **Reativar** no
+  histórico; aviso ao vender com vigência aberta; confirmação no "Usar agora".
+- **Migration `0018_membership_corrections`** (aditiva, head `0018`) — **só staging**; **prod pendente**
+  (`ADMIN_DATABASE_URL`).
+- **Testes:** `tests/test_membership_corrections.py` (10 novos ✅). Suíte **289 pass / 3 falhas ambientais
+  pré-existentes**. Frontend: `tsc` limpo + lint sem problemas no módulo.
+- **Pendente:** deploy em prod (migration `0018` + backend rebuild + frontend scp/build); Tier 3 (pausar,
+  trocar de plano, renovação automática, reembolso, expiração multi-org, caixa na venda) — planos próprios.
 
 ---
 

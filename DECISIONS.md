@@ -669,6 +669,51 @@ erros no console). Backfill **antes** de subir o código novo → sem janela de 
 
 ---
 
+### D-51 — Assinatura: ferramentas de correção/reversão da recepcionista + endurecimento (auditoria do módulo)
+
+**Data:** 2026-06-28 (8ª sessão)
+**Contexto:** auditoria crítica multiagente do módulo Assinaturas (memberships) com verificação adversarial.
+O módulo era **append-only sem caminhos de correção**: cancelar era irreversível e sem confirmação; "Usar
+agora" consumia um pacote e concluía o atendimento de forma irreversível; não havia editar/excluir uma venda
+errada; renovar gerava múltiplas assinaturas ativas; e a recepção (usuária principal) recebia **403 ao listar
+o catálogo de planos** apesar de poder vender. Foco: tirar a recepcionista dos becos-sem-saída sem aumentar
+risco de inconsistência. **100% aditivo e retrocompatível.**
+
+**Decisões/implementação (escopo Tier 0+1+2; aprovado pelo usuário com "continue"):**
+1. **Ferramentas de reversão (novos endpoints):** `POST /memberships/{id}/reativar` (desfaz cancelamento na
+   vigência, se não houver outra ativa); `PATCH /memberships/{id}` e `DELETE /memberships/{id}` (corrige/remove
+   venda **sem uso** — cliente/preço/combo/vigência); `PATCH /barbeiro/atendimento/{id}/estornar-uso` (estorna
+   o uso de atendimento **concluído** pago por assinatura: cancela o atendimento, devolve o saldo do pacote,
+   **reverte os pontos de fidelidade** — `reverse_appointment_points`, lançamento `reversal` no ledger — e
+   recalcula o snapshot). Fecha os traps T1–T8. *(A reversão de pontos foi um bug pego pela revisão
+   adversarial: `recalculate` só credita; sem a reversão, o `earn` ficava no ledger e inflava saldo/tier.)*
+2. **Invariante ≤1 ativa por cliente:** `renew_membership` encerra a anterior (`vencida`); auto-pick de
+   assinatura (checkout/attach sem `membership_id`) retorna **409** quando há múltiplas ativas, exigindo escolha.
+3. **Concorrência/consistência:** `revert_usage` reescrito como UPDATE atômico com RETURNING (sem
+   double-decrement); `_load_appointment` com `FOR UPDATE` (impede Payment duplicado na conclusão em dinheiro);
+   `IntegrityError` da unicidade de uso → **409 limpo**; índice único **parcial** (`reverted_at IS NULL`) p/
+   permitir re-vínculo após estorno (migration `0018`).
+4. **Auditoria:** `client_memberships.canceled_by_user_id` + `membership_usages.reverted_by_user_id` (migration
+   `0018`, FKs `SET NULL`).
+5. **Estado derivado:** leitura mostra `vencida` quando `end_at<=now` mesmo sem o cron (fim do limbo
+   "ativa-vencida").
+6. **RBAC:** recepção passa a **listar planos ativos** (vender já era `full_access`); criar/editar/arquivar
+   plano e listar arquivados seguem `manager`.
+7. **UX (frontend, só a tela `/admin/assinaturas`):** confirmação inline + feedback de erro em
+   Cancelar/Renovar/Excluir; botão **Reativar** no histórico; aviso ao vender com assinatura vigente;
+   confirmação no "Usar agora". Sem lib de toast nova (padrão de erro inline do app).
+
+**Migrations:** `0018_membership_corrections` (aditiva) — `down_revision=0017`. **Aplicada só no staging**
+(head `0018`); **produção pendente** (rodar com `ADMIN_DATABASE_URL`).
+**Testes:** `tests/test_membership_corrections.py` (10 novos, todos verdes); suíte **289 pass / 3 falhas
+ambientais pré-existentes** (provadas pré-existentes via `git stash`). Frontend: `tsc --noEmit` limpo e lint
+sem problemas nos arquivos do módulo.
+**Fora de escopo (Tier 3, plano próprio):** pausar/reativar (estado `pausada`), trocar de plano com crédito
+proporcional, renovação automática (cron), reembolso no cancelamento, expiração multi-org, registro de caixa
+na venda + separação "receita reconhecida × recebido".
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

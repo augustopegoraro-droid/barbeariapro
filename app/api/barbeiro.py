@@ -14,10 +14,13 @@ from sqlalchemy.orm import selectinload
 from app.core.rbac import check_appointment_ownership
 from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
 from app.services.calendar_sync import push_appointment
-from app.services.loyalty import recalculate as _recalculate_loyalty
+from app.services.loyalty import (
+    recalculate as _recalculate_loyalty,
+    reverse_appointment_points as _reverse_loyalty_points,
+)
 from app.services.membership import (
-    active_membership_for_client,
     apply_membership_to_appointment,
+    resolve_membership_for_autopick,
     revert_usage,
     usage_for_appointment,
 )
@@ -30,11 +33,17 @@ _VALID_METHODS = {m.value for m in PaymentMethod}
 
 
 async def _load_appointment(db: AsyncSession, appt_id: int) -> Appointment:
+    # FOR UPDATE: serializa transições de status concorrentes sobre o MESMO
+    # agendamento (duplo clique/retry da recepção). Sem isso, duas conclusões
+    # simultâneas no fluxo em dinheiro passam ambas no _require_agendado (TOCTOU)
+    # e criam Payment em dobro — a tabela payments não tem unicidade por
+    # agendamento. O lock é só nesta linha, dentro da transação do request.
     row = (
         await db.execute(
             select(Appointment)
             .where(Appointment.id == appt_id)
             .options(selectinload(Appointment.items))
+            .with_for_update(of=Appointment)
         )
     ).scalar_one_or_none()
     if row is None:
@@ -107,12 +116,7 @@ async def concluir_atendimento(
                     detail="Assinatura não encontrada.",
                 )
         else:
-            membership = await active_membership_for_client(db, appt.client_id)
-            if membership is None:
-                raise HTTPException(
-                    status_code=http_status.HTTP_404_NOT_FOUND,
-                    detail="Cliente não tem assinatura ativa.",
-                )
+            membership = await resolve_membership_for_autopick(db, appt.client_id)
         await apply_membership_to_appointment(
             db, appointment=appt, membership=membership, created_by_user_id=current_user.id
         )
@@ -196,7 +200,7 @@ async def faltou_atendimento(
     orig_total = float(appt.total_amount)
     appt.status = AppointmentStatus.faltou
     # Se o atendimento consumia um pacote de mensalidade, devolve o saldo.
-    await revert_usage(db, appt_id)
+    await revert_usage(db, appt_id, reverted_by_user_id=current_user.id)
     await db.commit()
 
     background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "delete")
@@ -219,8 +223,59 @@ async def cancelar_atendimento(
     orig_total = float(appt.total_amount)
     appt.status = AppointmentStatus.cancelado
     # Se o atendimento consumia um pacote de mensalidade, devolve o saldo.
-    await revert_usage(db, appt_id)
+    await revert_usage(db, appt_id, reverted_by_user_id=current_user.id)
     await db.commit()
 
     background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "delete")
     return AtendimentoOut(id=appt_id, status="cancelado", total_amount=orig_total)
+
+
+@router.patch("/atendimento/{appt_id}/estornar-uso", response_model=AtendimentoOut)
+async def estornar_uso_atendimento(
+    appt_id: Annotated[int, Path(gt=0)],
+    background_tasks: BackgroundTasks,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> AtendimentoOut:
+    """Estorna o uso de um atendimento JÁ CONCLUÍDO pago por assinatura.
+
+    Corrige o erro mais comum e antes irreversível: 'Usar agora' por engano, ou
+    conclusão debitando a assinatura errada. Cancela o atendimento, devolve 1 uso
+    ao saldo (``revert_usage``) e recalcula a fidelidade — tudo na transação do
+    request. Só funciona em atendimento ``concluido`` que tenha uso de assinatura
+    ativo (não toca atendimentos pagos em dinheiro/cartão/pix).
+    """
+    role, my_barber_id = await resolve_current_role_with_barber(db, current_user)
+
+    appt = await _load_appointment(db, appt_id)
+    check_appointment_ownership(appt, role, my_barber_id)
+
+    if appt.status != AppointmentStatus.concluido:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail="Só é possível estornar o uso de um atendimento concluído.",
+        )
+    usage = await usage_for_appointment(db, appt_id)
+    if usage is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail="Este atendimento não foi pago por assinatura (nada a estornar).",
+        )
+
+    appt.status = AppointmentStatus.cancelado
+    await revert_usage(db, appt_id, reverted_by_user_id=current_user.id)
+    await db.flush()
+    # A conclusão havia (1) recalculado os agregados legados e (2) CREDITADO
+    # pontos (earn) no ledger append-only. O recalc sozinho NÃO desfaz o earn
+    # (só credita), então reverte explicitamente os pontos deste agendamento
+    # antes de recompor o snapshot — senão o cliente mantém pontos/tier de um
+    # atendimento estornado.
+    await _reverse_loyalty_points(
+        current_user.organization_id, appt.client_id, appt_id, db,
+        by_user_id=current_user.id,
+    )
+    await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
+    await db.commit()
+
+    background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "delete")
+    return AtendimentoOut(id=appt_id, status="cancelado", total_amount=float(appt.total_amount))
