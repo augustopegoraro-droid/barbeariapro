@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.rbac import require_full_access, require_manager_access
+from app.core.rbac import MANAGER_ACCESS, require_full_access, require_manager_access
 from app.deps import (
     get_bot_db,
     get_current_user,
@@ -133,6 +133,23 @@ class AttachIn(BaseModel):
     )
 
 
+class MembershipUpdateIn(BaseModel):
+    """Correção de uma venda **antes de qualquer uso**. Campos opcionais; só os
+    informados são alterados. Recompõe os snapshots (valor reconhecido/combo)."""
+
+    client_id: Optional[int] = Field(None, gt=0)
+    start_at: Optional[datetime] = None
+    end_at: Optional[datetime] = None
+    duration_days: Optional[int] = Field(None, gt=0)
+    price: Optional[Decimal] = Field(None, ge=Decimal("0"))
+    combo_service_ids: Optional[list[int]] = Field(None, min_length=1)
+    included_uses: Optional[int] = Field(None, gt=0)
+    set_unlimited: Optional[bool] = Field(
+        None, description="true → torna o pacote ilimitado (exige unlimited_use_value)"
+    )
+    unlimited_use_value: Optional[Decimal] = Field(None, ge=Decimal("0"))
+
+
 class UsageOut(BaseModel):
     id: int
     appointment_id: int
@@ -220,6 +237,12 @@ def _membership_out(
 ) -> MembershipOut:
     now = datetime.now(timezone.utc)
     days_remaining = max(0, (m.end_at - now).days)
+    # Status efetivo derivado: uma assinatura 'ativa' cuja vigência já terminou é
+    # exibida como 'vencida' mesmo que o cron ainda não a tenha marcado (evita o
+    # limbo 'ativa-vencida' em leituras/relatórios).
+    effective_status = m.status.value
+    if m.status == MembershipStatus.ativa and m.end_at <= now:
+        effective_status = MembershipStatus.vencida.value
     combo = [
         PlanItemOut(
             service_id=c["service_id"],
@@ -245,7 +268,7 @@ def _membership_out(
         client_id=m.client_id,
         client_name=client_name,
         plan_id=m.plan_id,
-        status=m.status.value,
+        status=effective_status,
         start_at=m.start_at.isoformat(),
         end_at=m.end_at.isoformat(),
         days_remaining=days_remaining,
@@ -290,7 +313,13 @@ async def listar_planos(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     include_inactive: bool = Query(False),
 ) -> list[PlanOut]:
-    require_manager_access(await resolve_current_role(db, current_user))
+    # A recepção (usuária principal) precisa LISTAR o catálogo para vender pelo
+    # plano — vender já é FULL_ACCESS. Criar/editar/arquivar seguem em manager.
+    # Planos arquivados (include_inactive) só para owner/manager.
+    role = await resolve_current_role(db, current_user)
+    require_full_access(role)
+    if include_inactive and role not in MANAGER_ACCESS:
+        include_inactive = False
 
     stmt = (
         select(MembershipPlan)
@@ -581,10 +610,86 @@ async def cancelar_assinatura(
         raise HTTPException(http_status.HTTP_409_CONFLICT, "Assinatura já cancelada.")
     m.status = MembershipStatus.cancelada
     m.canceled_at = datetime.now(timezone.utc)
+    m.canceled_by_user_id = current_user.id
     await db.flush()
     out = await _membership_out_full(db, m)
     await db.commit()
     return out
+
+
+@router.post("/{membership_id}/reativar", response_model=MembershipOut)
+async def reativar_assinatura(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    membership_id: int = Path(..., gt=0),
+) -> MembershipOut:
+    """Desfaz um cancelamento dentro da vigência (corrige cancelamento acidental).
+
+    Só funciona se a vigência ainda não terminou e o cliente não tiver outra
+    assinatura ativa. Caso contrário, o caminho correto é renovar/vender.
+    """
+    require_full_access(await resolve_current_role(db, current_user))
+    m = await _load_membership(db, membership_id)
+    await svc.reactivate_membership(db, m, reactivated_by_user_id=current_user.id)
+    out = await _membership_out_full(db, m)
+    await db.commit()
+    return out
+
+
+@router.patch("/{membership_id}", response_model=MembershipOut)
+async def editar_assinatura(
+    body: MembershipUpdateIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    membership_id: int = Path(..., gt=0),
+) -> MembershipOut:
+    """Corrige uma venda equivocada (cliente/plano/preço/vigência/combo) enquanto
+    a assinatura ainda não teve nenhum uso. Após o 1º uso, é preciso estornar."""
+    require_full_access(await resolve_current_role(db, current_user))
+    m = await _load_membership(db, membership_id)
+
+    kwargs: dict = {}
+    if body.client_id is not None:
+        kwargs["client_id"] = body.client_id
+    if body.start_at is not None:
+        kwargs["start_at"] = body.start_at
+    if body.end_at is not None:
+        kwargs["end_at"] = body.end_at
+    if body.duration_days is not None:
+        kwargs["duration_days"] = body.duration_days
+    if body.price is not None:
+        kwargs["price"] = body.price
+    if body.combo_service_ids is not None:
+        kwargs["combo_service_ids"] = body.combo_service_ids
+    if body.included_uses is not None:
+        kwargs["included_uses"] = body.included_uses
+    if body.unlimited_use_value is not None:
+        kwargs["unlimited_use_value"] = body.unlimited_use_value
+
+    await svc.update_membership(
+        db,
+        m,
+        organization_id=current_user.organization_id,
+        set_unlimited=bool(body.set_unlimited),
+        **kwargs,
+    )
+    out = await _membership_out_full(db, m)
+    await db.commit()
+    return out
+
+
+@router.delete("/{membership_id}", status_code=http_status.HTTP_204_NO_CONTENT)
+async def excluir_assinatura(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    membership_id: int = Path(..., gt=0),
+) -> None:
+    """Remove uma venda totalmente equivocada **sem nenhum uso**. Com histórico de
+    uso, use cancelar (preserva o registro)."""
+    require_full_access(await resolve_current_role(db, current_user))
+    m = await _load_membership(db, membership_id)
+    await svc.delete_membership(db, m)
+    await db.commit()
 
 
 @router.post(
@@ -679,12 +784,7 @@ async def aplicar_pacote_em_agendamento(
         if membership is None:
             raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Assinatura não encontrada.")
     else:
-        membership = await svc.active_membership_for_client(db, appt.client_id)
-        if membership is None:
-            raise HTTPException(
-                http_status.HTTP_404_NOT_FOUND,
-                "Cliente não tem assinatura ativa.",
-            )
+        membership = await svc.resolve_membership_for_autopick(db, appt.client_id)
 
     await svc.apply_membership_to_appointment(
         db, appointment=appt, membership=membership, created_by_user_id=current_user.id

@@ -373,6 +373,64 @@ async def adjust_points(
     return entry
 
 
+async def reverse_appointment_points(
+    org_id: int,
+    client_id: int,
+    appointment_id: int,
+    session: AsyncSession,
+    by_user_id: Optional[int] = None,
+) -> Optional[LoyaltyPointEntry]:
+    """Reverte os pontos creditados (``earn``) por um atendimento que deixou de
+    valer (ex.: estorno de uso de assinatura num atendimento concluído).
+
+    O ledger é append-only, então lança um ``reversal`` com delta negativo igual
+    ao ``earn`` daquele agendamento. Idempotente: não reverte duas vezes (checa
+    se já existe um ``reversal`` para o mesmo agendamento). Se o saldo atual for
+    menor que o crédito original (cliente já resgatou pontos no meio), reverte só
+    até zerar — o ``_append_entry`` nunca deixa o saldo negativo. Necessário
+    porque ``recalculate`` só credita, nunca estorna.
+    """
+    earn = (
+        await session.execute(
+            select(LoyaltyPointEntry)
+            .where(LoyaltyPointEntry.client_id == client_id)
+            .where(LoyaltyPointEntry.ref_appointment_id == appointment_id)
+            .where(LoyaltyPointEntry.type == LoyaltyLedgerType.earn)
+            .order_by(LoyaltyPointEntry.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if earn is None or earn.points_delta <= 0:
+        return None
+    # já estornado? (idempotência)
+    already = (
+        await session.execute(
+            select(LoyaltyPointEntry.id)
+            .where(LoyaltyPointEntry.client_id == client_id)
+            .where(LoyaltyPointEntry.ref_appointment_id == appointment_id)
+            .where(LoyaltyPointEntry.type == LoyaltyLedgerType.reversal)
+            .limit(1)
+        )
+    ).first()
+    if already is not None:
+        return None
+    revert = min(int(earn.points_delta), await _current_balance(client_id, session))
+    if revert <= 0:
+        return None
+    entry = await _append_entry(
+        session,
+        org_id=org_id,
+        client_id=client_id,
+        type_=LoyaltyLedgerType.reversal,
+        delta=-revert,
+        reason="estorno de atendimento",
+        ref_appointment_id=appointment_id,
+        by_user_id=by_user_id,
+    )
+    await _sync_loyalty_row(org_id, client_id, session)
+    return entry
+
+
 # ===========================================================================
 # Persistência do snapshot (chamada ao concluir atendimento)
 # ===========================================================================

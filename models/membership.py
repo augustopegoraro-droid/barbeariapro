@@ -194,6 +194,10 @@ class ClientMembership(Base):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     canceled_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+    # Quem executou o cancelamento (auditoria de ação destrutiva).
+    canceled_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
@@ -201,7 +205,10 @@ class ClientMembership(Base):
     organization: Mapped["Organization"] = relationship()
     client: Mapped["Client"] = relationship(back_populates="memberships")
     plan: Mapped[Optional["MembershipPlan"]] = relationship(back_populates="memberships")
-    sold_by: Mapped[Optional["User"]] = relationship()
+    sold_by: Mapped[Optional["User"]] = relationship(foreign_keys=[sold_by_user_id])
+    canceled_by: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[canceled_by_user_id]
+    )
     usages: Mapped[List["MembershipUsage"]] = relationship(
         back_populates="membership", cascade="all, delete-orphan"
     )
@@ -213,7 +220,15 @@ class MembershipUsage(Base):
     __tablename__ = "membership_usages"
     __table_args__ = (
         CheckConstraint("recognized_value >= 0", name="membership_usages_value_nonneg"),
-        UniqueConstraint("appointment_id", name="membership_usages_appt_unique"),
+        # Unicidade só para usos ATIVOS: um agendamento pode ter no máximo 1 uso
+        # não-estornado. Estornos (reverted_at preenchido) ficam fora da unicidade,
+        # permitindo re-vincular o mesmo agendamento depois de um estorno.
+        Index(
+            "membership_usages_appt_active_unique",
+            "appointment_id",
+            unique=True,
+            postgresql_where=text("reverted_at IS NULL"),
+        ),
         Index("idx_membership_usages_membership", "membership_id"),
     )
 
@@ -235,13 +250,20 @@ class MembershipUsage(Base):
     used_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
-    # Preenchido quando o atendimento é cancelado/faltou → restaura o saldo.
+    # Preenchido quando o atendimento é cancelado/faltou/estornado → restaura o saldo.
     reverted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
     created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # Quem executou o estorno (auditoria — devolução do valor econômico do uso).
+    reverted_by_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
 
     organization: Mapped["Organization"] = relationship()
     membership: Mapped["ClientMembership"] = relationship(back_populates="usages")
     appointment: Mapped["Appointment"] = relationship()
-    created_by: Mapped[Optional["User"]] = relationship()
+    created_by: Mapped[Optional["User"]] = relationship(foreign_keys=[created_by_user_id])
+    reverted_by: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[reverted_by_user_id]
+    )

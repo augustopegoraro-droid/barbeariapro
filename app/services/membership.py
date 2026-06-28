@@ -24,6 +24,7 @@ from typing import Optional, Sequence
 
 from fastapi import HTTPException, status as http_status
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -359,7 +360,15 @@ async def renew_membership(
 ) -> ClientMembership:
     """Renova clonando os snapshots da própria assinatura (preserva a
     personalização e funciona sem plano de catálogo). Nova vigência a partir de
-    agora; saldo zerado."""
+    agora; saldo zerado.
+
+    A renovação **substitui** a assinatura anterior: se a antiga ainda estava
+    ``ativa``, é encerrada (``vencida``) ao criar a nova. Isso garante a
+    invariante de no máximo uma assinatura ativa por cliente e elimina o
+    histórico de 'múltiplas ativas' que a renovação antecipada gerava.
+    """
+    if old.status == MembershipStatus.ativa:
+        old.status = MembershipStatus.vencida
     start = _now_utc()
     end = compute_end_at(start, old.duration_days)
     membership = ClientMembership(
@@ -382,20 +391,238 @@ async def renew_membership(
     return membership
 
 
+async def active_memberships_for_client(
+    db: AsyncSession, client_id: int
+) -> list[ClientMembership]:
+    """Todas as assinaturas vigentes (ativa e não vencida) do cliente."""
+    return list(
+        (
+            await db.execute(
+                select(ClientMembership)
+                .where(ClientMembership.client_id == client_id)
+                .where(ClientMembership.status == MembershipStatus.ativa)
+                .where(ClientMembership.end_at > func.now())
+                .order_by(ClientMembership.end_at.desc())
+            )
+        ).scalars().all()
+    )
+
+
 async def active_membership_for_client(
     db: AsyncSession, client_id: int
 ) -> Optional[ClientMembership]:
-    """Assinatura vigente (ativa e não vencida) do cliente, se houver."""
-    return (
-        await db.execute(
-            select(ClientMembership)
-            .where(ClientMembership.client_id == client_id)
-            .where(ClientMembership.status == MembershipStatus.ativa)
-            .where(ClientMembership.end_at > func.now())
-            .order_by(ClientMembership.end_at.desc())
-            .limit(1)
+    """Assinatura vigente (ativa e não vencida) do cliente, se houver.
+
+    Critério único de 'ativa' usado em todo o módulo (também na serialização do
+    painel do cliente). Quando há mais de uma vigente, retorna a de maior
+    ``end_at`` — mas os fluxos de débito automático devem usar
+    ``resolve_membership_for_autopick`` p/ exigir desambiguação.
+    """
+    memberships = await active_memberships_for_client(db, client_id)
+    return memberships[0] if memberships else None
+
+
+async def resolve_membership_for_autopick(
+    db: AsyncSession, client_id: int
+) -> ClientMembership:
+    """Resolve a assinatura a debitar quando o caller não informou ``membership_id``.
+
+    404 se não há ativa; 409 se há mais de uma (a recepcionista precisa escolher
+    explicitamente qual debitar, evitando baixar saldo da assinatura errada).
+    """
+    memberships = await active_memberships_for_client(db, client_id)
+    if not memberships:
+        raise HTTPException(
+            http_status.HTTP_404_NOT_FOUND, "Cliente não tem assinatura ativa."
         )
-    ).scalar_one_or_none()
+    if len(memberships) > 1:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Cliente tem mais de uma assinatura ativa; informe qual usar (membership_id).",
+        )
+    return memberships[0]
+
+
+# ─── correção / reversão (ferramentas da recepcionista) ──────────────────────
+
+
+async def reactivate_membership(
+    db: AsyncSession,
+    membership: ClientMembership,
+    *,
+    reactivated_by_user_id: Optional[int] = None,  # noqa: ARG001 (reservado p/ auditoria futura)
+) -> ClientMembership:
+    """Desfaz um cancelamento dentro da vigência (``cancelada`` → ``ativa``).
+
+    Só reativa se a vigência ainda não terminou (senão a saída correta é renovar)
+    e se o cliente não tiver outra assinatura ativa (preserva a invariante de no
+    máximo uma ativa). Limpa ``canceled_at``/``canceled_by_user_id``.
+    """
+    if membership.status != MembershipStatus.cancelada:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Só é possível reativar uma assinatura cancelada.",
+        )
+    if membership.end_at <= _now_utc():
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Vigência já encerrada; renove em vez de reativar.",
+        )
+    if await active_memberships_for_client(db, membership.client_id):
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Cliente já tem assinatura ativa; resolva-a antes de reativar esta.",
+        )
+    membership.status = MembershipStatus.ativa
+    membership.canceled_at = None
+    membership.canceled_by_user_id = None
+    await db.flush()
+    return membership
+
+
+async def update_membership(
+    db: AsyncSession,
+    membership: ClientMembership,
+    *,
+    organization_id: int,
+    client_id=_UNSET,
+    start_at=_UNSET,
+    end_at=_UNSET,
+    duration_days=_UNSET,
+    price=_UNSET,
+    combo_service_ids=_UNSET,
+    included_uses=_UNSET,
+    set_unlimited: bool = False,
+    unlimited_use_value=_UNSET,
+) -> ClientMembership:
+    """Corrige uma venda **antes de qualquer uso** (cliente/combo/preço/vigência).
+
+    Recompõe os snapshots a partir dos novos valores; campos não informados são
+    mantidos. Bloqueado se a assinatura já tem histórico de uso (ativo OU
+    estornado) — nesse caso é preciso estornar os usos primeiro — e se não estiver
+    ``ativa``. ``unit_recognized_value`` é sempre recomputado da spec final.
+    """
+    if membership.usages:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Assinatura já tem histórico de uso; estorne os usos antes de editar.",
+        )
+    if membership.status != MembershipStatus.ativa:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT, "Só é possível editar uma assinatura ativa."
+        )
+
+    # cliente
+    if client_id is not _UNSET and client_id != membership.client_id:
+        client = (
+            await db.execute(select(Client).where(Client.id == client_id))
+        ).scalar_one_or_none()
+        if not client or client.deleted_at is not None:
+            raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Cliente não encontrado.")
+        membership.client_id = client_id
+
+    # combo (recompõe o snapshot)
+    if combo_service_ids is not _UNSET and combo_service_ids is not None:
+        final_ids = list(combo_service_ids)
+        if not final_ids:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY, "Combo não pode ser vazio."
+            )
+        if len(set(final_ids)) != len(final_ids):
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY, "Serviço repetido no combo."
+            )
+        services = (
+            await db.execute(select(Service).where(Service.id.in_(final_ids)))
+        ).scalars().all()
+        services_by_id = {s.id: s for s in services}
+        if any(sid not in services_by_id for sid in final_ids):
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Combo referencia serviço inexistente nesta organização.",
+            )
+        if any(not services_by_id[sid].is_active for sid in final_ids):
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Combo referencia serviço inativo.",
+            )
+        combo_items = [
+            _ComboItem(service_id=sid, position=pos)
+            for pos, sid in enumerate(final_ids, start=1)
+        ]
+        membership.combo_snapshot = build_combo_snapshot(combo_items, services_by_id)
+
+    # preço / usos
+    if price is not _UNSET and price is not None:
+        membership.price_paid = Decimal(price)
+    if set_unlimited:
+        membership.included_uses = None
+    elif included_uses is not _UNSET and included_uses is not None:
+        membership.included_uses = included_uses
+
+    # valor reconhecido por uso (recomputado da spec final)
+    if membership.included_uses is None:
+        # ilimitado: usa o unlimited_use_value informado; senão mantém o atual
+        if unlimited_use_value is not _UNSET and unlimited_use_value is not None:
+            membership.unit_recognized_value = Decimal(unlimited_use_value).quantize(
+                _CENTS, rounding=ROUND_HALF_UP
+            )
+        elif not set_unlimited:
+            pass  # já era ilimitado e não mudou o valor — mantém
+        else:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Pacote ilimitado exige unlimited_use_value.",
+            )
+    else:
+        try:
+            membership.unit_recognized_value = compute_unit_value(
+                membership.price_paid, membership.included_uses, None
+            )
+        except ValueError as exc:
+            raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+
+    # vigência
+    if start_at is not _UNSET and start_at is not None:
+        if start_at.tzinfo is None:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "start_at deve incluir fuso horário.",
+            )
+        membership.start_at = start_at.astimezone(timezone.utc)
+    if end_at is not _UNSET and end_at is not None:
+        if end_at.tzinfo is None:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "end_at deve incluir fuso horário.",
+            )
+        membership.end_at = end_at.astimezone(timezone.utc)
+    elif duration_days is not _UNSET and duration_days is not None:
+        membership.duration_days = duration_days
+        membership.end_at = compute_end_at(membership.start_at, duration_days)
+    if membership.end_at <= membership.start_at:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Vigência inválida (fim deve ser após o início).",
+        )
+
+    await db.flush()
+    return membership
+
+
+async def delete_membership(db: AsyncSession, membership: ClientMembership) -> None:
+    """Remove uma venda **sem nenhum uso** (corrige venda totalmente equivocada).
+
+    Só permite excluir se não houver registro de uso (ativo ou estornado). Com
+    histórico de uso, o caminho correto é cancelar (preservando o histórico).
+    """
+    if membership.usages:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            "Assinatura tem histórico de uso; cancele em vez de excluir.",
+        )
+    await db.delete(membership)
+    await db.flush()
 
 
 def remaining_uses(membership: ClientMembership) -> Optional[int]:
@@ -651,7 +878,18 @@ async def apply_membership_to_appointment(
             created_by_user_id=created_by_user_id,
         )
     )
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        # Corrida: outra requisição concorrente já vinculou um uso ativo a este
+        # agendamento (índice único parcial). Traduz SÓ essa violação p/ 409 limpo;
+        # qualquer outra integridade volta a propagar (não mascarar causa real).
+        if "membership_usages_appt_active_unique" in str(getattr(exc, "orig", exc)):
+            raise HTTPException(
+                http_status.HTTP_409_CONFLICT,
+                "Este atendimento já está pago por assinatura.",
+            )
+        raise
     return appointment
 
 
@@ -668,22 +906,41 @@ async def usage_for_appointment(
     ).scalar_one_or_none()
 
 
-async def revert_usage(db: AsyncSession, appointment_id: int) -> bool:
-    """Estorna o uso de um agendamento cancelado/faltou, devolvendo o saldo.
+async def revert_usage(
+    db: AsyncSession,
+    appointment_id: int,
+    *,
+    reverted_by_user_id: Optional[int] = None,
+) -> bool:
+    """Estorna o uso de um agendamento cancelado/faltou/estornado, devolvendo o saldo.
 
-    Idempotente: um segundo estorno do mesmo agendamento não faz nada.
+    Atômico e idempotente: a baixa de saldo é amarrada à transição
+    ``reverted_at`` NULL→agora num único UPDATE com RETURNING. Assim, dois
+    estornos concorrentes do mesmo agendamento (ex.: ``faltou`` e ``cancelar``
+    disparados quase juntos) devolvem o saldo no máximo uma vez — fechando a
+    corrida do antigo read-modify-write. Registra ``reverted_by_user_id`` p/
+    auditoria. Retorna ``False`` se não havia uso ativo a estornar.
     """
-    usage = await usage_for_appointment(db, appointment_id)
-    if usage is None:
+    row = (
+        await db.execute(
+            text(
+                "UPDATE membership_usages "
+                "SET reverted_at = now(), reverted_by_user_id = :u "
+                "WHERE appointment_id = :a AND reverted_at IS NULL "
+                "RETURNING membership_id"
+            ),
+            {"a": appointment_id, "u": reverted_by_user_id},
+        )
+    ).first()
+    if row is None:
         return False
     await db.execute(
         text(
             "UPDATE client_memberships SET used_uses = used_uses - 1 "
             "WHERE id = :id AND used_uses > 0"
         ),
-        {"id": usage.membership_id},
+        {"id": row.membership_id},
     )
-    usage.reverted_at = _now_utc()
     await db.flush()
     return True
 
