@@ -10,6 +10,7 @@
 > - `DECISIONS.md` — registro cronológico de decisões (D-01, D-14, D-18, D-29, D-35...).
 > - `CURRENT_SPRINT.md` — sprint corrente.
 > - `barbearia-frontend/AGENTS.md` — convenções do frontend (ler antes de mexer no Next.js).
+> - `CHATWOOT_CLOUD_API_ARQUITETURA.md` + `CHATWOOT_FASE1_FASE4_SPEC.md` — direção da camada de comunicação (D-49): Chatwoot + WhatsApp Cloud API.
 > - `/Users/apleandro/.claude/plans/partitioned-greeting-stearns.md` — auditoria completa + plano de evolução (origem deste arquivo).
 
 ---
@@ -111,6 +112,11 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
 - **Trava de disparo:** `app/services/whatsapp.py` não envia se `EVOLUTION_API_URL`/`INSTANCE_NAME`
   estiverem vazios (protege staging).
 - Fluxo do bot, comandos n8n e reconexão de WhatsApp: ver `PROJECT_CONTEXT.md §11-13`.
+- **🚧 Direção decidida (D-49, 2026-06-27):** esta camada será migrada para **Chatwoot (VM nova) +
+  WhatsApp Cloud API oficial** (número novo dedicado). A Evolution sai do fluxo do bot (D-41: número
+  restrito, conserto esgotado); a Inbox custom/SSE e as Fases 4/5/6 do CRM são aposentadas. O backend
+  permanece o sistema de registro (funil/agenda/financeiro). Raquel vira Agent Bot do Chatwoot. Plano em
+  `CHATWOOT_CLOUD_API_ARQUITETURA.md`. **Status: plano — nada implementado.**
 
 ### IA — diretriz vigente
 - **Decisão (2026-06-26): evoluir a IA dentro do n8n** (AI Agent node + OpenAI), expandindo as *tools*
