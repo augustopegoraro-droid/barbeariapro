@@ -785,6 +785,32 @@ clientes no disparo. Smoke visual logado em prod pende (precisa do login do gest
 
 ---
 
+### D-53 — WhatsApp: envio bloqueado por aparelho conectado (companion); número vira receive-only — 2026-06-29
+
+**Contexto:** pedido de trocar Evolution → serviço Baileys próprio. Antes de construir, rodou-se o gate de
+envio (Fase 0 do plano `~/.claude/plans/a-humming-pond.md`). Refina o **D-41**.
+
+**Achados:**
+- `send_text` para 2 destinatários distintos (Taylor `+5563984566177`, Augusto `+5563999368196`): `sent=True`
+  (Evolution aceita) mas **nenhum recebeu**.
+- **Sinal novo decisivo:** o **app do WhatsApp no celular do `5563920001734` envia normalmente** → a conta **não
+  está banida**. A restrição é específica de **envio por aparelho conectado (companion/linked device)**.
+- **Re-pareamento limpo testado** (`DELETE /instance/logout/Barbearia` → `state:close` → QR novo escaneado →
+  `state:open`): recebimento voltou, mas o envio **continua** falhando com `Closing session/pendingPreKey/status:ERROR`
+  na sessão **nova** → não é sessão corrompida, é flag de conta.
+- **Implica que Baileys NÃO resolve neste número** — Baileys é companion (mesmo protocolo multi-device da Evolution),
+  cai na mesma trava. (Gate barrou a construção antes de gastar dias.)
+
+**Decisão (gestor):** usar `5563920001734` **só para RECEBER** por ora (Inbox/CRM inbound segue via Evolution, que
+foi religada no re-pareamento). **Plano Baileys PAUSADO.** Retomar **só com número NOVO**; recomendação reforçada:
+**Cloud API oficial** sobre Baileys (Cloud API não é companion → sem a trava; Baileys em número novo corre risco de
+ser flagado de novo — provável origem do problema atual).
+
+**Impacto no Gestor (D-52):** dashboard web `/admin/gestor/*` funciona 100% (não usa WhatsApp). Bot WhatsApp
+`/bot/gestor/*` e push (`resumo-diario`/`alertas`) **não entregam** neste número (precisam enviar) — só com número novo.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

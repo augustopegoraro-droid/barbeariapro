@@ -113,6 +113,15 @@ session/pendingPreKey` → `status: ERROR`, **global** em 2 números distintos).
 um **número DEDICADO novo**. Evolução = projeto à parte (pré-requisitos Meta + reescrever
 `app/services/whatsapp.py` p/ Graph API + novo parser de webhook + templates). NÃO insistir em Evolution/Baileys.
 
+**ATUALIZAÇÃO 2026-06-29 (refina o diagnóstico — D-53):** a restrição é mais específica: **envio bloqueado por
+aparelho conectado (companion/linked device)**. O **app do WhatsApp no celular do número envia normal** (conta
+NÃO banida), mas Evolution/WhatsApp-Web/**Baileys** (todos companion) não enviam. **Re-pareamento limpo testado
+2026-06-29** (logout → QR novo → `state:open`): recebimento voltou, envio **continua** com
+`pendingPreKey/status:ERROR` na sessão nova. Logo **Baileys também não resolve neste número**. **Decisão do gestor:**
+usar `5563920001734` **só para receber** por ora (Evolution religada, Inbox/CRM recebendo); plano Baileys PAUSADO;
+retomar **só com número novo** (Cloud API recomendado sobre Baileys). Gestor (D-52): dashboard web funciona; bot
+WhatsApp + push só com número novo.
+
 ### 🟢 Segurança — Fase 1 (parcial)
 1. **`CLAUDE.md` criado** (commit `15692b4`) = memória técnica viva.
 2. **Fase 1.1 commitada** (`13822a1`): helper `secrets_match()` (`app/core/security.py`, comparação
