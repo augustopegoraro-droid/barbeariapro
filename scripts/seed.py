@@ -36,6 +36,7 @@ if os.path.exists(_env_path):
                 os.environ.setdefault(_k.strip(), _v.strip())
 
 from app.core.security import hash_password
+from app.services.onboarding import SERVICES_CATALOG
 from models import (
     Barber,
     BarberService,
@@ -61,24 +62,8 @@ PASSWORD = os.environ.get("SEED_PASSWORD", "senha123")
 NOW = datetime.now(timezone.utc)
 
 # ─── catálogo oficial ─────────────────────────────────────────────────────────
-# (nome, categoria, duração_min, preço, has_variable_price)
-SERVICES_CATALOG: list[tuple[str, ServiceCategory, int, str, bool]] = [
-    ("Corte Feminino",           ServiceCategory.cabelo,   60,  "190.00", False),
-    ("Corte Masculino",          ServiceCategory.cabelo,   45,   "90.00", False),
-    ("Corte Infantil",           ServiceCategory.cabelo,   30,   "80.00", False),
-    ("Barba",                    ServiceCategory.barba,    30,   "50.00", False),
-    ("Corte + Barba",            ServiceCategory.combo,    75,  "140.00", False),
-    ("Escova",                   ServiceCategory.cabelo,   60,   "90.00", True),
-    ("Manicure e Pedicure",      ServiceCategory.estetica, 90,   "75.00", False),
-    ("Hidratação",               ServiceCategory.quimica,  60,   "90.00", True),
-    ("Coloração",                ServiceCategory.quimica, 120,  "160.00", True),
-    ("Selagem Masculina",        ServiceCategory.quimica, 120,  "180.00", False),
-    ("Selagem Feminina",         ServiceCategory.quimica, 150,  "380.00", False),
-    ("Sobrancelha",              ServiceCategory.estetica, 30,   "50.00", False),
-    ("Sobrancelha com Henna",    ServiceCategory.estetica, 45,   "60.00", False),
-    ("Mechas",                   ServiceCategory.quimica, 180,  "600.00", True),
-    ("Depilação de Nariz e Orelha", ServiceCategory.estetica, 20, "35.00", False),
-]
+# Fonte única em app/services/onboarding.py (reutilizado pelo onboarding via painel
+# de plataforma). Importado acima como SERVICES_CATALOG.
 
 # ─── profissionais ────────────────────────────────────────────────────────────
 # (nome, especialidade, comissão, role, email, serviços_que_executa)

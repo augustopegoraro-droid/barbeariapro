@@ -848,6 +848,47 @@ reminders/reactivation por org única — viram multi-tenant quando o n8n iterar
 
 ---
 
+### D-55 — Painel de Plataforma (Superadmin): camada ACIMA dos tenants, cross-tenant — 2026-06-29
+
+**Contexto:** falta a camada do dono do SaaS — gerenciar todas as orgs (onboarding,
+billing, suspensão, indicadores consolidados) sem ser limitado pela RLS. Construído
+sobre `feat/multi-tenant-org-id` (D-54), na branch `feat/platform-superadmin`.
+
+**Restrições decisivas (exploração):** `barber_app` é **NOBYPASSRLS** e a VM **não tem
+`ADMIN_DATABASE_URL`** → em runtime, SELECT cross-org dá 0 linhas e o app não cria org
+sob RLS. Único bypass disponível: funções **`SECURITY DEFINER`** (molde D-54/`0020`).
+
+**Decisões (gestor):** (1) auth do superadmin por **password_hash bcrypt**; (2) cross-tenant
+**híbrido** (SECURITY DEFINER para listagem/contagens; `mrr()` reusado iterando orgs em
+**sessões helper isoladas** — endpoint nunca seta `app.current_org_id`); (3) **backend
+completo agora; frontend `/superadmin` separado depois**.
+
+**Implementado (só staging, head `0021`):**
+- Migration `0021`: tabela `platform_admins` (global, sem `organization_id`, **sem RLS**,
+  **sem GRANT a `barber_app`**) + funções `SECURITY DEFINER` (`app_platform_admin_login`,
+  `_admin_exists`, `_list_orgs`, `_active_org_ids`, `_usage`, `_create_org`) com
+  `GRANT EXECUTE TO barber_app`.
+- `models/platform_admin.py`; `app/core/security.py::create_platform_token` (`typ="platform"`,
+  sem `org`); `app/services/platform.py` (wrappers); `app/services/onboarding.py`
+  (`provision_org` + `SERVICES_CATALOG` extraído do `seed.py`, que passou a importá-lo);
+  `app/api/platform.py` (guard `require_platform_admin` + endpoints
+  `auth/login`, `orgs` GET/POST/PATCH/`suspend`/`reactivate`, `dashboard`); registrado em
+  `main.py`. Bootstrap: `scripts/seed_platform_admin.py` (role dona).
+- **Isolamento bilateral de token:** tenant↔plataforma se rejeitam mutuamente (presença
+  de `org` vs `typ`). Suspensão = `organizations.deleted_at` (não há status "suspended" no
+  enum `subscription_status`; "suspenso" é derivado de `deleted_at`).
+
+**Testes:** `tests/test_platform.py` (6): sem token 401, token de tenant→401, login+lista,
+onboarding cria org+owner+seed (owner novo loga) + suspend/reactivate (com purge),
+dashboard MRR consolidado. Baseline **332 pass / 2 skip / 3 fail** ambientais.
+
+**Fora de escopo / pendente:** frontend `/superadmin` (app Next.js separado — exigência:
+nunca no frontend de tenant); saúde de bot ao vivo (Evolution API; hoje só proxy
+`wa_instance_name`); deploy prod (provisionar `ADMIN_DATABASE_URL` na VM, aplicar `0021`,
+rodar bootstrap do superadmin). Branch **não commitada**.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

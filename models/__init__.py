@@ -33,6 +33,7 @@ from .enums import (
     UnitRole,
 )
 from .organization import Organization, Plan, Subscription
+from .platform_admin import PlatformAdmin
 from .unit import BusinessHours, Unit
 from .user import User, UserUnit
 from .barber import Barber, BarberService, BarberUnit, TimeOff
@@ -81,6 +82,7 @@ __all__ = [
     "Organization",
     "Plan",
     "Subscription",
+    "PlatformAdmin",
     # estrutura
     "Unit",
     "BusinessHours",
