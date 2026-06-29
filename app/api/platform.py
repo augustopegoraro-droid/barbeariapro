@@ -12,6 +12,8 @@ isoladas (`onboarding.py` e os helpers abaixo).
 
 from __future__ import annotations
 
+import logging
+from collections import Counter
 from datetime import datetime
 from typing import Annotated, Optional
 
@@ -19,7 +21,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select, text
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import (
@@ -31,8 +34,9 @@ from app.db.session import AsyncSessionLocal, get_db, set_current_org
 from app.services import onboarding as onboarding_svc
 from app.services import platform as platform_svc
 from app.services.management import mrr
-from models import Organization, Subscription
+from models import Organization, Plan, Subscription
 
+_logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/platform", tags=["platform"])
 _bearer = HTTPBearer(auto_error=True)
 
@@ -138,8 +142,13 @@ class DashboardCountsOut(BaseModel):
 
 class DashboardOut(BaseModel):
     counts: DashboardCountsOut
-    mrr_consolidated: float
-    active_subscriptions: int
+    # MRR do SaaS: soma de Plan.price_month das assinaturas ATIVAS dos tenants —
+    # a receita recorrente que as barbearias pagam à plataforma.
+    saas_mrr: float
+    # MRR agregado das mensalidades dos CLIENTES FINAIS (soma de mrr() por org).
+    # NÃO é receita do SaaS — é o volume recorrente que passa pelos tenants.
+    tenants_membership_mrr: float
+    tenants_active_memberships: int
     usage: list[UsageOut]
 
 
@@ -192,10 +201,12 @@ async def create_org(body: OrgCreateIn, _admin: PlatformAdminId) -> OrgCreateOut
             owner_email=str(body.owner_email),
             owner_password=body.owner_password,
         )
-    except Exception as exc:  # noqa: BLE001 — devolve causa legível (subdomínio dup., plano inexistente)
+    except IntegrityError:
+        # Conflito de dados esperado (subdomínio já em uso, plano inexistente/FK).
+        # Não vaza detalhe interno; demais erros propagam como 500 (bug real).
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Falha ao criar org: {exc}",
+            detail="Não foi possível criar a org: subdomínio já em uso ou plano inválido.",
         )
     return OrgCreateOut(**summary)
 
@@ -216,6 +227,15 @@ async def patch_org(org_id: int, body: OrgPatchIn, _admin: PlatformAdminId) -> O
             if body.name is not None:
                 org.name = body.name
             if body.plan_id is not None:
+                # Valida o plano ANTES de atribuir, senão a FK estoura no commit
+                # como 500 não tratado. `plans` é catálogo global (sem RLS).
+                plan_exists = (
+                    await session.execute(
+                        select(Plan.id).where(Plan.id == body.plan_id)
+                    )
+                ).scalar_one_or_none()
+                if plan_exists is None:
+                    raise HTTPException(status_code=400, detail="Plano inexistente.")
                 sub = (
                     await session.execute(
                         select(Subscription)
@@ -245,34 +265,47 @@ async def reactivate_org(org_id: int, _admin: PlatformAdminId) -> OrgOut:
 @router.get("/dashboard", response_model=DashboardOut)
 async def dashboard(_admin: PlatformAdminId, db: PlatformDB) -> DashboardOut:
     orgs = await platform_svc.list_orgs(db)
-    suspended = sum(1 for o in orgs if o.get("deleted_at") is not None)
-    active = sum(
-        1 for o in orgs if o.get("deleted_at") is None and o.get("sub_status") == "active"
+    # Contagens derivadas da MESMA regra de status da listagem (fonte única).
+    status_counts = Counter(_derive_status(o) for o in orgs)
+
+    # MRR do SaaS: soma do preço do plano das assinaturas ativas (não suspensas).
+    saas_mrr = sum(
+        float(o["plan_price_month"] or 0)
+        for o in orgs
+        if o.get("deleted_at") is None and o.get("sub_status") == "active"
     )
-    trial = sum(
-        1 for o in orgs if o.get("deleted_at") is None and o.get("sub_status") == "trial"
-    )
+
     usage_rows = await platform_svc.usage(db)
 
-    # MRR consolidado: reusa mrr() (sob RLS por org) em sessão helper isolada —
-    # o request nunca seta o GUC.
+    # MRR agregado das mensalidades dos clientes finais: reusa mrr() (sob RLS por
+    # org) em sessão helper isolada — o request nunca seta o GUC. Uma org com dado
+    # inconsistente não pode derrubar o painel inteiro: isola por org.
+    # NB: O(N) round-trips — débito de escala conhecido (paginar/agregar via função
+    # SECURITY DEFINER quando a base crescer).
     ids = await platform_svc.active_org_ids(db)
-    total_mrr = 0.0
-    active_subs = 0
+    tenants_mrr = 0.0
+    tenants_memberships = 0
     async with AsyncSessionLocal() as helper:
         for oid in ids:
-            async with helper.begin():
-                await set_current_org(helper, oid)
-                m = await mrr(helper)
-            total_mrr += m["mrr"]
-            active_subs += m["active_count"]
+            try:
+                async with helper.begin():
+                    await set_current_org(helper, oid)
+                    m = await mrr(helper)
+                tenants_mrr += m["mrr"]
+                tenants_memberships += m["active_count"]
+            except Exception as exc:  # noqa: BLE001 — um tenant ruim não derruba o painel
+                _logger.warning("dashboard mrr falhou para org %s: %s", oid, exc)
 
     return DashboardOut(
         counts=DashboardCountsOut(
-            total=len(orgs), active=active, trial=trial, suspended=suspended
+            total=len(orgs),
+            active=status_counts.get("active", 0),
+            trial=status_counts.get("trial", 0),
+            suspended=status_counts.get("suspended", 0),
         ),
-        mrr_consolidated=round(total_mrr, 2),
-        active_subscriptions=active_subs,
+        saas_mrr=round(saas_mrr, 2),
+        tenants_membership_mrr=round(tenants_mrr, 2),
+        tenants_active_memberships=tenants_memberships,
         usage=[UsageOut(**u) for u in usage_rows],
     )
 
@@ -280,7 +313,6 @@ async def dashboard(_admin: PlatformAdminId, db: PlatformDB) -> DashboardOut:
 # ─── helpers de escrita escopada ───────────────────────────────────────────────
 
 async def _set_org_deleted(org_id: int, *, suspend: bool) -> None:
-    value = "now()" if suspend else "NULL"
     async with AsyncSessionLocal() as session:
         async with session.begin():
             await set_current_org(session, org_id)
@@ -289,10 +321,8 @@ async def _set_org_deleted(org_id: int, *, suspend: bool) -> None:
             ).scalar_one_or_none()
             if org is None:
                 raise HTTPException(status_code=404, detail="Org não encontrada.")
-            await session.execute(
-                text(f"UPDATE organizations SET deleted_at = {value} WHERE id = :id"),
-                {"id": org_id},
-            )
+            # ORM (sem f-string SQL): server-side now() na suspensão, NULL ao reativar.
+            org.deleted_at = func.now() if suspend else None
 
 
 async def _get_org_out(org_id: int) -> OrgOut:

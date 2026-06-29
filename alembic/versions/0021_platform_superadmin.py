@@ -76,12 +76,14 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION app_platform_list_orgs()
         RETURNS TABLE(
             id bigint, name text, subdomain text, plan_name text,
-            sub_status text, created_at timestamptz, deleted_at timestamptz
+            plan_price_month numeric, sub_status text,
+            created_at timestamptz, deleted_at timestamptz
         )
         LANGUAGE sql STABLE SECURITY DEFINER
         SET search_path = public, pg_temp
         AS $$
             SELECT o.id, o.name, o.subdomain, p.name AS plan_name,
+                   p.price_month AS plan_price_month,
                    s.status::text AS sub_status, o.created_at, o.deleted_at
             FROM organizations o
             LEFT JOIN LATERAL (

@@ -116,7 +116,11 @@ async def test_dashboard_mrr_consolidado(client, platform_headers):
     r = await client.get("/platform/dashboard", headers=platform_headers)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert "mrr_consolidated" in body and body["mrr_consolidated"] >= 0
+    # MRR do SaaS (Plan.price_month) e MRR das mensalidades dos clientes finais
+    # são números distintos e ambos presentes.
+    assert "saas_mrr" in body and body["saas_mrr"] >= 0
+    assert "tenants_membership_mrr" in body and body["tenants_membership_mrr"] >= 0
+    assert "tenants_active_memberships" in body
     assert {"total", "active", "trial", "suspended"} <= set(body["counts"].keys())
     assert isinstance(body["usage"], list)
 
@@ -161,11 +165,23 @@ async def test_cria_org_com_owner_e_seed(client, platform_headers):
         assert rlogin.status_code == 200, rlogin.text
         assert rlogin.json()["role"] == "owner"
 
-        # suspend / reactivate
+        login_body = {
+            "organization_id": org_id,
+            "email": owner_email,
+            "password": "ownernovo123",
+        }
+
+        # suspend → login do tenant é bloqueado (suspensão não é cosmética)
         rs = await client.post(f"/platform/orgs/{org_id}/suspend", headers=platform_headers)
         assert rs.status_code == 200 and rs.json()["status"] == "suspended"
+        rsusp = await client.post("/auth/login", json=login_body)
+        assert rsusp.status_code == 403, rsusp.text
+
+        # reactivate → login volta a funcionar
         ra = await client.post(f"/platform/orgs/{org_id}/reactivate", headers=platform_headers)
         assert ra.status_code == 200 and ra.json()["status"] != "suspended"
+        rreact = await client.post("/auth/login", json=login_body)
+        assert rreact.status_code == 200, rreact.text
     finally:
         if org_id is not None:
             _purge_org(org_id)

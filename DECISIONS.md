@@ -885,7 +885,27 @@ dashboard MRR consolidado. Baseline **332 pass / 2 skip / 3 fail** ambientais.
 **Fora de escopo / pendente:** frontend `/superadmin` (app Next.js separado — exigência:
 nunca no frontend de tenant); saúde de bot ao vivo (Evolution API; hoje só proxy
 `wa_instance_name`); deploy prod (provisionar `ADMIN_DATABASE_URL` na VM, aplicar `0021`,
-rodar bootstrap do superadmin). Branch **não commitada**.
+rodar bootstrap do superadmin).
+
+**Pós code review (correções aplicadas):**
+- **Suspensão agora é efetiva:** `/auth/login` recusa org com `deleted_at` (403). Antes a
+  suspensão era cosmética (RLS de `organizations` não filtra `deleted_at` e o login por
+  `organization_id` não passa pela resolução de subdomínio). Tokens já emitidos expiram
+  naturalmente (limitação aceita).
+- **Dashboard — dois MRR distintos:** `saas_mrr` (soma de `Plan.price_month` das assinaturas
+  ativas = receita do SaaS) **e** `tenants_membership_mrr` (soma de `mrr()` = mensalidades dos
+  clientes finais, volume que passa pelos tenants). Antes só havia o segundo, rotulado como se
+  fosse a receita do SaaS. `app_platform_list_orgs` passou a expor `plan_price_month`.
+- Robustez: `create_org` mapeia só `IntegrityError`→409 (resto propaga, sem vazar SQL);
+  `patch_org` valida plano (400 se inexistente, evita 500 na FK); loop de MRR isola por org
+  (um tenant ruim não derruba o painel); `_set_org_deleted` via ORM (sem f-string SQL);
+  contagens do dashboard reusam `_derive_status` (fonte única de status).
+
+**Limitações conhecidas (débito, não bloqueante):** funções `SECURITY DEFINER` de plataforma
+têm `GRANT EXECUTE` a `barber_app` (o app tem só esse role) — a barreira é o guard HTTP
+`require_platform_admin`; endurecer com role de plataforma dedicado é trabalho futuro.
+Dashboard/`_get_org_out` fazem O(N) round-trips (agregação via função `SECURITY DEFINER`
+quando a base crescer).
 
 ---
 

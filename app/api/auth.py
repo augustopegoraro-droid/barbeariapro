@@ -60,6 +60,20 @@ async def login(
 ) -> TokenResponse:
     # Define o tenant ANTES de consultar; a RLS restringe `users` à organização.
     await set_current_org(db, body.organization_id)
+    # Org suspensa (deleted_at) não autentica — senão a suspensão do painel de
+    # plataforma (D-55) seria cosmética (login por organization_id não passa pela
+    # resolução de subdomínio que filtra deleted_at). Tokens já emitidos expiram
+    # naturalmente (access_token_expire_minutes).
+    org = (
+        await db.execute(
+            select(Organization).where(Organization.id == body.organization_id)
+        )
+    ).scalar_one_or_none()
+    if org is not None and org.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organização suspensa. Contate o suporte.",
+        )
     user = (
         await db.execute(select(User).where(User.email == str(body.email)))
     ).scalar_one_or_none()
