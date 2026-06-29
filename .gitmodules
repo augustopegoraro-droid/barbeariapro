@@ -1,0 +1,3 @@
+[submodule "barbearia-frontend"]
+	path = barbearia-frontend
+	url = https://github.com/augustopegoraro-droid/barbearia-frontend.git

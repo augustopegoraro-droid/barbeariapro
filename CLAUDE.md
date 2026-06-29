@@ -69,7 +69,7 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
 - `app/deps.py` — dependências de request (auth + sessão com tenant).
 - `models/*` — modelos SQLAlchemy (organization, plan, subscription, unit, user, barber, client,
   appointment, payment, expense, service, lead, conversation, message, attachment, integration, membership, enums).
-- `barbearia-frontend/` — **repo git aninhado separado** (ver §7, remote morto).
+- `barbearia-frontend/` — **submódulo git separado** (remote `augustopegoraro-droid/barbearia-frontend`, privado; D-08).
 
 ---
 
@@ -206,7 +206,7 @@ multi-tenant só de fachada no frontend (`NEXT_PUBLIC_ORG_ID` fixo em build) · 
 **🟠 Alto:** webhook secret opcional (tornar obrigatório após provisionar nos dois lados) · `except
 Exception` mudos · SQL via f-string em advisory lock · pool DB no default / sem PgBouncer / sem
 Redis / sem fila de workers · React Query não usado · páginas-monolito (`crm/page.tsx` 1389 linhas) ·
-cron n8n em série p/ todas as orgs · **repo frontend aninhado com remote morto** (`DoctorDCombo/...`).
+cron n8n em série p/ todas as orgs · ~~repo frontend com remote morto~~ (✅ D-08, 2026-06-29: remote restaurado + submódulo registrado).
 
 **🟡 Médio:** transações inconsistentes · `Payment` desacoplado de `Appointment` · dados hardcoded no
 frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i18n · docs dispersas.
