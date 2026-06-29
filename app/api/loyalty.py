@@ -15,9 +15,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.rbac import require_full_access, require_manager_access
-from app.deps import get_bot_db, get_current_user, get_tenant_db, resolve_current_role
+from app.deps import (
+    get_bot_db,
+    get_bot_org_id,
+    get_current_user,
+    get_tenant_db,
+    resolve_current_role,
+)
 from app.services import loyalty as loyalty_svc
 from app.services import reactivation as reactivation_svc
 from models import User
@@ -26,6 +31,7 @@ from models.loyalty import ClientLoyalty, LoyaltyPointEntry, LoyaltyRule, Loyalt
 router = APIRouter(prefix="/loyalty", tags=["loyalty"])
 internal_router = APIRouter(prefix="/internal/loyalty", tags=["loyalty-internal"])
 BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
+BotOrgId = Annotated[int, Depends(get_bot_org_id)]
 TenantDB = Annotated[AsyncSession, Depends(get_tenant_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
@@ -153,7 +159,7 @@ def _tier_out(t: LoyaltyTier) -> TierOut:
 
 
 @router.get("/clients/{client_id}", response_model=LoyaltyOut)
-async def get_client_loyalty(client_id: int, db: BotDB) -> LoyaltyOut:
+async def get_client_loyalty(client_id: int, db: BotDB, org_id: BotOrgId) -> LoyaltyOut:
     loyalty = (
         await db.execute(select(ClientLoyalty).where(ClientLoyalty.client_id == client_id))
     ).scalar_one_or_none()
@@ -165,7 +171,7 @@ async def get_client_loyalty(client_id: int, db: BotDB) -> LoyaltyOut:
 
     milestone = loyalty_svc.next_milestone(loyalty.visit_count, loyalty.total_spent)
 
-    tiers = await _tiers_for(settings.bot_organization_id, db)
+    tiers = await _tiers_for(org_id, db)
     tier = loyalty_svc.tier_for_points(loyalty.points_balance, tiers)
     nxt = loyalty_svc.points_to_next_tier(loyalty.points_balance, tiers)
 
@@ -320,6 +326,6 @@ async def put_rules(body: RuleIn, current_user: CurrentUser, db: TenantDB) -> Ru
 
 
 @internal_router.post("/reactivation/run", response_model=ReactivationOut)
-async def run_reactivation(db: BotDB) -> ReactivationOut:
-    result = await reactivation_svc.run(org_id=settings.bot_organization_id, session=db)
+async def run_reactivation(db: BotDB, org_id: BotOrgId) -> ReactivationOut:
+    result = await reactivation_svc.run(org_id=org_id, session=db)
     return ReactivationOut(**result)

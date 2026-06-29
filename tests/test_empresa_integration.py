@@ -15,7 +15,7 @@ import pytest
 
 BARBER_EMAIL = os.environ.get("SEED_BARBER_EMAIL", "marciana@barbeariapro.com")
 SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "senha123")
-SEED_ORG_ID = int(os.environ.get("SEED_ORG_ID", "3"))
+SEED_ORG_ID = int(os.environ.get("SEED_ORG_ID", "1"))
 
 
 async def _barber_headers(client):

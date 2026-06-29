@@ -72,6 +72,13 @@ class Organization(Base):
         Uuid, nullable=False, unique=True, server_default=text("gen_random_uuid()")
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    # Resolução de tenant (multi-tenant real, migration 0020). Ambos NULL p/ orgs
+    # antigas; únicos quando não-nulos (índices parciais).
+    # - subdomain: slug do login (taylor.app.com → org); substitui NEXT_PUBLIC_ORG_ID.
+    # - wa_instance_name: instância Evolution que recebe os webhooks da barbearia;
+    #   o bot resolve a org pela instância do payload.
+    subdomain: Mapped[Optional[str]] = mapped_column(Text)
+    wa_instance_name: Mapped[Optional[str]] = mapped_column(Text)
     # Dados cadastrais (tela /admin/empresa). Todos opcionais — retrocompat.
     legal_name: Mapped[Optional[str]] = mapped_column(Text)
     cnpj: Mapped[Optional[str]] = mapped_column(Text)

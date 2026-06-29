@@ -27,6 +27,13 @@ class TokenData(BaseModel):
     organization_id: int
 
 
+class TenantResponse(BaseModel):
+    """Resolução pública subdomínio → org (pré-login). Sem dados sensíveis."""
+
+    organization_id: int
+    name: str
+
+
 class MeResponse(BaseModel):
     user_id: int
     organization_id: int

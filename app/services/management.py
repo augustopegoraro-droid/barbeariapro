@@ -1,10 +1,12 @@
 """Camada de cálculo das *tools de gestão* (Agente Gestor — D-52).
 
 Fonte única de verdade para os indicadores do Gestor. Funções `async (db, ...)`
-que assumem uma `AsyncSession` já sob RLS (a org vem do contexto: bot via
-`settings.bot_organization_id`, dashboard via JWT). As 3 apresentações
-(bot `/bot/gestor/*`, dashboard `/admin/gestor/*`, cron `/internal/gestor/*`)
-apenas chamam estas funções e formatam — sem duplicar SQL.
+que assumem uma `AsyncSession` já sob RLS — o `org_id` NÃO é parâmetro: a RLS
+(`app.current_org_id`) é a barreira de tenant e quem define a org é o caller, a
+partir do contexto de autenticação (bot via instância WhatsApp → org; dashboard
+via JWT). As 3 apresentações (bot `/bot/gestor/*`, dashboard `/admin/gestor/*`,
+cron `/internal/gestor/*`) apenas setam a org na sessão, chamam estas funções e
+formatam — sem duplicar SQL e sem org_id solto que poderia furar o isolamento.
 
 Reaproveita `local_date`/`today_local` (datas locais) e `resolve_role` (RBAC).
 """

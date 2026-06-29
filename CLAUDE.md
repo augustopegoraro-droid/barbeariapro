@@ -82,6 +82,16 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
   `SELECT set_config('app.current_org_id', :org, true)` (parametrizado, **local à transação** — não
   vaza no pool). **RLS é a única barreira multi-tenant.**
 - RBAC por unidade: `owner > manager > reception > barber` (`app/core/rbac.py`).
+- **Multi-tenant real (D-54, 2026-06-29, só staging — head `0020`):** o `org_id` não é mais hardcoded.
+  - **Login → subdomínio:** o frontend resolve o subdomínio do host (`taylor.app.com` → org) via
+    `GET /auth/tenant?subdomain=` (público) e passa o `organization_id` ao `/auth/login`. `NEXT_PUBLIC_ORG_ID`
+    vira só fallback de dev (localhost). Helpers em `barbearia-frontend/lib/tenant.ts`.
+  - **Bot → instância WhatsApp:** `get_bot_db` resolve org/unidade pela instância (header `X-Instance`, enviado
+    pelo n8n) e expõe via `get_bot_org_id`/`get_bot_unit_id`; sem mapeamento cai em `settings.bot_organization_id`
+    (prod inalterado até backfill). **Não** se resolve por telefone (`phone_e164` não é único).
+  - **Resolução pré-tenant:** `organizations` tem RLS, então um SELECT sem tenant não vê nada → funções
+    `SECURITY DEFINER` `app_org_id_by_subdomain`/`app_org_id_by_wa_instance` (migration `0020`) devolvem só o `id`.
+    Wrappers em `app/services/tenant.py`. `management.py` segue sem `org_id` em parâmetro: a RLS é a barreira.
 - Bot: header `X-Bot-Token` validado contra `settings.bot_api_key`. Webhook Evolution:
   `X-Webhook-Secret` (hoje opcional). Comparações de segredo são **tempo-constante** via
   `app.core.security.secrets_match()`.
@@ -201,7 +211,8 @@ Detalhe completo (com `arquivo:linha`) na auditoria:
 
 **🔴 Crítico:** `credentials.json` no histórico git (rotacionar credencial OpenAI/n8n + limpar histórico) ·
 portas Postgres/n8n/Evolution abertas ao mundo + sem HTTPS · SSE single-process (não escala) ·
-multi-tenant só de fachada no frontend (`NEXT_PUBLIC_ORG_ID` fixo em build) · VM única sem HA.
+~~multi-tenant só de fachada no frontend (`NEXT_PUBLIC_ORG_ID` fixo em build)~~ (🚧 D-54: resolução por
+subdomínio (login) e instância WhatsApp (bot) implementada em staging; falta deploy/backfill em prod) · VM única sem HA.
 
 **🟠 Alto:** webhook secret opcional (tornar obrigatório após provisionar nos dois lados) · `except
 Exception` mudos · SQL via f-string em advisory lock · pool DB no default / sem PgBouncer / sem
