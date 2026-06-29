@@ -62,7 +62,7 @@ BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
 # org/unidade resolvidos pela instância WhatsApp (fallback settings). Use estes
 # em vez de `settings.bot_organization_id` / `bot_unit_id` (multi-tenant).
 BotOrgId = Annotated[int, Depends(get_bot_org_id)]
-BotUnitId = Annotated[Optional[int], Depends(get_bot_unit_id)]
+BotUnitId = Annotated[int, Depends(get_bot_unit_id)]
 
 _SLOT_STEP = 30  # minutos entre slots
 

@@ -39,11 +39,17 @@ async def resolve_tenant(
             detail="Tenant não encontrado para o subdomínio informado.",
         )
     # org_id veio de função SECURITY DEFINER (ignora RLS); agora escopa a sessão
-    # ao tenant para ler o nome sob RLS normal.
+    # ao tenant para ler o nome sob RLS normal. scalar_one_or_none + 404 evita 500
+    # numa corrida (org soft-deletada entre a resolução e este SELECT).
     await set_current_org(db, org_id)
     name = (
         await db.execute(select(Organization.name).where(Organization.id == org_id))
-    ).scalar_one()
+    ).scalar_one_or_none()
+    if name is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant não encontrado para o subdomínio informado.",
+        )
     return TenantResponse(organization_id=org_id, name=name)
 
 
