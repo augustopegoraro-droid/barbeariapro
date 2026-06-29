@@ -772,9 +772,16 @@ GESTÃO. `tsc --noEmit` 0 erros + eslint limpo.
 pré-existentes** (bypass_hours, RLS isolation, e2e — não são bugs). Envio/disparo **não** é exercido em teste
 (evita WhatsApp real; sem telefone de gestor no seed, `sent=0`).
 
-**Pendente (deploy):** aplicar migration `0019` na VM; popular `users.phone_e164` do(s) gestor(es) (tela
-`/admin/usuarios` é placeholder); cadastrar `monthly_revenue_goal`; criar os 2 crons no n8n; mergear/deployar
-o frontend. Evolução: gating de role no menu/rota do frontend; seleção pontual de clientes no disparo.
+**✅ DEPLOYADO em produção 2026-06-29:** backend em `fefd316` (container healthy; 7 rotas `/admin/gestor/*`,
+8 `/bot/gestor/*`, 2 `/internal/gestor/*` no openapi; gating 401); migration `0019` aplicada (head=`0019`,
+2 colunas novas) via URL admin inline após `pg_dump` pré-deploy (`backups/predeploy_0019_20260629_154543.sql`);
+frontend deployado (archive→scp→build; `/admin/gestor` responde 307; container healthy); `users.phone_e164`
+gravado p/ Taylor (`+5563984566177`) e Thedy (`+5563999663695`). Pin da Evolution no `docker-compose.yml`
+preservado (stash/pop).
+
+**Pendente:** cadastrar `monthly_revenue_goal` (tela Empresa) + criar os 2 crons no n8n (`docs/GESTOR_CRON_N8N.md`)
+— ambos opcionais e independentes. Evolução: gating de role no menu/rota do frontend; seleção pontual de
+clientes no disparo. Smoke visual logado em prod pende (precisa do login do gestor).
 
 ---
 

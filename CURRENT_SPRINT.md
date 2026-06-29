@@ -39,8 +39,11 @@
   R$100/1 ativa, Ranking/Buracos com empty state correto, Inativos com botão Disparar). Troca de período
   Hoje→Mês refez as queries (IA: 0→3 leads fora do horário). Console sem erros. **Não** cliquei em Disparar
   (efeito externo). Endpoints `/admin/gestor/*` checados por API antes (todos 200).
-- **Pendente (deploy):** aplicar `0019` na VM (superuser; owner=`barber_owner`); popular `users.phone_e164`
-  do gestor; cadastrar meta; criar 2 crons no n8n; mergear/deployar frontend.
+- **✅ DEPLOYADO em prod 2026-06-29:** backend `fefd316` (healthy; rotas gestor no openapi; gating 401),
+  migration `0019` aplicada (URL admin inline + `pg_dump` pré-deploy), frontend deployado (`/admin/gestor`→307),
+  telefones de Taylor/Thedy gravados na org 1. Pin da Evolution preservado.
+- **Pendente (opcional):** meta de faturamento (tela Empresa) + 2 crons n8n (`docs/GESTOR_CRON_N8N.md`);
+  smoke visual logado em prod (precisa do login do gestor).
 
 ---
 

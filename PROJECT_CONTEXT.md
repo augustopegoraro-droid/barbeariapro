@@ -5,6 +5,22 @@
 
 ---
 
+## 0.000 SESSÃO 2026-06-29 — Deploy do Agente Gestor (D-52) em produção
+
+> ✅ **DEPLOYADO em produção 2026-06-29** (containers `app-backend`/`app-frontend` healthy).
+
+- **Backend** `fefd316`: `git pull origin main` na VM com **stash/pop do `docker-compose.yml`** (preserva o
+  pin sha256 da Evolution); rebuild `docker compose -f docker-compose.app.yml up -d --build backend`.
+- **Migration `0019`** aplicada: `docker build -f Dockerfile.migrate` + `docker run` com
+  `DATABASE_URL` admin inline (`postgres@host.docker.internal:5432`, senha do container `barbeariapro-postgres`)
+  — `.env` da VM **não** tem `ADMIN_DATABASE_URL`. `pg_dump` pré-deploy em `backups/predeploy_0019_20260629_154543.sql`.
+- **Frontend**: `git archive HEAD` (do `main` do repo `augustopegoraro-droid/barbearia-frontend`) → scp → `tar -x`
+  sobre `/opt/barbeariapro/barbearia-frontend` → rebuild `--build frontend`. `/admin/gestor` responde 307 (≠404).
+- **Telefones** dos gestores gravados (org 1): Taylor `+5563984566177`, Thedy `+5563999663695`.
+- **Pendente:** smoke visual logado (precisa do login do gestor); meta de faturamento; 2 crons n8n (`docs/GESTOR_CRON_N8N.md`).
+
+---
+
 ## 0.00 SESSÃO 2026-06-27 (5ª) — Deploy `/admin/empresa` (D-45) + `/admin/assinaturas` em produção
 
 > ✅ **DEPLOYADO em produção 2026-06-27 ~01:40** (containers `app-backend`/`app-frontend` healthy).
