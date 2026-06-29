@@ -1,15 +1,19 @@
 """
 Testes de integração dos endpoints de clientes, auth/RLS, loyalty e segmentação.
 
-Rodam a aplicação ASGI em processo contra o Postgres semeado (org 3). Cobrem o
+Rodam a aplicação ASGI em processo contra o Postgres semeado. Cobrem o
 caminho real: autenticação → RLS → CRUD com soft-delete → filtros de segmentação.
 As fixtures `client` e `auth_headers` vêm de tests/conftest.py.
 """
 from __future__ import annotations
 
+import os
 import uuid
 
 import pytest
+
+# Org semeada (mesmo default de tests/conftest.py: staging usa org 1).
+SEED_ORG_ID = int(os.environ.get("SEED_ORG_ID", "1"))
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -23,14 +27,14 @@ async def test_login_owner_emite_token(client):
         json={
             "email": "taylor@barbeariapro.com",
             "password": "senha123",
-            "organization_id": 3,
+            "organization_id": SEED_ORG_ID,
         },
     )
     if resp.status_code != 200:
         pytest.skip("DB semeado indisponível")
     body = resp.json()
     assert body["access_token"]
-    assert body["organization_id"] == 3
+    assert body["organization_id"] == SEED_ORG_ID
     assert body["role"] == "owner"
 
 
@@ -41,7 +45,7 @@ async def test_login_senha_errada_401(client):
         json={
             "email": "taylor@barbeariapro.com",
             "password": "senha-errada",
-            "organization_id": 3,
+            "organization_id": SEED_ORG_ID,
         },
     )
     assert resp.status_code == 401
@@ -59,7 +63,7 @@ async def test_me_isola_tenant_via_rls(client, auth_headers):
     resp = await client.get("/auth/me", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["organization_id"] == 3
+    assert body["organization_id"] == SEED_ORG_ID
     assert body["organizations_visible"] == 1
 
 

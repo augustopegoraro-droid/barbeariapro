@@ -96,6 +96,14 @@ async def get_bot_db(
                         .limit(1)
                     )
                 ).scalar_one_or_none()
+            # Fail-fast (mantém o contrato antigo): sem unidade, endpoints do bot que
+            # dependem dela (availability/appointments/buracos) quebrariam ou serviriam
+            # a unidade errada. Melhor recusar explicitamente do que degradar silencioso.
+            if unit_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Bot não configurado (org sem unidade ou BOT_UNIT_ID ausente)",
+                )
             request.state.bot_org_id = org_id
             request.state.bot_unit_id = unit_id
             yield session
@@ -115,8 +123,10 @@ async def get_bot_org_id(
 async def get_bot_unit_id(
     request: Request,
     _db: Annotated[AsyncSession, Depends(get_bot_db)],
-) -> Optional[int]:
-    """unit_id resolvido pelo `get_bot_db` (unidade da instância, ou settings)."""
+) -> int:
+    """unit_id resolvido pelo `get_bot_db` (unidade da instância, ou settings).
+
+    Sempre não-nulo: `get_bot_db` levanta 503 se nenhuma unidade resolver."""
     return request.state.bot_unit_id
 
 

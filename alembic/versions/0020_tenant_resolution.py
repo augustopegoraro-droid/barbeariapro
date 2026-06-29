@@ -38,10 +38,12 @@ def upgrade() -> None:
     op.add_column(
         "organizations", sa.Column("wa_instance_name", sa.Text(), nullable=True)
     )
+    # Índice em lower(subdomain): unicidade e resolução são case-insensitive
+    # (a função app_org_id_by_subdomain compara por lower()).
     op.create_index(
         "idx_organizations_subdomain",
         "organizations",
-        ["subdomain"],
+        [sa.text("lower(subdomain)")],
         unique=True,
         postgresql_where=sa.text("subdomain IS NOT NULL"),
     )
@@ -66,7 +68,7 @@ def upgrade() -> None:
         SET search_path = public, pg_temp
         AS $$
             SELECT id FROM organizations
-            WHERE subdomain = lower(p_subdomain)
+            WHERE lower(subdomain) = lower(p_subdomain)
               AND deleted_at IS NULL
             LIMIT 1
         $$
