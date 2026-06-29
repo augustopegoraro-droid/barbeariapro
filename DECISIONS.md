@@ -59,8 +59,8 @@ antes de persistir em `integration_accounts.token_encrypted`.
 backend). O remote antigo `DoctorDCombo/barbearia-frontend` **não existia**; foi
 substituído por `https://github.com/augustopegoraro-droid/barbearia-frontend.git`
 (privado) e **registrado como submódulo** (`.gitmodules`). `main` + branches com push OK.
-**Ponteiro do submódulo:** o gitlink no backend ainda aponta para `f5397a8` (válido, está
-no `main` do remote novo); **bumpar para o `main` atual após o merge** da branch de frontend.
+**Ponteiro do submódulo:** bumpado para `8ba47e1` (main do frontend pós-merge do PR #1,
+já com a tela do Gestor) em 2026-06-29.
 **Deploy:** via scp + build Docker diretamente na VM.
 Ver PROJECT_CONTEXT §2 para os comandos completos.
 **Pendência:** considerar mover para `augustopegoraro-droid/barbeariapro` (subpasta) ou criar novo repo.
@@ -785,7 +785,7 @@ o frontend. Evolução: gating de role no menu/rota do frontend; seleção pontu
 | Sem backup dos volumes Docker da VM | infra VM | ⚠️ Alto | VM ficou TERMINATED em 2026-06-25 |
 | ~~Debug print temporário no webhook~~ | `app/api/wa_webhook.py` | ✅ Resolvido | D-40: trocado por `logger.debug` (commit `13822a1`) |
 | Bot responses não confirmadas no CRM | fluxo n8n + Evolution | ⚠️ Alto | Pendente confirmação end-to-end |
-| ~~Frontend sem remote git funcional~~ | `barbearia-frontend/.git` | ✅ Resolvido | 2026-06-29: remote movido p/ `augustopegoraro-droid/barbearia-frontend` (privado) + submódulo registrado (`.gitmodules`). Resíduo: bumpar ponteiro após merge do frontend |
+| ~~Frontend sem remote git funcional~~ | `barbearia-frontend/.git` | ✅ Resolvido | 2026-06-29: remote movido p/ `augustopegoraro-droid/barbearia-frontend` (privado) + submódulo registrado (`.gitmodules`) + ponteiro bumpado para `8ba47e1` |
 | HTTPS / domínio não configurado | infra VM | Médio | nginx pronto; falta registrar taylorethedy.app |
 | Portas abertas ao mundo na VM | firewall GCP | Médio (reduzido) | D-40: 5678/8080 fechadas; 5432 já fechada. Restam 8000/3000 (uso direto do browser) — mover p/ nginx+HTTPS |
 | Estado do bot em memória (debounce) | `app/api/bot.py` | Médio | Restart perde estado. Aguarda Redis. |
