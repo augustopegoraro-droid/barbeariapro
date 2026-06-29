@@ -43,6 +43,8 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(Text, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # Telefone canônico (E.164) — usado no gating por telefone do Agente Gestor.
+    phone_e164: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )

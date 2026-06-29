@@ -20,6 +20,18 @@ from app.core.phone import normalize_phone
 from app.deps import get_bot_db
 from app.services.scheduling import barber_has_conflict
 from app.services.lead_funnel import advance_lead_on_inbound, upsert_client_and_lead
+from app.services.management import (
+    agenda_gaps,
+    ai_generated_revenue,
+    barber_ranking,
+    financial_summary,
+    inactive_clients,
+    is_manager_role,
+    mrr,
+    resolve_period,
+    resolve_role_by_phone,
+)
+from app.services import reactivation as _reactivation
 from app.services.loyalty import recalculate as _recalculate_loyalty
 import app.services.conversation as _conv_svc
 from app.services.conversation import MediaIn as _MediaIn
@@ -1077,3 +1089,224 @@ async def complete_appointment(
     ).first()
 
     return _appt_out(appt, row[0] if row else "—", row[1] if row else "—")
+
+
+# ===========================================================================
+# Tools de Gestão (Agente Gestor — D-52)
+# Consumidas pelo AI Agent (n8n) quando o GESTOR pergunta por linguagem natural.
+# Org fixa (settings.bot_organization_id); gating por telefone do remetente.
+# ===========================================================================
+
+async def _require_manager_phone(db: AsyncSession, requester_phone: str) -> str:
+    """Valida que o telefone do remetente pertence a um owner/manager.
+
+    Levanta 403 caso contrário. Defense-in-depth: o n8n já deve checar via
+    /bot/gestor/whoami, mas toda tool sensível recheca aqui."""
+    role = await resolve_role_by_phone(db, requester_phone)
+    if not is_manager_role(role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso restrito ao gestor (owner/manager).",
+        )
+    return role
+
+
+class WhoAmIOut(BaseModel):
+    is_manager: bool
+    role: Optional[str] = None
+
+
+@router.get("/gestor/whoami", response_model=WhoAmIOut)
+async def gestor_whoami(
+    db: BotDB,
+    phone: str = Query(..., description="Telefone do remetente (E.164 ou BR)"),
+) -> WhoAmIOut:
+    """Gating: informa se o telefone pertence a um gestor (owner/manager).
+    O AI Agent chama esta tool ANTES de qualquer dado sensível."""
+    role = await resolve_role_by_phone(db, phone)
+    return WhoAmIOut(is_manager=is_manager_role(role), role=role)
+
+
+class GestorMethodOut(BaseModel):
+    method: str
+    amount: float
+    count: int
+
+
+class GestorFinanceiroOut(BaseModel):
+    period: str
+    date_from: str
+    date_to: str
+    revenue: float
+    commissions: float
+    expenses: float
+    net: float
+    appointment_count: int
+    by_method: list[GestorMethodOut]
+
+
+@router.get("/gestor/financeiro", response_model=GestorFinanceiroOut)
+async def gestor_financeiro(
+    db: BotDB,
+    requester_phone: str = Query(..., description="Telefone de quem pergunta (gating)"),
+    period: Optional[str] = Query(None, description="hoje|ontem|semana|mes"),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+) -> GestorFinanceiroOut:
+    """Resumo financeiro do período (receita, comissões, despesas, líquido)."""
+    await _require_manager_phone(db, requester_phone)
+    df, dt, label = resolve_period(period, date_from, date_to)
+    data = await financial_summary(db, df, dt)
+    return GestorFinanceiroOut(period=label, **data)
+
+
+class GestorBarberOut(BaseModel):
+    barber_id: int
+    barber_name: str
+    appointment_count: int
+    revenue: float
+    ticket_medio: float
+    commission: float
+
+
+class GestorRankingOut(BaseModel):
+    period: str
+    date_from: str
+    date_to: str
+    barbers: list[GestorBarberOut]
+
+
+@router.get("/gestor/ranking", response_model=GestorRankingOut)
+async def gestor_ranking(
+    db: BotDB,
+    requester_phone: str = Query(..., description="Telefone de quem pergunta (gating)"),
+    period: Optional[str] = Query(None, description="hoje|ontem|semana|mes"),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+) -> GestorRankingOut:
+    """Ranking de produção por barbeiro no período (receita, ticket, comissão)."""
+    await _require_manager_phone(db, requester_phone)
+    df, dt, label = resolve_period(period, date_from, date_to)
+    barbers = await barber_ranking(db, df, dt)
+    return GestorRankingOut(
+        period=label, date_from=df.isoformat(), date_to=dt.isoformat(), barbers=barbers
+    )
+
+
+# ─── Fase B — inativos, buracos, faturamento-IA, MRR ───────────────────────
+
+class GestorInativoOut(BaseModel):
+    client_id: int
+    name: str
+    phone: Optional[str] = None
+    days_since_last_visit: Optional[int] = None
+    visit_count: int = 0
+    status: Optional[str] = None
+    preferred_barber: Optional[str] = None
+
+
+class GestorInativosOut(BaseModel):
+    count: int
+    clients: list[GestorInativoOut]
+
+
+@router.get("/gestor/inativos", response_model=GestorInativosOut)
+async def gestor_inativos(
+    db: BotDB,
+    requester_phone: str = Query(..., description="Telefone de quem pergunta (gating)"),
+    days: Optional[int] = Query(None, ge=1, description="Sem dias: usa status em_risco/inativo"),
+    limit: int = Query(50, ge=1, le=200),
+) -> GestorInativosOut:
+    """Clientes parados, candidatos a reativação."""
+    await _require_manager_phone(db, requester_phone)
+    clients = await inactive_clients(db, days=days, limit=limit)
+    return GestorInativosOut(count=len(clients), clients=clients)
+
+
+class GestorDisparoOut(BaseModel):
+    sent: int
+    skipped: int
+    total_targets: int
+
+
+@router.post("/gestor/inativos/disparar", response_model=GestorDisparoOut)
+async def gestor_inativos_disparar(
+    db: BotDB,
+    requester_phone: str = Query(..., description="Telefone de quem pede (gating)"),
+) -> GestorDisparoOut:
+    """Dispara a campanha de reativação (mesma rotina automática; respeita cooldown
+    e opt-out). A trava de envio do WhatsApp protege staging."""
+    await _require_manager_phone(db, requester_phone)
+    result = await _reactivation.run(org_id=settings.bot_organization_id, session=db)
+    return GestorDisparoOut(**result)
+
+
+class GestorWindowOut(BaseModel):
+    start: str
+    end: str
+
+
+class GestorBuracoBarberOut(BaseModel):
+    barber_id: int
+    barber_name: str
+    idle_min: int
+    free_windows: list[GestorWindowOut]
+
+
+class GestorBuracosOut(BaseModel):
+    date: str
+    barbers: list[GestorBuracoBarberOut]
+
+
+@router.get("/gestor/buracos", response_model=GestorBuracosOut)
+async def gestor_buracos(
+    db: BotDB,
+    requester_phone: str = Query(..., description="Telefone de quem pergunta (gating)"),
+    date: Optional[date] = Query(None, description="Default: hoje"),
+) -> GestorBuracosOut:
+    """Janelas ociosas por barbeiro na data (default hoje)."""
+    await _require_manager_phone(db, requester_phone)
+    from app.core.dates import today_local
+    target = date or today_local()
+    barbers = await agenda_gaps(db, target, settings.bot_unit_id)
+    return GestorBuracosOut(date=target.isoformat(), barbers=barbers)
+
+
+class GestorIaFaturamentoOut(BaseModel):
+    date_from: str
+    date_to: str
+    appointments: int
+    revenue: float
+    leads_after_hours: int
+
+
+@router.get("/gestor/ia-faturamento", response_model=GestorIaFaturamentoOut)
+async def gestor_ia_faturamento(
+    db: BotDB,
+    requester_phone: str = Query(..., description="Telefone de quem pergunta (gating)"),
+    period: Optional[str] = Query(None, description="hoje|ontem|semana|mes"),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+) -> GestorIaFaturamentoOut:
+    """Resultado atribuível ao bot: agendamentos/receita via WhatsApp + leads fora
+    do horário comercial."""
+    await _require_manager_phone(db, requester_phone)
+    df, dt, _ = resolve_period(period, date_from, date_to)
+    data = await ai_generated_revenue(db, df, dt, settings.bot_unit_id)
+    return GestorIaFaturamentoOut(**data)
+
+
+class GestorMrrOut(BaseModel):
+    active_count: int
+    mrr: float
+    expiring_30d: int
+
+
+@router.get("/gestor/mrr", response_model=GestorMrrOut)
+async def gestor_mrr(
+    db: BotDB,
+    requester_phone: str = Query(..., description="Telefone de quem pergunta (gating)"),
+) -> GestorMrrOut:
+    """Receita recorrente das assinaturas vigentes + quantas vencem em 30 dias."""
+    await _require_manager_phone(db, requester_phone)
+    return GestorMrrOut(**await mrr(db))

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dates import local_date
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services.management import barber_revenue_rows
 from models import (
     Appointment,
     AppointmentItem,
@@ -210,26 +211,8 @@ def _month_range(month: str) -> tuple[date, date]:
     return first, next_month - timedelta(days=1)
 
 
-async def _barber_revenue_rows(db: AsyncSession, date_from: date, date_to: date):
-    return (
-        await db.execute(
-            select(
-                Barber.id,
-                Barber.name,
-                Barber.commission_pct,
-                func.count(Appointment.id.distinct()).label("appt_count"),
-                func.coalesce(func.sum(AppointmentItem.price_charged), 0).label("revenue"),
-            )
-            .select_from(AppointmentItem)
-            .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
-            .join(Barber, Barber.id == AppointmentItem.barber_id)
-            .where(Appointment.status == AppointmentStatus.concluido)
-            .where(local_date(Appointment.start_at) >= date_from)
-            .where(local_date(Appointment.start_at) <= date_to)
-            .group_by(Barber.id, Barber.name, Barber.commission_pct)
-            .order_by(func.sum(AppointmentItem.price_charged).desc())
-        )
-    ).all()
+# A query de receita por barbeiro vive em app.services.management
+# (barber_revenue_rows), compartilhada com as tools de gestão (D-52).
 
 
 # ─── GET /financeiro/mensal ───────────────────────────────────────────────────
@@ -263,7 +246,7 @@ async def get_financeiro_mensal(
     await _require_manager(db, current_user)
     date_from, date_to = _month_range(month)
 
-    barber_rows = await _barber_revenue_rows(db, date_from, date_to)
+    barber_rows = await barber_revenue_rows(db, date_from, date_to)
     by_barber = [
         BarberOut(
             barber_id=r.id,
@@ -445,7 +428,7 @@ async def export_comissoes_csv(
     await _require_manager(db, current_user)
     date_from, date_to = _month_range(month)
 
-    barber_rows = await _barber_revenue_rows(db, date_from, date_to)
+    barber_rows = await barber_revenue_rows(db, date_from, date_to)
     rows = [
         [
             r.name,

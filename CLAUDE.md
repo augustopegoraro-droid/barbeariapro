@@ -63,12 +63,13 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
   empresa, equipe, financeiro, health, integracoes, loyalty, memberships, reminders, servicos, wa_webhook).
 - `app/core/*` — `config`, `security`, `rbac`, `crypto`, `dates`, `phone`.
 - `app/services/*` — `scheduling`, `conversation`, `sse_broker`, `whatsapp`, `reminders`,
-  `reactivation`, `loyalty`, `google_calendar`, `calendar_sync`, `membership`.
+  `reactivation`, `loyalty`, `google_calendar`, `calendar_sync`, `membership`, `management`
+  (camada de cálculo das *tools de gestão* — D-52, reaproveitada por bot/dashboard/cron).
 - `app/db/session.py` — engine async + `set_current_org()` (ativa RLS por transação).
 - `app/deps.py` — dependências de request (auth + sessão com tenant).
 - `models/*` — modelos SQLAlchemy (organization, plan, subscription, unit, user, barber, client,
   appointment, payment, expense, service, lead, conversation, message, attachment, integration, membership, enums).
-- `barbearia-frontend/` — **repo git aninhado separado** (ver §7, remote morto).
+- `barbearia-frontend/` — **submódulo git separado** (remote `augustopegoraro-droid/barbearia-frontend`, privado; D-08).
 
 ---
 
@@ -174,6 +175,15 @@ gerando voucher (`loyalty_vouchers`); `client_loyalty.points_balance`/`current_t
 (abas Clientes/Configuração). Rollout 100% aditivo (nivel/categoria + API legada mantidos). Migrations `0016`/`0017`
 (head=`0017`). **Falta (PR-C):** badges/filtro de tier em Clientes + slice no Dashboard.
 
+**Tools de Gestão ("Agente Gestor")** (D-52, Fases A+B+C — **só staging**): camada única
+`app/services/management.py` em 3 canais — bot (`/bot/gestor/*`, gating por telefone), dashboard
+(`/admin/gestor/*`, JWT+`require_manager_access`) e cron (`/internal/gestor/*` via `gestor_notify`).
+Tools: `whoami`, `financeiro`, `ranking`, `inativos` (+`disparar`, reusa `reactivation.run`), `buracos`
+(agenda ociosa), `ia-faturamento`, `mrr`; push: `resumo-diario` + `alertas` (meta/queda). Frontend:
+página `/admin/gestor` (React Query). Migration `0019` (`users.phone_e164` +
+`organizations.monthly_revenue_goal`); crons em `docs/GESTOR_CRON_N8N.md`. **Pendente:** deploy prod
+(aplicar `0019`, popular telefone do gestor, cadastrar meta, criar crons no n8n, mergear frontend).
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
@@ -196,7 +206,7 @@ multi-tenant só de fachada no frontend (`NEXT_PUBLIC_ORG_ID` fixo em build) · 
 **🟠 Alto:** webhook secret opcional (tornar obrigatório após provisionar nos dois lados) · `except
 Exception` mudos · SQL via f-string em advisory lock · pool DB no default / sem PgBouncer / sem
 Redis / sem fila de workers · React Query não usado · páginas-monolito (`crm/page.tsx` 1389 linhas) ·
-cron n8n em série p/ todas as orgs · **repo frontend aninhado com remote morto** (`DoctorDCombo/...`).
+cron n8n em série p/ todas as orgs · ~~repo frontend com remote morto~~ (✅ D-08, 2026-06-29: remote restaurado + submódulo registrado).
 
 **🟡 Médio:** transações inconsistentes · `Payment` desacoplado de `Appointment` · dados hardcoded no
 frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i18n · docs dispersas.
