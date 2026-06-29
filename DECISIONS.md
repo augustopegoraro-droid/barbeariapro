@@ -717,6 +717,64 @@ na venda + separação "receita reconhecida × recebido".
 
 ---
 
+## D-52 — Tools de Gestão ("Agente Gestor"): Fase A (fundação + financeiro/ranking) — 2026-06-28
+
+**Contexto:** o sistema atendia bem a Raquel (recepção/operação), mas faltava uma camada para o
+**Gestor/dono** — quem decide (faturamento, produção por barbeiro, o que está vazando). Visão do produto
+(CLAUDE.md §3) prevê "funcionária virtual" por linguagem natural via *tools* REST. Plano completo em
+`/Users/apleandro/.claude/plans/a-humming-pond.md`.
+
+**Decisão de arquitetura:** **1 camada de cálculo, 3 apresentações.** Toda a lógica vive em
+`app/services/management.py` (funções `async (db, ...)` sob RLS), consumida por:
+- **Bot (pull):** `/bot/gestor/*` — `X-Bot-Token` + gating por telefone do remetente. Org fixa
+  (`settings.bot_organization_id`). O AI Agent (n8n) chama `whoami` primeiro.
+- **Dashboard (JWT):** `/admin/gestor/*` — `get_tenant_db` + `require_manager_access` (recepção fora).
+- **Cron (push):** previsto na Fase C (`/internal/gestor/*` + `send_text`).
+
+**Gating por telefone (escolha do usuário):** cruza o telefone do remetente com a role do `User`.
+`User`/`Barber` **não tinham telefone** → migration **`0019_gestor_fields`** adiciona `users.phone_e164`
+(+ índice parcial único por org) e `organizations.monthly_revenue_goal` (alerta futuro). Helper
+`resolve_role_by_phone()` + `is_manager_role()`; toda tool sensível do bot recheca (defense-in-depth).
+
+**Reuso (não reescrever):** `_barber_revenue_rows` saiu de `financeiro.py` para
+`management.barber_revenue_rows` (financeiro passou a importar — sem regressão). `local_date`/`today_local`,
+`resolve_role`, `normalize_phone` reaproveitados.
+
+**Entregue (Fase A):** `whoami`, `financeiro` (receita/comissões/despesas/líquido), `ranking` (receita/
+ticket médio/comissão) nos canais bot + dashboard. **Despesas** seguem a competência mensal já adotada
+(`Expense.competence_month`) — `net` é pleno em janela de mês fechado.
+**Migration `0019` aplicada no staging** (via superuser `postgres`; o owner das tabelas é `barber_owner`,
+e o usuário do app não é dono — DDL exige superuser/owner).
+
+**Entregue (Fase B):** `inativos` (status fidelidade ou `days`) + `inativos/disparar` (reusa
+`reactivation.run` — cooldown/opt-out/trava de envio); `buracos` (janelas ociosas/barbeiro via
+`BusinessHours` − agendamentos − folgas, corta o passado se hoje); `ia-faturamento` (`booking_channel=
+whatsapp` concluídos + leads fora do horário comercial); `mrr` (`price_paid/duration_days×30` das ativas +
+vencendo em 30d). Helper puro `_free_windows`. Tudo nos canais bot + dashboard.
+
+**Entregue (Fase C — push proativo + UI):** `app/services/gestor_notify.py` monta o texto pt-BR e envia via
+`send_text` aos `manager_phones` (owner/manager com telefone). Endpoints internos (cron, X-Bot-Token):
+`POST /internal/gestor/resumo-diario` (`daily_digest`: faturamento/atendimentos/topo/faltas/IA + ociosidade
+de amanhã) e `POST /internal/gestor/alertas` (`revenue_alerts`: projeção do mês vs `monthly_revenue_goal` +
+queda vs média semanal). Meta cadastrável via `PATCH /empresa` (`organizations.monthly_revenue_goal`). Crons
+documentados em `docs/GESTOR_CRON_N8N.md` (não editar `workflows.json` local — diverge da VM).
+**Frontend:** página `/admin/gestor` (Next.js) com `SegmentedControl` de período + `GestorKpis` (receita/
+comissões/líquido/atend./MRR/IA), `RankingPanel`, `InativosPanel` (com botão Disparar via mutation) e
+`BuracosPanel`; React Query (`hooks/use-gestor.ts` + `useAuthedQuery`/`AsyncState`), item "Gestor" no menu
+GESTÃO. `tsc --noEmit` 0 erros + eslint limpo.
+
+**Testes:** `tests/test_gestor_unit.py` (período/role/free_windows/builders, 15) +
+`tests/test_gestor_integration.py` (dashboard RBAC, gating do bot, regressão `financeiro mes ==
+/financeiro/mensal`, endpoints internos, 16). Suíte **320 pass / 2 skip / 3 falhas ambientais
+pré-existentes** (bypass_hours, RLS isolation, e2e — não são bugs). Envio/disparo **não** é exercido em teste
+(evita WhatsApp real; sem telefone de gestor no seed, `sent=0`).
+
+**Pendente (deploy):** aplicar migration `0019` na VM; popular `users.phone_e164` do(s) gestor(es) (tela
+`/admin/usuarios` é placeholder); cadastrar `monthly_revenue_goal`; criar os 2 crons no n8n; mergear/deployar
+o frontend. Evolução: gating de role no menu/rota do frontend; seleção pontual de clientes no disparo.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

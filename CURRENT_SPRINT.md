@@ -1,6 +1,46 @@
 # CURRENT_SPRINT.md
-> Estado do desenvolvimento em **2026-06-28**. Atualizar a cada sessão.
-> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-51), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
+> Estado do desenvolvimento em **2026-06-29**. Atualizar a cada sessão.
+> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-52), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
+
+---
+
+## 🟢 Sessão 2026-06-29 — Tools de Gestão / "Agente Gestor" Fases A+B+C (D-52)
+
+> Fundação das tools de gestão para o **Gestor/dono** (não a recepção). Plano em
+> `~/.claude/plans/a-humming-pond.md`. **Backend + frontend prontos — só staging; validado no browser.**
+>
+> **Onde está o que foi feito nesta sessão** (commits: principal `feat/gestor-tools-d52`; frontend idem):
+> - Cálculo (1 camada): `app/services/management.py` · push: `app/services/gestor_notify.py`
+> - APIs: `app/api/gestor.py` (dashboard `/admin/gestor/*` + interno `/internal/gestor/*`),
+>   tools bot em `app/api/bot.py` (`/bot/gestor/*`), meta em `app/api/empresa.py`,
+>   reuso em `app/api/financeiro.py`, registro em `app/main.py`
+> - Dados: `alembic/versions/0019_gestor_fields.py`, `models/user.py`, `models/organization.py`
+> - Testes: `tests/test_gestor_unit.py`, `tests/test_gestor_integration.py`
+> - Cron n8n (doc): `docs/GESTOR_CRON_N8N.md`
+> - Frontend: `barbearia-frontend/app/admin/gestor/page.tsx`, `components/gestor/*`,
+>   `hooks/use-gestor.ts`, item no menu em `components/layout/AdminSidebar.tsx`
+
+- **Camada única `app/services/management.py`** (cálculo sob RLS) → 3 apresentações: bot `/bot/gestor/*`
+  (gating por telefone), dashboard `/admin/gestor/*` (JWT+`require_manager_access`), cron (Fase C).
+- **Fase A:** `whoami` (gating), `financeiro` (receita/comissões/despesas/líquido), `ranking`
+  (receita/ticket médio/comissão). `_barber_revenue_rows` extraído de `financeiro.py` (reuso, sem regressão).
+- **Fase B:** `inativos` (status fidelidade ou `days`) + `inativos/disparar` (reusa `reactivation.run`);
+  `buracos` (janelas ociosas/barbeiro via `BusinessHours`−agendamentos−folgas); `ia-faturamento`
+  (`booking_channel=whatsapp` + leads fora do horário); `mrr` (assinaturas ativas). Helper puro `_free_windows`.
+- **Fase C:** push proativo — `gestor_notify` + `/internal/gestor/resumo-diario` e `/alertas` (cron X-Bot-Token);
+  `daily_digest` + `revenue_alerts` (meta vs `monthly_revenue_goal`, queda vs média). Meta via `PATCH /empresa`.
+  Crons documentados em `docs/GESTOR_CRON_N8N.md`. **Frontend:** página `/admin/gestor` (KPIs/ranking/inativos+
+  disparar/buracos) com React Query; item no menu GESTÃO. `tsc` 0 erros + eslint limpo.
+- **Migration `0019_gestor_fields`** (aditiva): `users.phone_e164` (+índice parcial único/org, gating) e
+  `organizations.monthly_revenue_goal`. **Aplicada no staging** via superuser `postgres` (owner = `barber_owner`).
+- **Testes:** `tests/test_gestor_unit.py` (15) + `tests/test_gestor_integration.py` (16). Suíte
+  **320 pass / 2 skip / 3 falhas ambientais** pré-existentes. Envio/disparo não é exercido em teste.
+- **✅ Smoke no browser (staging, org 1):** login como taylor → `/admin/gestor` renderiza (KPIs com MRR
+  R$100/1 ativa, Ranking/Buracos com empty state correto, Inativos com botão Disparar). Troca de período
+  Hoje→Mês refez as queries (IA: 0→3 leads fora do horário). Console sem erros. **Não** cliquei em Disparar
+  (efeito externo). Endpoints `/admin/gestor/*` checados por API antes (todos 200).
+- **Pendente (deploy):** aplicar `0019` na VM (superuser; owner=`barber_owner`); popular `users.phone_e164`
+  do gestor; cadastrar meta; criar 2 crons no n8n; mergear/deployar frontend.
 
 ---
 

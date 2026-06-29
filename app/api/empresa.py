@@ -42,6 +42,7 @@ class OrganizationOut(BaseModel):
     website: Optional[str] = None
     instagram: Optional[str] = None
     logo_url: Optional[str] = None
+    monthly_revenue_goal: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -99,6 +100,7 @@ class OrganizationUpdate(BaseModel):
     website: Optional[str] = Field(None, max_length=200)
     instagram: Optional[str] = Field(None, max_length=120)
     logo_url: Optional[str] = Field(None, max_length=500)
+    monthly_revenue_goal: Optional[float] = Field(None, ge=0, description="Meta de faturamento mensal (R$); null limpa")
 
 
 class UnitUpdate(BaseModel):

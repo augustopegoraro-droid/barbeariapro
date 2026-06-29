@@ -80,6 +80,8 @@ class Organization(Base):
     website: Mapped[Optional[str]] = mapped_column(Text)
     instagram: Mapped[Optional[str]] = mapped_column(Text)
     logo_url: Mapped[Optional[str]] = mapped_column(Text)
+    # Meta de faturamento mensal (R$); NULL = sem meta. Usada no alerta proativo.
+    monthly_revenue_goal: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
