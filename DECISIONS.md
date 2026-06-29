@@ -848,6 +848,67 @@ reminders/reactivation por org única — viram multi-tenant quando o n8n iterar
 
 ---
 
+### D-55 — Painel de Plataforma (Superadmin): camada ACIMA dos tenants, cross-tenant — 2026-06-29
+
+**Contexto:** falta a camada do dono do SaaS — gerenciar todas as orgs (onboarding,
+billing, suspensão, indicadores consolidados) sem ser limitado pela RLS. Construído
+sobre `feat/multi-tenant-org-id` (D-54), na branch `feat/platform-superadmin`.
+
+**Restrições decisivas (exploração):** `barber_app` é **NOBYPASSRLS** e a VM **não tem
+`ADMIN_DATABASE_URL`** → em runtime, SELECT cross-org dá 0 linhas e o app não cria org
+sob RLS. Único bypass disponível: funções **`SECURITY DEFINER`** (molde D-54/`0020`).
+
+**Decisões (gestor):** (1) auth do superadmin por **password_hash bcrypt**; (2) cross-tenant
+**híbrido** (SECURITY DEFINER para listagem/contagens; `mrr()` reusado iterando orgs em
+**sessões helper isoladas** — endpoint nunca seta `app.current_org_id`); (3) **backend
+completo agora; frontend `/superadmin` separado depois**.
+
+**Implementado (só staging, head `0021`):**
+- Migration `0021`: tabela `platform_admins` (global, sem `organization_id`, **sem RLS**,
+  **sem GRANT a `barber_app`**) + funções `SECURITY DEFINER` (`app_platform_admin_login`,
+  `_admin_exists`, `_list_orgs`, `_active_org_ids`, `_usage`, `_create_org`) com
+  `GRANT EXECUTE TO barber_app`.
+- `models/platform_admin.py`; `app/core/security.py::create_platform_token` (`typ="platform"`,
+  sem `org`); `app/services/platform.py` (wrappers); `app/services/onboarding.py`
+  (`provision_org` + `SERVICES_CATALOG` extraído do `seed.py`, que passou a importá-lo);
+  `app/api/platform.py` (guard `require_platform_admin` + endpoints
+  `auth/login`, `orgs` GET/POST/PATCH/`suspend`/`reactivate`, `dashboard`); registrado em
+  `main.py`. Bootstrap: `scripts/seed_platform_admin.py` (role dona).
+- **Isolamento bilateral de token:** tenant↔plataforma se rejeitam mutuamente (presença
+  de `org` vs `typ`). Suspensão = `organizations.deleted_at` (não há status "suspended" no
+  enum `subscription_status`; "suspenso" é derivado de `deleted_at`).
+
+**Testes:** `tests/test_platform.py` (6): sem token 401, token de tenant→401, login+lista,
+onboarding cria org+owner+seed (owner novo loga) + suspend/reactivate (com purge),
+dashboard MRR consolidado. Baseline **332 pass / 2 skip / 3 fail** ambientais.
+
+**Fora de escopo / pendente:** frontend `/superadmin` (app Next.js separado — exigência:
+nunca no frontend de tenant); saúde de bot ao vivo (Evolution API; hoje só proxy
+`wa_instance_name`); deploy prod (provisionar `ADMIN_DATABASE_URL` na VM, aplicar `0021`,
+rodar bootstrap do superadmin).
+
+**Pós code review (correções aplicadas):**
+- **Suspensão agora é efetiva:** `/auth/login` recusa org com `deleted_at` (403). Antes a
+  suspensão era cosmética (RLS de `organizations` não filtra `deleted_at` e o login por
+  `organization_id` não passa pela resolução de subdomínio). Tokens já emitidos expiram
+  naturalmente (limitação aceita).
+- **Dashboard — dois MRR distintos:** `saas_mrr` (soma de `Plan.price_month` das assinaturas
+  ativas = receita do SaaS) **e** `tenants_membership_mrr` (soma de `mrr()` = mensalidades dos
+  clientes finais, volume que passa pelos tenants). Antes só havia o segundo, rotulado como se
+  fosse a receita do SaaS. `app_platform_list_orgs` passou a expor `plan_price_month`.
+- Robustez: `create_org` mapeia só `IntegrityError`→409 (resto propaga, sem vazar SQL);
+  `patch_org` valida plano (400 se inexistente, evita 500 na FK); loop de MRR isola por org
+  (um tenant ruim não derruba o painel); `_set_org_deleted` via ORM (sem f-string SQL);
+  contagens do dashboard reusam `_derive_status` (fonte única de status).
+
+**Limitações conhecidas (débito, não bloqueante):** funções `SECURITY DEFINER` de plataforma
+têm `GRANT EXECUTE` a `barber_app` (o app tem só esse role) — a barreira é o guard HTTP
+`require_platform_admin`; endurecer com role de plataforma dedicado é trabalho futuro.
+Dashboard/`_get_org_out` fazem O(N) round-trips (agregação via função `SECURITY DEFINER`
+quando a base crescer).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

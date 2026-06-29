@@ -96,6 +96,35 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
   `X-Webhook-Secret` (hoje opcional). Comparações de segredo são **tempo-constante** via
   `app.core.security.secrets_match()`.
 
+## Painel de Plataforma (Superadmin)
+
+Separado do painel de tenant. `platform_admins` é tabela própria, sem
+`organization_id`. Guards de plataforma usam SECURITY DEFINER e nunca setam
+`app.current_org_id`. Rota: `/superadmin` ou `admin.taylorethedy.com` — nunca
+dentro do frontend de tenant.
+
+**Detalhes de implementação (D-55, branch `feat/platform-superadmin`, só staging):**
+- **JWT próprio:** `create_platform_token` (`app/core/security.py`) emite `typ="platform"`
+  **sem `org`**. Isolamento bilateral: token de tenant (com `org`, sem `typ`) é
+  rejeitado pelo guard de plataforma; token de plataforma (sem `org`) é rejeitado
+  por `get_token_data` do tenant. Guard `require_platform_admin` (`app/api/platform.py`)
+  revalida o admin via SECURITY DEFINER a cada request.
+- **RLS bypass controlado:** `barber_app` é NOBYPASSRLS, então um SELECT cross-org
+  sem tenant retorna 0 linhas. Migration `0021` cria `platform_admins` (sem RLS, sem
+  GRANT direto a `barber_app`) + funções SECURITY DEFINER (login, exists, `list_orgs`,
+  `active_org_ids`, `usage`, `create_org`) com `GRANT EXECUTE TO barber_app` (molde da `0020`).
+- **Cross-tenant híbrido:** listagem/contagens/uso via SECURITY DEFINER; **MRR
+  consolidado reusa `mrr()`** (`management.py`) iterando orgs em **sessões helper
+  isoladas** — o endpoint nunca seta o GUC na própria sessão. Onboarding
+  (`POST /platform/orgs`, `app/services/onboarding.py`) cria org via SECURITY DEFINER
+  e semeia filhos (unidade/owner/serviços do `SERVICES_CATALOG`) numa sessão helper
+  escopada — substitui o `scripts/seed.py` manual. 1º superadmin via
+  `scripts/seed_platform_admin.py` (role dona).
+- **Pendente:** frontend `/superadmin` (app separado); saúde de bot ao vivo
+  (conectado/restrito) exige Evolution API (hoje só o proxy `wa_instance_name`);
+  deploy prod (aplicar `0021` com `ADMIN_DATABASE_URL`, hoje ausente na VM; bootstrap
+  do superadmin).
+
 ### Financeiro (`app/api/financeiro.py`)
 - Receita = soma de `AppointmentItem.price_charged` de agendamentos `concluido`.
 - Comissão = receita × `Barber.commission_pct`. Despesas via `Expense` (com `competence_month`).

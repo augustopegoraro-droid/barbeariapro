@@ -50,6 +50,25 @@ def create_access_token(*, user_id: int, organization_id: int) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_platform_token(*, admin_id: int) -> str:
+    """Emite um JWT de PLATAFORMA (superadmin do SaaS).
+
+    Distinto do token de tenant: carrega `typ="platform"` e **não** carrega `org`.
+    Assim, o guard de tenant (`get_token_data`, que exige `org`) rejeita este token,
+    e o guard de plataforma (que exige `typ="platform"`) rejeita os de tenant.
+    Mesma chave/HS256.
+    """
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=settings.access_token_expire_minutes)
+    payload: dict[str, Any] = {
+        "sub": str(admin_id),
+        "typ": "platform",
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp()),
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
 def decode_access_token(token: str) -> dict[str, Any]:
     """Decodifica e valida (assinatura + exp) o JWT. Lança JWTError se inválido."""
     return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
