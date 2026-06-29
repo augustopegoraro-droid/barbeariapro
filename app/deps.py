@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Annotated, Optional
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy import select
@@ -17,6 +17,7 @@ from app.core.rbac import resolve_role, resolve_role_with_barber
 from app.core.security import decode_access_token, secrets_match
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.schemas.auth import TokenData
+from app.services.tenant import org_id_by_wa_instance
 from models import Unit, User, UserUnit
 
 bearer_scheme = HTTPBearer(auto_error=True)
@@ -54,23 +55,79 @@ async def get_tenant_db(
 
 
 async def get_bot_db(
+    request: Request,
     x_bot_token: Annotated[Optional[str], Header(alias="X-Bot-Token")] = None,
+    x_instance: Annotated[Optional[str], Header(alias="X-Instance")] = None,
 ) -> AsyncIterator[AsyncSession]:
-    """Sessão para o chatbot: autentica via X-Bot-Token header."""
+    """Sessão para o chatbot: autentica via X-Bot-Token header.
+
+    Multi-tenant: a org/unidade vêm da instância WhatsApp (header `X-Instance`,
+    enviado pelo n8n). Sem o header — ou instância sem mapeamento — cai no
+    comportamento legado single-tenant via `settings.bot_organization_id` /
+    `bot_unit_id`. O par resolvido fica em `request.state` para os endpoints
+    consumirem via `get_bot_org_id` / `get_bot_unit_id` (em vez de ler `settings`).
+    """
     if not secrets_match(x_bot_token, settings.bot_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Bot token inválido ou ausente",
         )
-    if not settings.bot_organization_id or not settings.bot_unit_id:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Bot não configurado (BOT_ORGANIZATION_ID / BOT_UNIT_ID ausentes)",
-        )
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            await set_current_org(session, settings.bot_organization_id)
+            # Resolve a org pela instância (sem tenant: a função SQL ignora a RLS).
+            org_id = await org_id_by_wa_instance(session, x_instance or "")
+            unit_id: Optional[int] = None
+            if org_id is None:
+                org_id = settings.bot_organization_id or None
+                unit_id = settings.bot_unit_id or None
+            if not org_id:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Bot não configurado (sem instância mapeada nem BOT_ORGANIZATION_ID)",
+                )
+            await set_current_org(session, org_id)
+            if unit_id is None:
+                # Org veio da instância: usa a unidade padrão (menor id, não excluída).
+                unit_id = (
+                    await session.execute(
+                        select(Unit.id)
+                        .where(Unit.deleted_at.is_(None))
+                        .order_by(Unit.id)
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+            # Fail-fast (mantém o contrato antigo): sem unidade, endpoints do bot que
+            # dependem dela (availability/appointments/buracos) quebrariam ou serviriam
+            # a unidade errada. Melhor recusar explicitamente do que degradar silencioso.
+            if unit_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Bot não configurado (org sem unidade ou BOT_UNIT_ID ausente)",
+                )
+            request.state.bot_org_id = org_id
+            request.state.bot_unit_id = unit_id
             yield session
+
+
+async def get_bot_org_id(
+    request: Request,
+    _db: Annotated[AsyncSession, Depends(get_bot_db)],
+) -> int:
+    """org_id resolvido pelo `get_bot_db` (instância → org, com fallback a settings).
+
+    Depende de `get_bot_db` (cacheado no request) só para garantir a ordem de
+    resolução; lê o valor de `request.state`."""
+    return request.state.bot_org_id
+
+
+async def get_bot_unit_id(
+    request: Request,
+    _db: Annotated[AsyncSession, Depends(get_bot_db)],
+) -> int:
+    """unit_id resolvido pelo `get_bot_db` (unidade da instância, ou settings).
+
+    Sempre não-nulo: `get_bot_db` levanta 503 se nenhuma unidade resolver."""
+    return request.state.bot_unit_id
 
 
 async def get_current_user(

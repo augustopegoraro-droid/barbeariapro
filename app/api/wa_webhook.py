@@ -24,6 +24,7 @@ from app.core.security import secrets_match
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.services import conversation as conv_svc
 from app.services.conversation import MediaIn
+from app.services.tenant import org_id_by_wa_instance
 from models.enums import AttachmentMediaType, MessageSenderType, MessageType
 
 _logger = logging.getLogger(__name__)
@@ -48,15 +49,15 @@ async def _get_webhook_db(
     Comparação em tempo constante. Enquanto WA_WEBHOOK_SECRET estiver vazio o
     header é opcional (comportamento atual de produção). Tornar obrigatório
     exige antes provisionar o segredo na Evolution e no .env da VM (Fase 1.4).
+
+    A sessão é aberta SEM tenant: o `org_id` é resolvido pela instância do payload
+    dentro do handler (multi-tenant), e o `set_current_org` é feito lá antes de
+    qualquer query escopada.
     """
     if settings.wa_webhook_secret and not secrets_match(x_webhook_secret, settings.wa_webhook_secret):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Webhook secret inválido")
-    if not settings.bot_organization_id:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail="BOT_ORGANIZATION_ID não configurado")
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            await set_current_org(session, settings.bot_organization_id)
             yield session
 
 
@@ -167,11 +168,22 @@ async def evolution_webhook(
     if phone is None:
         return {"ok": True, "skipped": True, "reason": "not_individual"}
 
-    # Valida instância se configurada
+    # Resolve a org pela instância do payload (multi-tenant). Com mapeamento
+    # ausente, cai no comportamento legado single-tenant via settings.
     instance = payload.get("instance", "")
-    if settings.evolution_instance_name and instance != settings.evolution_instance_name:
-        _logger.warning("wa_webhook instance inesperada: got=%r expected=%r", instance, settings.evolution_instance_name)
-        return {"ok": True, "skipped": True, "reason": "instance_mismatch"}
+    org_id = await org_id_by_wa_instance(db, instance)
+    if org_id is None:
+        if settings.evolution_instance_name and instance != settings.evolution_instance_name:
+            _logger.warning(
+                "wa_webhook instance sem mapeamento e ≠ configurada: got=%r expected=%r",
+                instance, settings.evolution_instance_name,
+            )
+            return {"ok": True, "skipped": True, "reason": "instance_mismatch"}
+        org_id = settings.bot_organization_id
+    if not org_id:
+        _logger.warning("wa_webhook sem org resolvida (instance=%r)", instance)
+        return {"ok": True, "skipped": True, "reason": "no_org"}
+    await set_current_org(db, org_id)
 
     sender_type = MessageSenderType.bot if from_me else MessageSenderType.client
     _logger.info("wa_webhook event=%s phone=%s sender=%s", event, phone, sender_type.value)
@@ -185,7 +197,7 @@ async def evolution_webhook(
     try:
         await conv_svc.record_message(
             db,
-            org_id=settings.bot_organization_id,
+            org_id=org_id,
             phone=phone,
             sender_type=sender_type,
             body=body,

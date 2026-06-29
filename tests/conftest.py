@@ -15,7 +15,7 @@ import pytest_asyncio
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Organização e credenciais semeadas (scripts/seed.py, SEED_PASSWORD).
-SEED_ORG_ID = int(os.environ.get("SEED_ORG_ID", "3"))
+SEED_ORG_ID = int(os.environ.get("SEED_ORG_ID", "1"))
 SEED_OWNER_EMAIL = os.environ.get("SEED_OWNER_EMAIL", "taylor@barbeariapro.com")
 SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "senha123")
 

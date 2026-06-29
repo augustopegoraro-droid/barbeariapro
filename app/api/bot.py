@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.dates import local_tz
 from app.core.phone import normalize_phone
-from app.deps import get_bot_db
+from app.deps import get_bot_db, get_bot_org_id, get_bot_unit_id
 from app.services.scheduling import barber_has_conflict
 from app.services.lead_funnel import advance_lead_on_inbound, upsert_client_and_lead
 from app.services.management import (
@@ -59,6 +59,10 @@ from models.enums import (DeliveryStatus, LeadStage, MessageDirection,
 
 router = APIRouter(prefix="/bot", tags=["bot"])
 BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
+# org/unidade resolvidos pela instância WhatsApp (fallback settings). Use estes
+# em vez de `settings.bot_organization_id` / `bot_unit_id` (multi-tenant).
+BotOrgId = Annotated[int, Depends(get_bot_org_id)]
+BotUnitId = Annotated[int, Depends(get_bot_unit_id)]
 
 _SLOT_STEP = 30  # minutos entre slots
 
@@ -263,7 +267,7 @@ class _MessageLogIn(BaseModel):
 
 
 @router.post("/messages", status_code=200)
-async def log_message(body: _MessageLogIn, db: BotDB, _auth: _BotAuth = None):
+async def log_message(body: _MessageLogIn, db: BotDB, org_id: BotOrgId, _auth: _BotAuth = None):
     """Grava mensagem recebida ou enviada no histórico de conversa.
 
     Chamado pelo n8n após debounce/flush (inbound) e após resposta do AI Agent
@@ -271,7 +275,6 @@ async def log_message(body: _MessageLogIn, db: BotDB, _auth: _BotAuth = None):
     Grava mesmo sem cliente cadastrado (1º contato).
     """
     phone = _normalize_phone(body.phone)
-    org_id = settings.bot_organization_id
     direction = MessageDirection(body.direction)
     now = datetime.now(timezone.utc)
 
@@ -458,12 +461,12 @@ async def list_services(db: BotDB) -> list:
 
 
 @router.get("/barbers", response_model=List[BarberOut])
-async def list_barbers(db: BotDB) -> list:
+async def list_barbers(db: BotDB, unit_id: BotUnitId) -> list:
     rows = (
         await db.execute(
             select(Barber)
             .join(BarberUnit, BarberUnit.barber_id == Barber.id)
-            .where(BarberUnit.unit_id == settings.bot_unit_id)
+            .where(BarberUnit.unit_id == unit_id)
             .where(Barber.deleted_at.is_(None))
         )
     ).scalars().all()
@@ -476,12 +479,12 @@ async def list_barbers(db: BotDB) -> list:
 
 
 @router.post("/clients", response_model=ClientOut, status_code=status.HTTP_200_OK)
-async def upsert_client(body: ClientUpsertIn, db: BotDB) -> ClientOut:
+async def upsert_client(body: ClientUpsertIn, db: BotDB, org_id: BotOrgId) -> ClientOut:
     phone = _normalize_phone(body.phone)
     # Caminho ÚNICO de criação de cliente/lead (compartilhado com /chatwoot/webhook).
     client = await upsert_client_and_lead(
         db,
-        org_id=settings.bot_organization_id,
+        org_id=org_id,
         phone=phone,
         name=body.name,
         channel=ContactChannel.whatsapp,
@@ -496,10 +499,9 @@ class ClientPhotoIn(BaseModel):
 
 
 @router.patch("/clients/photo", status_code=200)
-async def update_client_photo(body: ClientPhotoIn, db: BotDB, _auth: _BotAuth = None):
+async def update_client_photo(body: ClientPhotoIn, db: BotDB, org_id: BotOrgId, _auth: _BotAuth = None):
     """Salva URL e descrição gerada por Vision da última foto de referência."""
     phone = _normalize_phone(body.phone)
-    org_id = settings.bot_organization_id
 
     client = (
         await db.execute(
@@ -519,9 +521,8 @@ async def update_client_photo(body: ClientPhotoIn, db: BotDB, _auth: _BotAuth = 
 
 
 @router.get("/clients/profile", response_model=ClientProfileOut)
-async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
+async def get_client_profile(phone: str, db: BotDB, org_id: BotOrgId) -> ClientProfileOut:
     phone = _normalize_phone(phone)
-    org_id = settings.bot_organization_id
 
     client = (
         await db.execute(
@@ -668,9 +669,8 @@ async def get_client_profile(phone: str, db: BotDB) -> ClientProfileOut:
 
 
 @router.get("/clients/paused-status")
-async def get_paused_status(phone: str, db: BotDB, _auth: _BotAuth = None):
+async def get_paused_status(phone: str, db: BotDB, org_id: BotOrgId, _auth: _BotAuth = None):
     phone = _normalize_phone(phone)
-    org_id = settings.bot_organization_id
     client = (
         await db.execute(
             select(Client)
@@ -692,9 +692,9 @@ async def get_availability(
     service_id: int,
     date: date,
     db: BotDB,
+    org_id: BotOrgId,
+    unit_id: BotUnitId,
 ) -> AvailabilityOut:
-    org_id = settings.bot_organization_id
-    unit_id = settings.bot_unit_id
 
     svc = (await db.execute(select(Service).where(Service.id == service_id))).scalar_one_or_none()
     if not svc:
@@ -815,9 +815,7 @@ async def get_availability(
 
 
 @router.post("/appointments", response_model=AppointmentOut, status_code=status.HTTP_201_CREATED)
-async def create_appointment(body: AppointmentCreateIn, db: BotDB) -> AppointmentOut:
-    org_id = settings.bot_organization_id
-    unit_id = settings.bot_unit_id
+async def create_appointment(body: AppointmentCreateIn, db: BotDB, org_id: BotOrgId, unit_id: BotUnitId) -> AppointmentOut:
 
     client = (await db.execute(select(Client).where(Client.id == body.client_id))).scalar_one_or_none()
     if not client or client.deleted_at is not None:
@@ -966,9 +964,9 @@ async def create_appointment(body: AppointmentCreateIn, db: BotDB) -> Appointmen
 async def list_appointments(
     phone: str,
     db: BotDB,
+    org_id: BotOrgId,
 ) -> list:
     phone = _normalize_phone(phone)
-    org_id = settings.bot_organization_id
 
     client = (
         await db.execute(
@@ -1013,10 +1011,10 @@ async def list_appointments(
 async def cancel_appointment(
     appointment_id: int,
     db: BotDB,
+    org_id: BotOrgId,
     phone: str = Query(..., description="Telefone E.164 do solicitante (+5511999998888)"),
 ) -> AppointmentOut:
     phone = _normalize_phone(phone)
-    org_id = settings.bot_organization_id
 
     owner = (
         await db.execute(
@@ -1061,6 +1059,7 @@ async def cancel_appointment(
 async def complete_appointment(
     appointment_id: int,
     db: BotDB,
+    org_id: BotOrgId,
 ) -> AppointmentOut:
     """Marca agendamento como concluído. Usado pela equipe após o atendimento."""
     appt = (
@@ -1075,7 +1074,7 @@ async def complete_appointment(
     appt.status = AppointmentStatus.concluido
     # autoflush=False: sem flush as agregações do recalculate não veem este atendimento
     await db.flush()
-    await _recalculate_loyalty(appt.client_id, settings.bot_organization_id, db)
+    await _recalculate_loyalty(appt.client_id, org_id, db)
 
     row = (
         await db.execute(
@@ -1094,7 +1093,8 @@ async def complete_appointment(
 # ===========================================================================
 # Tools de Gestão (Agente Gestor — D-52)
 # Consumidas pelo AI Agent (n8n) quando o GESTOR pergunta por linguagem natural.
-# Org fixa (settings.bot_organization_id); gating por telefone do remetente.
+# Org resolvida pela instância WhatsApp (header X-Instance; fallback settings);
+# gating por telefone do remetente dentro dessa org.
 # ===========================================================================
 
 async def _require_manager_phone(db: AsyncSession, requester_phone: str) -> str:
@@ -1232,12 +1232,13 @@ class GestorDisparoOut(BaseModel):
 @router.post("/gestor/inativos/disparar", response_model=GestorDisparoOut)
 async def gestor_inativos_disparar(
     db: BotDB,
+    org_id: BotOrgId,
     requester_phone: str = Query(..., description="Telefone de quem pede (gating)"),
 ) -> GestorDisparoOut:
     """Dispara a campanha de reativação (mesma rotina automática; respeita cooldown
     e opt-out). A trava de envio do WhatsApp protege staging."""
     await _require_manager_phone(db, requester_phone)
-    result = await _reactivation.run(org_id=settings.bot_organization_id, session=db)
+    result = await _reactivation.run(org_id=org_id, session=db)
     return GestorDisparoOut(**result)
 
 
@@ -1261,6 +1262,7 @@ class GestorBuracosOut(BaseModel):
 @router.get("/gestor/buracos", response_model=GestorBuracosOut)
 async def gestor_buracos(
     db: BotDB,
+    unit_id: BotUnitId,
     requester_phone: str = Query(..., description="Telefone de quem pergunta (gating)"),
     date: Optional[date] = Query(None, description="Default: hoje"),
 ) -> GestorBuracosOut:
@@ -1268,7 +1270,7 @@ async def gestor_buracos(
     await _require_manager_phone(db, requester_phone)
     from app.core.dates import today_local
     target = date or today_local()
-    barbers = await agenda_gaps(db, target, settings.bot_unit_id)
+    barbers = await agenda_gaps(db, target, unit_id)
     return GestorBuracosOut(date=target.isoformat(), barbers=barbers)
 
 
@@ -1283,6 +1285,7 @@ class GestorIaFaturamentoOut(BaseModel):
 @router.get("/gestor/ia-faturamento", response_model=GestorIaFaturamentoOut)
 async def gestor_ia_faturamento(
     db: BotDB,
+    unit_id: BotUnitId,
     requester_phone: str = Query(..., description="Telefone de quem pergunta (gating)"),
     period: Optional[str] = Query(None, description="hoje|ontem|semana|mes"),
     date_from: Optional[date] = Query(None),
@@ -1292,7 +1295,7 @@ async def gestor_ia_faturamento(
     do horário comercial."""
     await _require_manager_phone(db, requester_phone)
     df, dt, _ = resolve_period(period, date_from, date_to)
-    data = await ai_generated_revenue(db, df, dt, settings.bot_unit_id)
+    data = await ai_generated_revenue(db, df, dt, unit_id)
     return GestorIaFaturamentoOut(**data)
 
 

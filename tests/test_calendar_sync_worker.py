@@ -75,7 +75,7 @@ def test_build_event_sem_items():
 @pytest.mark.asyncio
 async def test_push_noop_sem_integration_account(client, auth_headers):
     """push_appointment é no-op se a org não tem Calendar conectado."""
-    seed_org = int(os.environ.get("SEED_ORG_ID", "3"))
+    seed_org = int(os.environ.get("SEED_ORG_ID", "1"))
     with patch("app.services.google_calendar.insert_event") as mock_insert:
         await push_appointment(appointment_id=9999, org_id=seed_org, action="upsert")
     mock_insert.assert_not_called()
@@ -88,7 +88,7 @@ async def test_push_upsert_cria_evento_e_grava_sync(client, auth_headers, monkey
     """Com IntegrationAccount ativa, push cria o evento e grava calendar_sync."""
     from app.db.session import AsyncSessionLocal, set_current_org
 
-    seed_org = int(os.environ.get("SEED_ORG_ID", "3"))
+    seed_org = int(os.environ.get("SEED_ORG_ID", "1"))
 
     # Busca um agendamento real do banco de staging
     async with AsyncSessionLocal() as session:
@@ -179,7 +179,7 @@ async def test_push_falha_api_grava_failed(monkeypatch):
     from app.db.session import AsyncSessionLocal, set_current_org
     from app.services.google_calendar import GoogleCalendarError
 
-    seed_org = int(os.environ.get("SEED_ORG_ID", "3"))
+    seed_org = int(os.environ.get("SEED_ORG_ID", "1"))
 
     async with AsyncSessionLocal() as session:
         async with session.begin():

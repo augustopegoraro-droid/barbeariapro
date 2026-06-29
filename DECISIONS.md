@@ -811,6 +811,43 @@ ser flagado de novo — provável origem do problema atual).
 
 ---
 
+### D-54 — Multi-tenant real: org_id deixa de ser hardcoded (subdomínio → org no login; instância WhatsApp → org no bot) — 2026-06-29
+
+**Contexto:** o `org_id` estava fixo em build (`NEXT_PUBLIC_ORG_ID` no frontend) e em config (`settings.bot_organization_id`
+no bot) — dívida que bloqueava a expansão SaaS multi-tenant. RLS + `organization_id` nas tabelas já existiam (fundação OK).
+Auditoria do estado atual: o **JWT já carregava `org`** e **toda request autenticada já lia o org do token** (`get_tenant_db`)
+— itens 1 e 2 do pedido já estavam feitos. As `management.py` **não usam `settings`**: operam sob RLS (org vem da sessão);
+adicionar `org_id` como parâmetro seria redundante e poderia furar o isolamento — mantido sob RLS (item 4 reinterpretado).
+
+**Decisões (gestor):**
+- **Bot → org pela INSTÂNCIA WhatsApp** (não pelo telefone do remetente: `phone_e164` não é único → ambíguo e furaria a RLS).
+- **Login → org pelo SUBDOMÍNIO** (`taylor.app.com` → org); `NEXT_PUBLIC_ORG_ID` vira só fallback de dev (localhost).
+
+**Implementação (branch `feat/multi-tenant-org-id`, só staging):**
+- **Migration `0020`** (head): `organizations.subdomain` + `organizations.wa_instance_name` (TEXT, únicos via índice parcial
+  quando não-nulos) + 2 funções `SECURITY DEFINER` (`app_org_id_by_subdomain` / `app_org_id_by_wa_instance`) que resolvem
+  a org **antes** de saber o tenant (RLS bloquearia um SELECT sem `app.current_org_id`) e devolvem **só o `id`** (sem vazar
+  linha). `GRANT EXECUTE` ao `barber_app`.
+- **`app/services/tenant.py`** — wrappers async dessas funções (sessão pré-tenant).
+- **`GET /auth/tenant?subdomain=`** (público) → `{organization_id, name}`; 404 se desconhecido. O frontend chama antes do login.
+- **Bot multi-tenant via header `X-Instance`** (n8n envia): `get_bot_db` resolve org/unidade pela instância e expõe via
+  `get_bot_org_id`/`get_bot_unit_id`; `bot.py`/`loyalty.py`/`reminders.py` passaram a injetar esses valores em vez de ler
+  `settings`. **Fallback:** instância sem mapeamento (ou sem header) → `settings.bot_organization_id`/`bot_unit_id` →
+  comportamento atual de prod **inalterado** até o backfill.
+- **Frontend** (`lib/tenant.ts` + `lib/auth.ts`): `authorize` resolve o `organization_id` do subdomínio do host via
+  `/auth/tenant`; sem tenant resolvido o login falha (não cai em org default). `NEXT_PUBLIC_ORG_ID` só fallback de dev.
+- **`SEED_ORG_ID`** (item 6): default dos testes 3 → **1** (casa com o seed real do staging, org 1); env só de teste.
+
+**Testes:** `tests/test_tenant_resolution.py` (6 testes: `/auth/tenant` ok/case-insensitive/404, funções SECURITY DEFINER,
+bot via `X-Instance` + fallback). Baseline preservado: **326 pass / 2 skip / 3 fail** (as 3 ambientais de sempre).
+
+**Pendente (deploy prod — gestor coordena):** aplicar `0020` (com `ADMIN_DATABASE_URL`); popular `subdomain` (`taylor`) +
+`wa_instance_name` (instância Evolution real) da org 1; configurar subdomínio (DNS + nginx); fazer o n8n enviar `X-Instance`
+nas chamadas `/bot/*`. **Fora de escopo (single-tenant via settings ainda):** `chatwoot.py` (D-49, inerte) e o cron de
+reminders/reactivation por org única — viram multi-tenant quando o n8n iterar orgs (dívida "cron em série").
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

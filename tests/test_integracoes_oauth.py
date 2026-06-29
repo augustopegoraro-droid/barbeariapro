@@ -27,7 +27,7 @@ from app.core.crypto import decrypt_token
 @pytest_asyncio.fixture
 async def barber_headers(client):
     """Header de autenticação para um usuário com role barber (marciana)."""
-    seed_org = int(os.environ.get("SEED_ORG_ID", "3"))
+    seed_org = int(os.environ.get("SEED_ORG_ID", "1"))
     resp = await client.post(
         "/auth/login",
         json={"email": "marciana@barbeariapro.com", "password": "senha123", "organization_id": seed_org},
@@ -154,7 +154,7 @@ async def test_callback_persiste_integration_account(client, monkeypatch):
     from app.db.session import AsyncSessionLocal, set_current_org
     from app.core import crypto
 
-    seed_org = int(os.environ.get("SEED_ORG_ID", "3"))
+    seed_org = int(os.environ.get("SEED_ORG_ID", "1"))
 
     monkeypatch.setattr(settings, "google_client_id", "cid.apps.googleusercontent.com")
     monkeypatch.setattr(settings, "google_client_secret", "secret")
