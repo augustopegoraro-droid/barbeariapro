@@ -82,7 +82,7 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
   `SELECT set_config('app.current_org_id', :org, true)` (parametrizado, **local à transação** — não
   vaza no pool). **RLS é a única barreira multi-tenant.**
 - RBAC por unidade: `owner > manager > reception > barber` (`app/core/rbac.py`).
-- **Multi-tenant real (D-54, 2026-06-29, só staging — head `0020`):** o `org_id` não é mais hardcoded.
+- **Multi-tenant real (D-54, DEPLOYADO em prod 2026-06-30 — head `0021`; org 1 = `taylor`/`Barbearia`):** o `org_id` não é mais hardcoded.
   - **Login → subdomínio:** o frontend resolve o subdomínio do host (`taylor.app.com` → org) via
     `GET /auth/tenant?subdomain=` (público) e passa o `organization_id` ao `/auth/login`. `NEXT_PUBLIC_ORG_ID`
     vira só fallback de dev (localhost). Helpers em `barbearia-frontend/lib/tenant.ts`.
@@ -103,7 +103,7 @@ Separado do painel de tenant. `platform_admins` é tabela própria, sem
 `app.current_org_id`. Rota: `/superadmin` ou `admin.taylorethedy.com` — nunca
 dentro do frontend de tenant.
 
-**Detalhes de implementação (D-55, branch `feat/platform-superadmin`, só staging):**
+**Detalhes de implementação (D-55, DEPLOYADO em prod 2026-06-30 — API-only; superadmin `augustopegoraro.apl@gmail.com`):**
 - **JWT próprio:** `create_platform_token` (`app/core/security.py`) emite `typ="platform"`
   **sem `org`**. Isolamento bilateral: token de tenant (com `org`, sem `typ`) é
   rejeitado pelo guard de plataforma; token de plataforma (sem `org`) é rejeitado
@@ -240,8 +240,8 @@ Detalhe completo (com `arquivo:linha`) na auditoria:
 
 **🔴 Crítico:** `credentials.json` no histórico git (rotacionar credencial OpenAI/n8n + limpar histórico) ·
 portas Postgres/n8n/Evolution abertas ao mundo + sem HTTPS · SSE single-process (não escala) ·
-~~multi-tenant só de fachada no frontend (`NEXT_PUBLIC_ORG_ID` fixo em build)~~ (🚧 D-54: resolução por
-subdomínio (login) e instância WhatsApp (bot) implementada em staging; falta deploy/backfill em prod) · VM única sem HA.
+~~multi-tenant só de fachada no frontend (`NEXT_PUBLIC_ORG_ID` fixo em build)~~ (✅ D-54 DEPLOYADO em prod 2026-06-30:
+resolução por subdomínio (login) e instância WhatsApp (bot); falta só DNS de subdomínios + n8n `X-Instance`) · VM única sem HA.
 
 **🟠 Alto:** webhook secret opcional (tornar obrigatório após provisionar nos dois lados) · `except
 Exception` mudos · SQL via f-string em advisory lock · pool DB no default / sem PgBouncer / sem

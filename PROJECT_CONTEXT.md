@@ -5,6 +5,44 @@
 
 ---
 
+## 0.0000 SESSÃO 2026-06-30 — Deploy D-54 (multi-tenant) + D-55 (superadmin) em produção
+
+> ✅ **DEPLOYADO e verificado em produção 2026-06-30.** Migration head agora **`0021`**. Backend, bot e painel da Raquel intactos.
+
+**O que entrou (PRs #12/#13/#2 mergeados em `main`):**
+- **Migrations `0020`+`0021`** aplicadas (head era `0019` → agora **`0021`**). `0020` = resolução de tenant (`organizations.subdomain` + `wa_instance_name` + funções `SECURITY DEFINER` `app_org_id_by_*`); `0021` = painel de plataforma (`platform_admins` + funções `app_platform_*`).
+- **Backfill org 1:** `subdomain='taylor'`, `wa_instance_name='Barbearia'` (instância Evolution real). `app_org_id_by_subdomain('taylor')` e `app_org_id_by_wa_instance('Barbearia')` → `1`.
+- **Superadmin criado:** `augustopegoraro.apl@gmail.com` (senha é **segredo**, não documentar). Login `POST /platform/auth/login` → token; `/platform/orgs` e `/platform/dashboard` OK; token de tenant em `/platform/*` → 401.
+- **Submódulo frontend reparado** (estava sem `.git`) + **frontend rebuildado** com o fix `x-forwarded-host`.
+
+**⚙️ COMO rodar migrations/scripts admin em prod (IMPORTANTE — difere do antigo `Dockerfile.migrate`):**
+A imagem do backend **NÃO** copia `alembic/` nem `scripts/` (só `app/`+`models/`). Então monta-se o repo do host no container (que tem as libs), como root, com a `DATABASE_URL` do **superuser `postgres`** inline:
+```bash
+cd /opt/barbeariapro
+PGPW=$(docker exec barbeariapro-postgres printenv POSTGRES_PASSWORD)
+ENC=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=chr(0)))" "$PGPW")
+URL="postgresql+psycopg://postgres:${ENC}@host.docker.internal:5432/barbeariapro"
+sudo docker compose -f docker-compose.app.yml run --rm --user root -v /opt/barbeariapro:/repo:ro -w /repo \
+  -e DATABASE_URL="$URL" backend python -m alembic upgrade head
+# superadmin: idem, com -e ADMIN_DATABASE_URL="$URL" -e PLATFORM_ADMIN_EMAIL=.. -e PLATFORM_ADMIN_PASSWORD=.. ... python scripts/seed_platform_admin.py
+```
+`pg_dump` pré-deploy: `backups/predeploy_d54_d55_20260630_002430.sql`.
+
+**🔑 Git/credenciais na VM (descoberto nesta sessão):**
+- O repo **`barbeariapro` é PÚBLICO** (por isso `git pull` do super-projeto funciona sem credencial); **`barbearia-frontend` é PRIVADO**.
+- A VM **não tinha** credencial GitHub → criada **deploy key SSH** read-only: `/root/.ssh/bfrontend_deploy` + alias em `/root/.ssh/config` (`Host github-bfrontend`); a URL do submódulo foi sobrescrita p/ SSH no `.git/config` (`git@github-bfrontend:augustopegoraro-droid/barbearia-frontend.git`). **`git submodule update` e deploys futuros do frontend funcionam.** (Pull do super-projeto: `git -c submodule.recurse=false merge --ff-only origin/main` evita travar no submódulo.)
+- `.env` da VM (build-args do frontend): `NEXT_PUBLIC_ORG_ID=1`, `NEXT_PUBLIC_API_URL=http://34.95.199.134:8000`. `NEXT_PUBLIC_*` são **inlinadas no build** (runtime `printenv` vem vazio — normal).
+
+**Verificado:** `/auth/tenant?subdomain=taylor` → org 1; `/bot/services`/`/bot/barbers` → 200 (bot usa fallback `settings.bot_organization_id=1`/`bot_unit_id=1`, **sem 503** apesar do novo fail-fast de unidade); frontend `/login` → 200 com `34.95.199.134:8000` inlinado (sem `localhost:8000`).
+
+**Pendente (não bloqueia nada do que está no ar):**
+- **DNS de subdomínios** — *no registrador* (domínio ainda não registrado; dívida conhecida). Sem isso o login segue por IP + `NEXT_PUBLIC_ORG_ID=1`.
+- **n8n enviar header `X-Instance`** — só necessário quando entrar a **2ª barbearia** (hoje a instância `Barbearia` mapeia org 1 = idêntico ao fallback).
+- **Frontend `/superadmin`** (app separado) — painel de plataforma é **API-only** por ora.
+- Limpeza opcional na VM: `barbearia-frontend.bak.20260626-164038/`, `barbearia-frontend.predeploy-bak.*`, `barbearia-frontend.stale.*`.
+
+---
+
 ## 0.000 SESSÃO 2026-06-29 — Deploy do Agente Gestor (D-52) em produção
 
 > ✅ **DEPLOYADO em produção 2026-06-29** (containers `app-backend`/`app-frontend` healthy).

@@ -823,7 +823,9 @@ adicionar `org_id` como parâmetro seria redundante e poderia furar o isolamento
 - **Bot → org pela INSTÂNCIA WhatsApp** (não pelo telefone do remetente: `phone_e164` não é único → ambíguo e furaria a RLS).
 - **Login → org pelo SUBDOMÍNIO** (`taylor.app.com` → org); `NEXT_PUBLIC_ORG_ID` vira só fallback de dev (localhost).
 
-**Implementação (branch `feat/multi-tenant-org-id`, só staging):**
+> ✅ **DEPLOYADO em produção 2026-06-30** (PRs #12/#2 mergeados em `main`; head prod `0021`; org 1 backfillada `taylor`/`Barbearia`). Procedimento operacional em `PROJECT_CONTEXT.md §0.0000`.
+
+**Implementação:**
 - **Migration `0020`** (head): `organizations.subdomain` + `organizations.wa_instance_name` (TEXT, únicos via índice parcial
   quando não-nulos) + 2 funções `SECURITY DEFINER` (`app_org_id_by_subdomain` / `app_org_id_by_wa_instance`) que resolvem
   a org **antes** de saber o tenant (RLS bloquearia um SELECT sem `app.current_org_id`) e devolvem **só o `id`** (sem vazar
@@ -841,10 +843,10 @@ adicionar `org_id` como parâmetro seria redundante e poderia furar o isolamento
 **Testes:** `tests/test_tenant_resolution.py` (6 testes: `/auth/tenant` ok/case-insensitive/404, funções SECURITY DEFINER,
 bot via `X-Instance` + fallback). Baseline preservado: **326 pass / 2 skip / 3 fail** (as 3 ambientais de sempre).
 
-**Pendente (deploy prod — gestor coordena):** aplicar `0020` (com `ADMIN_DATABASE_URL`); popular `subdomain` (`taylor`) +
-`wa_instance_name` (instância Evolution real) da org 1; configurar subdomínio (DNS + nginx); fazer o n8n enviar `X-Instance`
-nas chamadas `/bot/*`. **Fora de escopo (single-tenant via settings ainda):** `chatwoot.py` (D-49, inerte) e o cron de
-reminders/reactivation por org única — viram multi-tenant quando o n8n iterar orgs (dívida "cron em série").
+**Pós-deploy — pendente (não bloqueia o que está no ar):** configurar **DNS de subdomínios** (registrador; domínio ainda
+não registrado); fazer o **n8n enviar `X-Instance`** nas chamadas `/bot/*` (só necessário ao entrar a 2ª org — hoje a
+instância `Barbearia` mapeia org 1 = idêntico ao fallback `settings`). **Fora de escopo (single-tenant via settings ainda):**
+`chatwoot.py` (D-49, inerte) e o cron de reminders/reactivation por org única — viram multi-tenant quando o n8n iterar orgs.
 
 ---
 
@@ -863,7 +865,10 @@ sob RLS. Único bypass disponível: funções **`SECURITY DEFINER`** (molde D-54
 **sessões helper isoladas** — endpoint nunca seta `app.current_org_id`); (3) **backend
 completo agora; frontend `/superadmin` separado depois**.
 
-**Implementado (só staging, head `0021`):**
+> ✅ **DEPLOYADO em produção 2026-06-30** (PR #13 mergeado em `main`; head `0021`). Superadmin criado:
+> `augustopegoraro.apl@gmail.com` (senha é segredo). Acesso **API-only** (`POST /platform/auth/login`); frontend `/superadmin` pendente.
+
+**Implementado (head `0021`):**
 - Migration `0021`: tabela `platform_admins` (global, sem `organization_id`, **sem RLS**,
   **sem GRANT a `barber_app`**) + funções `SECURITY DEFINER` (`app_platform_admin_login`,
   `_admin_exists`, `_list_orgs`, `_active_org_ids`, `_usage`, `_create_org`) com
