@@ -61,14 +61,42 @@ O importador consulta os telefones já existentes no org e **pula** os repetidos
 então rodar de novo é idempotente e **não** exige limpar a base antes. Um cliente
 com telefone já presente não é duplicado.
 
-## Limpeza (reset) da org 1 — OPCIONAL e destrutivo
+## Limpeza (reset) da org — `scripts/reset_org.py`
 
-Se a decisão for **substituir** a base atual (em vez de mesclar via dedup), o reset
-é uma etapa **separada, gated e com backup obrigatório** (passo 1 acima). O escopo
-precisa ser decidido explicitamente (o que apagar vs. preservar: config estrutural
-— org/unidade/usuários/serviços/profissionais/horários — normalmente é preservada;
-dados operacionais — clientes/agendamentos/pagamentos/assinaturas/fidelidade/
-conversas — é o que se limpa). **Não** há script de reset no repo até essa decisão.
+Para **substituir** a base fictícia pela real, o `reset_org.py` apaga os dados
+**operacionais/de cliente** e **preserva a configuração estrutural**.
+
+| Apaga (operacional/fictício) | Preserva (config/estrutura) |
+|---|---|
+| clients, client_consents | organizations, units, business_hours |
+| appointments, appointment_items | users, user_units |
+| payments, expenses | barbers, barber_units, barber_services, time_off |
+| leads, lead_events | services |
+| conversations, messages, attachments, message_log | plans, subscriptions *(assinatura do org c/ a plataforma)* |
+| calendar_sync | **integration_accounts** *(WhatsApp/Google — conexão viva)* |
+| client_memberships, membership_usages | membership_plans, membership_plan_items *(catálogo)* |
+| client_loyalty, loyalty_point_ledger, loyalty_vouchers | loyalty_tiers, loyalty_rules *(config)* |
+| | expense_categories *(config)* |
+
+Segurança do script: roda como `barber_app` com `set_current_org` (**RLS auto-escopa
+no org**) + `WHERE organization_id` explícito; **dry-run por padrão**; com `--commit`
+exige `--confirm-name "<nome exato do org>"`; tudo em transação (erro → rollback).
+
+```bash
+# 1) BACKUP primeiro (obrigatório — ver acima)
+# 2) dry-run: conta o que seria apagado, por tabela
+python scripts/reset_org.py --org-id 1
+# 3) aplicar (exige o nome exato do org)
+python scripts/reset_org.py --org-id 1 --commit --confirm-name "Barbearia Taylor e Thedy"
+```
+
+Validado no staging (org 1): os 18 DELETEs executam em ordem FK-safe com privilégio
+de `barber_app` (testado com rollback, sem tocar os dados). **Se quiser apagar
+também os catálogos preservados** (planos de mensalidade / tiers de fidelidade /
+categorias), me avise para incluí-los na lista.
+
+> Alternativa ao reset: o importador **deduplica** por telefone, então dá para
+> **mesclar** a base real sem limpar — útil se a base atual não for 100% fictícia.
 
 ## Teste
 `tests/test_trinks_import.py` valida o parser (mapeamento, telefone, dedup, data,
