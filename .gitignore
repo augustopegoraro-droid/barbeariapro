@@ -20,6 +20,7 @@ Thumbs.db
 !.env.example
 !.env.production.example
 !.env.docker.example
+!.env.superadmin.example
 
 # ── Credenciais e secrets ─────────────────────────────────────────────────────
 credentials.json

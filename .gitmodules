@@ -1,3 +1,6 @@
 [submodule "barbearia-frontend"]
 	path = barbearia-frontend
 	url = https://github.com/augustopegoraro-droid/barbearia-frontend.git
+[submodule "barbearia-superadmin"]
+	path = barbearia-superadmin
+	url = https://github.com/augustopegoraro-droid/barbearia-superadmin.git

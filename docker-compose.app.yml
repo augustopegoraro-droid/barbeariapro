@@ -71,3 +71,42 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  # ──────────────────────────────────────────────────────────────
+  # Superadmin — Painel de Plataforma (Next 16) :3100
+  #
+  # Repo SEPARADO: augustopegoraro-droid/barbearia-superadmin. Precisa estar
+  # presente em ./barbearia-superadmin (submódulo ou `git clone` na VM).
+  #
+  # Sob profile "superadmin" → NÃO sobe no `up` padrão. Só quando ativado:
+  #   docker compose -f docker-compose.app.yml --profile superadmin up -d --build superadmin
+  #
+  # Requer .env.superadmin (ver .env.superadmin.example). Deploy só depois do
+  # domínio: DNS admin.taylorethedy.com + server block no nginx + HTTPS.
+  # ──────────────────────────────────────────────────────────────
+  superadmin:
+    profiles: ["superadmin"]
+    build:
+      context: ./barbearia-superadmin
+      dockerfile: Dockerfile
+      args:
+        # Inlinada no bundle do browser em build. Em prod: URL pública do backend.
+        NEXT_PUBLIC_API_URL: ${SUPERADMIN_API_URL:-http://localhost:8000}
+    image: barbeariapro-superadmin
+    container_name: barbeariapro-app-superadmin
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    env_file:
+      - .env.superadmin   # API_URL_INTERNAL (SSR/next-auth), AUTH_SECRET, AUTH_TRUST_HOST
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3100/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
