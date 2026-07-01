@@ -237,9 +237,12 @@ migration `0022` (`clients` ganha `email`/`birth_date`/`notes`, aditivo) + `app/
 (parser latin-1/`;`/preâmbulo, dedup por telefone, `normalize_phone`) + `scripts/import_trinks.py`
 (CLI `--org-id --file [--commit]`, dry-run padrão, **roda na VM** — 5432 fechada). Validado no arquivo
 real: **2.911 importáveis** / 371 dups / 0 inválidos. Exports crus são **PII (LGPD) — no `.gitignore`,
-nunca versionar**. Runbook em `docs/TRINKS_IMPORT.md`. **Pendente:** aplicar `0022` na VM + backup +
-dry-run + import na org 1. **Reset destrutivo da org 1 não existe** (decisão de escopo pendente; dedup
-pode dispensar o wipe).
+nunca versionar**. Runbook em `docs/TRINKS_IMPORT.md`. Reset opcional: `scripts/reset_org.py` (apaga
+dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dry-run + `--confirm-name`).
+> ✅ **DEPLOYADO em prod 2026-07-01:** `0022` aplicada; org 1 (`Salão de beleza Taylor e Thedy`) resetada
+> (260 linhas fictícias) e **2.911 clientes reais importados** da Trinks (backup `~/pre_trinks_backup.sql`
+> na VM). Org 1 agora: 2.911 clientes, resto operacional zerado. Próximos imports (agendamentos/estoque/
+> financeiro) virão depois.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
