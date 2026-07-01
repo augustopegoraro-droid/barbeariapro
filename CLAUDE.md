@@ -232,6 +232,15 @@ página `/admin/gestor` (React Query). Migration `0019` (`users.phone_e164` +
 `organizations.monthly_revenue_goal`); crons em `docs/GESTOR_CRON_N8N.md`. **Pendente:** deploy prod
 (aplicar `0019`, popular telefone do gestor, cadastrar meta, criar crons no n8n, mergear frontend).
 
+**Import de clientes da Trinks (D-56/onboarding, 2026-07-01 — tooling pronto, só backend):**
+migration `0022` (`clients` ganha `email`/`birth_date`/`notes`, aditivo) + `app/services/trinks_import.py`
+(parser latin-1/`;`/preâmbulo, dedup por telefone, `normalize_phone`) + `scripts/import_trinks.py`
+(CLI `--org-id --file [--commit]`, dry-run padrão, **roda na VM** — 5432 fechada). Validado no arquivo
+real: **2.911 importáveis** / 371 dups / 0 inválidos. Exports crus são **PII (LGPD) — no `.gitignore`,
+nunca versionar**. Runbook em `docs/TRINKS_IMPORT.md`. **Pendente:** aplicar `0022` na VM + backup +
+dry-run + import na org 1. **Reset destrutivo da org 1 não existe** (decisão de escopo pendente; dedup
+pode dispensar o wipe).
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
