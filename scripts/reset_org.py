@@ -51,11 +51,16 @@ _DELETE_ORDER: list[tuple[str, str]] = [
     ("leads", _ORG),
     ("membership_usages", _ORG),
     ("client_memberships", _ORG),
+    ("membership_plan_items", _ORG),   # catálogo de mensalidade (itens antes do plano)
+    ("membership_plans", _ORG),        # catálogo de mensalidade
     ("loyalty_point_ledger", _ORG),
     ("loyalty_vouchers", _ORG),
     ("client_loyalty", _ORG),
+    ("loyalty_rules", _ORG),           # config de fidelidade (após dados do cliente)
+    ("loyalty_tiers", _ORG),           # config de fidelidade
     ("payments", _ORG),
     ("expenses", _ORG),
+    ("expense_categories", _ORG),      # categorias financeiras (após despesas)
     ("appointment_items", _VIA_APPT),
     ("appointments", _ORG),
     ("client_consents", _VIA_CLIENT),
@@ -64,8 +69,9 @@ _DELETE_ORDER: list[tuple[str, str]] = [
 
 # Explicitamente PRESERVADAS (não tocar): organizations, units, business_hours,
 # users, user_units, barbers, barber_units, barber_services, time_off, services,
-# plans, subscriptions, integration_accounts, membership_plans,
-# membership_plan_items, loyalty_tiers, loyalty_rules, expense_categories.
+# plans, subscriptions, integration_accounts.
+# (Catálogos — membership_plans/items, loyalty_tiers/rules, expense_categories —
+#  são apagados a pedido: dados fictícios que o gestor vai recriar.)
 
 
 async def _counts(session, org_id: int) -> dict[str, int]:
