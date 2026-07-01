@@ -120,10 +120,19 @@ dentro do frontend de tenant.
   e semeia filhos (unidade/owner/serviços do `SERVICES_CATALOG`) numa sessão helper
   escopada — substitui o `scripts/seed.py` manual. 1º superadmin via
   `scripts/seed_platform_admin.py` (role dona).
-- **Pendente:** frontend `/superadmin` (app separado); saúde de bot ao vivo
-  (conectado/restrito) exige Evolution API (hoje só o proxy `wa_instance_name`);
-  deploy prod (aplicar `0021` com `ADMIN_DATABASE_URL`, hoje ausente na VM; bootstrap
-  do superadmin).
+- **Frontend do Superadmin (D-56, 2026-07-01):** app Next 16 em **repo separado**
+  `augustopegoraro-droid/barbearia-superadmin` (2º submódulo do backend, em
+  `./barbearia-superadmin`), consumindo `/platform/*` de prod. Telas: login, dashboard
+  (2 MRR + uso por tenant), tenants (listar/suspender/reativar/editar), onboarding.
+  next-auth Credentials → token `typ=platform`; **sem** org/subdomínio; porta dev 3100.
+  **Deploy preparado, não ativado:** serviço `superadmin` no `docker-compose.app.yml` sob
+  **profile `superadmin`** (não sobe no `up` padrão) + `Dockerfile` + server block
+  `admin.taylorethedy.com`→:3100 em `deploy/nginx.conf` + `.env.superadmin.example`.
+  Ativação pós-domínio (mesma VM, **não** precisa VM nova): DNS + `up --profile superadmin`
+  + certbot.
+- **Pendente:** compra do domínio (`admin.taylorethedy.com`) + ativação do deploy acima;
+  saúde de bot ao vivo (conectado/restrito) exige Evolution API (hoje só o proxy
+  `wa_instance_name`).
 
 ### Financeiro (`app/api/financeiro.py`)
 - Receita = soma de `AppointmentItem.price_charged` de agendamentos `concluido`.

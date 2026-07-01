@@ -914,6 +914,48 @@ quando a base crescer).
 
 ---
 
+### D-56 — Frontend do Superadmin: repo/app separado + deploy preparado (sem ativar) — 2026-07-01
+
+**Contexto:** a D-55 deixou o backend do painel de plataforma completo em prod (API-only) e
+o frontend `/superadmin` como pendência explícita ("app Next.js separado — nunca no frontend
+de tenant"). Pergunta do dono: para o domínio separado do superadmin, precisa de VM nova?
+
+**Decisões:** (1) **não precisa VM nova** — domínio ≠ servidor; o backend já é compartilhado,
+a separação superadmin↔tenant é lógica (token `typ=platform`, `platform_admins`, SECURITY
+DEFINER). Subdomínio via DNS + nginx na **mesma VM**. (2) Frontend em **repo git novo**
+(escolha do dono), não submódulo do frontend nem pasta no monólito. (3) Compra de domínio =
+**um** domínio raiz (`taylorethedy.com`); todos os subdomínios (`admin`, `taylor`, `app`, `api`)
+são grátis. Cloudflare Registrar (preço de custo). O domínio destrava também HTTPS (Let's
+Encrypt) e o DNS de subdomínios da D-54.
+
+**Implementado (buildável/rodável hoje, contra a API de prod):**
+- Repo **`augustopegoraro-droid/barbearia-superadmin`** (privado) — Next 16 · TS strict ·
+  Tailwind v4 · next-auth v5 · React Query · axios · lucide. Tema dark + brand amber. Porta dev
+  **3100**. Guard via `proxy.ts` (convenção Next 16). **Sem** lógica de org/subdomínio.
+- Auth: Credentials → `POST /platform/auth/login`; token `typ=platform` na sessão.
+- Telas: `/login`, `/dashboard` (`GET /platform/dashboard` — contagens, `saas_mrr`,
+  `tenants_membership_mrr`, uso por tenant), `/tenants` (listar + suspender/reativar + editar
+  `PATCH`), `/tenants/new` (onboarding `POST /platform/orgs`).
+- Adicionado como **submódulo** do backend em `./barbearia-superadmin` (2º submódulo, ao lado
+  de `barbearia-frontend`).
+
+**Deploy preparado (SEM ativar — nada muda em prod):**
+- `docker-compose.app.yml`: serviço `superadmin` (:3100) sob **profile `superadmin`** → o `up`
+  padrão é idêntico; só sobe com `--profile superadmin`. `Dockerfile` multi-stage (espelha o do
+  frontend) validado (imagem builda + serve).
+- `deploy/nginx.conf`: server block `admin.taylorethedy.com` → `:3100`.
+- `.env.superadmin.example` (`AUTH_SECRET`, `API_URL_INTERNAL`, `AUTH_TRUST_HOST`) + exceção no
+  `.gitignore`.
+
+**Ativação futura (pós-compra do domínio, mesma VM):** DNS `admin.taylorethedy.com` → IP →
+`docker compose -f docker-compose.app.yml --profile superadmin up -d --build superadmin` →
+`certbot --nginx -d admin.taylorethedy.com --redirect`.
+
+**Verificações:** `npm run build` ✅ · `docker build` ✅ · container serve (`/login` 200, `/`→
+307 login) ✅ · YAML do compose ✅ · submódulo no SHA certo ✅.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
