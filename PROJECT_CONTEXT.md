@@ -5,6 +5,36 @@
 
 ---
 
+## 0.00000 SESSÃO 2026-07-02 (2ª) — Deploy Kernel IA (D-57) + agente financeiro (D-58) em produção
+
+> ✅ **DEPLOYADO em produção 2026-07-02** (containers `app-backend`/`app-frontend` healthy).
+> ⚠️ **Bloqueado por chave OpenAI:** `OPENAI_API_KEY` da VM inválida/expirada (401) — Kernel IA
+> degrada com graça, mas ninguém consegue usar o chat até rotacionar a chave.
+
+- **Backend** `652fc2a` (merge do PR #15): `git pull origin main` na VM com **stash/pop do
+  `docker-compose.yml`** (preserva o pin sha256 da Evolution, mesmo padrão de sempre); rebuild
+  `docker compose -f docker-compose.app.yml up -d --build backend`. **Sem migration nova** — head
+  já era `0025` (aplicada numa sessão anterior, só o código do D-58 estava faltando).
+- **Frontend** `5f35099` (merge do PR #4 em `barbearia-frontend`): a VM já tinha a **deploy key SSH**
+  configurada (D-54) — dessa vez bastou `git pull origin main` dentro do submódulo (sem precisar do
+  fluxo antigo `git archive`+scp+tar) + rebuild `--build frontend`.
+- **Descoberta na auditoria pré-deploy:** o backend já tinha `/kernel-ia/query` no ar (build de
+  22:16 do mesmo dia, de uma sessão anterior), mas o **frontend nunca tinha sido deployado com o
+  FAB do Kernel IA** (`kernel-ia-launcher.tsx` ausente do bundle `.next` antes deste deploy) — ou
+  seja, esta sessão foi a **1ª exposição real do Kernel IA a usuários de produção**, não só um
+  incremento do D-58. `CLAUDE.md`/`DECISIONS.md` tinham uma nota desatualizada dizendo D-57
+  "prod pendente" quando na verdade só o front é que faltava — corrigido nesta sessão.
+- **Verificado:** ambos containers `healthy`; `/kernel-ia/query` no `openapi.json`; bundle do
+  frontend contém `kernel-ia-launcher` (`grep -rl "Kernel IA" .next` no container); `docker exec`
+  chamando `kernel_ia.answer()` direto contra a org 1 real confirma o fail-closed gracioso
+  (`action=config`) quando a chave OpenAI é inválida — **não** um 500.
+- **Pendente:** rotacionar `OPENAI_API_KEY` em `/opt/barbeariapro/.env` (segredo — coordenar com o
+  usuário, não é algo pra uma sessão automatizada decidir sozinha); depois disso, repetir a
+  validação manual "LLM real" do D-58 (perguntas tipo *"a receita recorrente cobre a folha?"*)
+  como smoke test final.
+
+---
+
 ## 0.0000 SESSÃO 2026-06-30 — Deploy D-54 (multi-tenant) + D-55 (superadmin) em produção
 
 > ✅ **DEPLOYADO e verificado em produção 2026-06-30.** Migration head agora **`0021`**. Backend, bot e painel da Raquel intactos.
