@@ -1031,9 +1031,21 @@ depois pelo usuário sem tocar em código.
 n8n e o par hardcoded do teste e2e barbeiro↔serviço — nenhuma nova). 21 testes puros novos de
 formatação/guardrail (`tests/test_kernel_ia_finance.py`) + testes de RBAC/dispatch fail-closed em
 `tests/test_kernel_ia.py` (owner/manager ganham a tool; reception e barber não; dispatch nunca toca
-o banco se o papel não autoriza). Validação manual com LLM real (prompts reais tipo "a receita
-recorrente cobre a folha?") pendente antes do deploy em prod — mesmo passo que o D-57 já fez.
-**Status: implementado em local/staging (backend + PR do frontend), prod pendente.**
+o banco se o papel não autoriza).
+
+> ✅ **DEPLOYADO em prod 2026-07-02** (backend `652fc2a` + frontend `5f35099`; sem migration nova —
+> `0025` já era head). `docker compose up -d --build backend frontend` na VM; ambos containers
+> `healthy`; `/kernel-ia/query` no openapi; bundle do frontend confirmado com o FAB (`grep -rl
+> "Kernel IA" .next` no container). **Esta foi, na prática, a 1ª vez que o Kernel IA inteiro
+> (D-57 navegação + D-58 finanças) chegou ao frontend de produção** — só as migrations do D-57
+> tinham ido antes.
+>
+> ⚠️ **Bloqueado por chave OpenAI inválida em prod:** `OPENAI_API_KEY` da VM devolve 401
+> (`invalid_api_key`) — confirmado invocando `kernel_ia.answer()` diretamente no container contra
+> o org 1 real. Degrada com graça (`action=config`), sem erro 500, mas o chat não funciona para
+> ninguém até a chave ser rotacionada em `/opt/barbeariapro/.env`. **A validação manual "LLM real"
+> deste D-58 segue pendente** por causa disso — repetir os prompts de teste assim que a chave for
+> corrigida.
 
 ---
 
