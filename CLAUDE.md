@@ -241,8 +241,9 @@ nunca versionar**. Runbook em `docs/TRINKS_IMPORT.md`. Reset opcional: `scripts/
 dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dry-run + `--confirm-name`).
 > ✅ **DEPLOYADO em prod 2026-07-01:** `0022` aplicada; org 1 (`Salão de beleza Taylor e Thedy`) resetada
 > (260 linhas fictícias) e **2.911 clientes reais importados** da Trinks (backup `~/pre_trinks_backup.sql`
-> na VM). Org 1 agora: 2.911 clientes, resto operacional zerado. Próximos imports (agendamentos/estoque/
-> financeiro) virão depois.
+> na VM). **Também importados 47 agendamentos de julho** (`import_trinks_appointments.py` +
+> `trinks_appointments.py`, de-para de serviços + fuso; 45 clientes casados + 2 criados → 2.913 clientes).
+> Próximos imports (estoque/pacotes/financeiro/marketing) virão depois, mesmo molde.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
