@@ -232,6 +232,27 @@ página `/admin/gestor` (React Query). Migration `0019` (`users.phone_e164` +
 `organizations.monthly_revenue_goal`); crons em `docs/GESTOR_CRON_N8N.md`. **Pendente:** deploy prod
 (aplicar `0019`, popular telefone do gestor, cadastrar meta, criar crons no n8n, mergear frontend).
 
+**Import de clientes da Trinks (D-56/onboarding, 2026-07-01 — tooling pronto, só backend):**
+migration `0022` (`clients` ganha `email`/`birth_date`/`notes`, aditivo) + `app/services/trinks_import.py`
+(parser latin-1/`;`/preâmbulo, dedup por telefone, `normalize_phone`) + `scripts/import_trinks.py`
+(CLI `--org-id --file [--commit]`, dry-run padrão, **roda na VM** — 5432 fechada). Validado no arquivo
+real: **2.911 importáveis** / 371 dups / 0 inválidos. Exports crus são **PII (LGPD) — no `.gitignore`,
+nunca versionar**. Runbook em `docs/TRINKS_IMPORT.md`. Reset opcional: `scripts/reset_org.py` (apaga
+dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dry-run + `--confirm-name`).
+> ✅ **DEPLOYADO em prod 2026-07-01:** `0022` aplicada; org 1 (`Salão de beleza Taylor e Thedy`) resetada
+> (260 linhas fictícias) e **2.911 clientes reais importados** da Trinks (backup `~/pre_trinks_backup.sql`
+> na VM). **Também importados 47 agendamentos de julho** (`import_trinks_appointments.py` +
+> `trinks_appointments.py`, de-para de serviços + fuso; 45 clientes casados + 2 criados → 2.913 clientes).
+> Próximos imports (estoque/pacotes/financeiro/marketing) virão depois, mesmo molde.
+>
+> **Rotas de self-service (D-56, `app/api/imports.py`):** `POST /admin/import/trinks/{clients,
+> appointments,ranking,debts}` (gestor; corpo = CSV bruto, sem multipart; `commit=false` dry-run →
+> `commit=true` grava; RLS pela org do token). Parsers aceitam `bytes` ou path.
+> **Ranking** (`trinks_ranking.py`): enriquece clientes (preenche email/nascimento faltantes por
+> telefone, nunca sobrescreve). **Débitos** (`trinks_debts.py` + migration `0023` `client_debts` +
+> API `app/api/debts.py`: `GET /admin/debts`, `/summary`, `POST /{id}/pay|reopen`): contas a receber
+> (não cabia em `payments`); casa cliente por nome, `client_id` nullable, idempotente.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

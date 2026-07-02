@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Date,
     ForeignKey,
     Identity,
     Index,
@@ -55,6 +56,10 @@ class Client(Base):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     phone_e164: Mapped[str] = mapped_column(Text, nullable=False)
+    # Campos migrados da Trinks (opcionais; migration 0022).
+    email: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     acquisition_channel: Mapped[Optional[ContactChannel]] = mapped_column(
         pg_enum(ContactChannel, "contact_channel")
     )

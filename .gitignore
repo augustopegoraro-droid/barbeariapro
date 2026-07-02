@@ -22,6 +22,14 @@ Thumbs.db
 !.env.docker.example
 !.env.superadmin.example
 
+# ── Dados de clientes / exports (PII — LGPD; NUNCA versionar) ──────────────────
+# Exports brutos da Trinks e afins ficam locais, fora do git. Versione só o
+# CÓDIGO do importador e fixtures ANONIMIZADAS.
+TrinksInformations/
+/data/
+*_export.csv
+*_export.xlsx
+
 # ── Credenciais e secrets ─────────────────────────────────────────────────────
 credentials.json
 *credentials*.json
