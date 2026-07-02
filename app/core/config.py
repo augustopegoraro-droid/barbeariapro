@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     evolution_instance_name: str = ""
     evolution_api_key: str = ""
 
+    # Kernel IA (assistente in-app, /kernel-ia/query). Reusa a OPENAI_API_KEY do bot.
+    # Vazio → endpoint responde mensagem amigável "IA não configurada" (sem crash).
+    openai_api_key: str = ""
+    kernel_ia_model: str = "gpt-4o-mini"
+
     # Webhook direto Evolution → FastAPI (substitui debounce do n8n para o CRM)
     # N8N_WEBHOOK_URL: URL base do n8n para forward (ex: http://host.docker.internal:5678)
     # WA_WEBHOOK_SECRET: se definido, valida o header X-Webhook-Secret em /bot/wa-webhook
