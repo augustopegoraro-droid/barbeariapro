@@ -98,6 +98,28 @@ categorias), me avise para incluí-los na lista.
 > Alternativa ao reset: o importador **deduplica** por telefone, então dá para
 > **mesclar** a base real sem limpar — útil se a base atual não for 100% fictícia.
 
+## Agendamentos — `scripts/import_trinks_appointments.py`
+
+Import de agendamentos (ex.: `AgendamentosFuturosJulho.csv`). Cada linha liga
+**cliente** (por telefone; **cria** se novo, com nome/e-mail da linha), **profissional**
+(por nome) e **serviço** (de-para Trinks→catálogo). Cria `Appointment` (status
+`agendado`, `display_number` sequencial por unidade, fuso `app_timezone`→UTC) +
+`AppointmentItem` (preço/duração da linha). Pula `Cancelado`, serviço sem de-para e
+linha sem telefone (tudo contabilizado no relatório). Pré-requisito: profissionais e
+serviços já existentes na org.
+
+De-para de serviços em `app/services/trinks_appointments.py::_SERVICE_MAP` (ajuste lá
+se surgirem nomes novos). Rodar (na VM, mesmo padrão de mount):
+
+```bash
+# dry-run → conferir → --commit
+... backend python scripts/import_trinks_appointments.py --org-id 1 --file TrinksInformations/agendamentos.csv
+... backend python scripts/import_trinks_appointments.py --org-id 1 --file TrinksInformations/agendamentos.csv --commit
+```
+
+Validado no staging: parser no arquivo real (48 parseáveis, de-para 100%) + caminho de
+escrita (43 appointments + clientes, com rollback).
+
 ## Teste
 `tests/test_trinks_import.py` valida o parser (mapeamento, telefone, dedup, data,
 e-mail, canal, encoding latin-1) contra `tests/fixtures/trinks/clientes_sample.csv`
