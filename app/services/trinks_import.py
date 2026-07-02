@@ -93,9 +93,9 @@ class ImportReport:
 
 # ─── parsing ─────────────────────────────────────────────────────────────────────
 
-def _read_rows(path: str | Path) -> list[list[str]]:
-    """Lê o CSV lidando com encoding (utf-8 → fallback latin-1) e ';' como sep."""
-    raw = Path(path).read_bytes()
+def _read_rows(source: str | Path | bytes) -> list[list[str]]:
+    """Lê o CSV (de path OU bytes) tratando encoding (utf-8→latin-1) e ';' como sep."""
+    raw = bytes(source) if isinstance(source, (bytes, bytearray)) else Path(source).read_bytes()
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -141,14 +141,14 @@ def _clean(value: Optional[str]) -> Optional[str]:
     return v or None
 
 
-def parse_clients(path: str | Path) -> tuple[list[ParsedClient], ParseReport]:
+def parse_clients(source: str | Path | bytes) -> tuple[list[ParsedClient], ParseReport]:
     """Lê e mapeia o export de clientes. Deduplica por telefone dentro do arquivo.
 
     Retorna (registros_importáveis, relatório). Só entram em `registros` os que têm
     nome + telefone válido e são únicos no arquivo; os demais são contabilizados no
     relatório (não silenciosamente descartados).
     """
-    rows = _read_rows(path)
+    rows = _read_rows(source)
     report = ParseReport()
     header_idx = _find_header(rows)
     if header_idx is None:

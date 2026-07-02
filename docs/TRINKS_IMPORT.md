@@ -120,6 +120,26 @@ se surgirem nomes novos). Rodar (na VM, mesmo padrão de mount):
 Validado no staging: parser no arquivo real (48 parseáveis, de-para 100%) + caminho de
 escrita (43 appointments + clientes, com rollback).
 
+## Rotas de API (self-service do dono) — `app/api/imports.py`
+
+Além dos scripts (uso operacional na VM), há rotas para o **dono/gerente migrar a
+própria base** pelo painel, sem CLI. Reutilizam os mesmos serviços/parser/de-para.
+
+- `POST /admin/import/trinks/clients?commit=false`
+- `POST /admin/import/trinks/appointments?commit=false`
+
+**Auth:** JWT de tenant, gestor (owner/manager). **Org:** a do token (RLS). **Corpo:**
+o arquivo CSV bruto (`application/octet-stream`/`text/csv`) — sem multipart. **Preview →
+aplicar:** `commit=false` (padrão) devolve o relatório sem gravar; `commit=true` grava.
+Resposta: `{ commit, parse: {...}, import: {...} }` (os mesmos relatórios do CLI).
+
+Frontend (upload):
+```js
+const rep = await fetch(`/admin/import/trinks/clients?commit=${commit}`, {
+  method: "POST", headers: { Authorization: `Bearer ${token}` }, body: file,
+}).then(r => r.json());   // 1º com commit=false p/ preview; depois commit=true
+```
+
 ## Teste
 `tests/test_trinks_import.py` valida o parser (mapeamento, telefone, dedup, data,
 e-mail, canal, encoding latin-1) contra `tests/fixtures/trinks/clientes_sample.csv`

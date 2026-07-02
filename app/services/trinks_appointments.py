@@ -87,8 +87,8 @@ class ImportReport:
 
 # ─── parsing ─────────────────────────────────────────────────────────────────────
 
-def _read_rows(path: str | Path) -> list[list[str]]:
-    raw = Path(path).read_bytes()
+def _read_rows(source: str | Path | bytes) -> list[list[str]]:
+    raw = bytes(source) if isinstance(source, (bytes, bytearray)) else Path(source).read_bytes()
     try:
         txt = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -127,8 +127,8 @@ def _clean(v: Optional[str]) -> Optional[str]:
     return v or None
 
 
-def parse_appointments(path: str | Path) -> tuple[list[ParsedAppointment], ParseReport]:
-    rows = _read_rows(path)
+def parse_appointments(source: str | Path | bytes) -> tuple[list[ParsedAppointment], ParseReport]:
+    rows = _read_rows(source)
     report = ParseReport()
     hidx = _find_header(rows)
     if hidx is None:

@@ -244,6 +244,11 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > na VM). **Também importados 47 agendamentos de julho** (`import_trinks_appointments.py` +
 > `trinks_appointments.py`, de-para de serviços + fuso; 45 clientes casados + 2 criados → 2.913 clientes).
 > Próximos imports (estoque/pacotes/financeiro/marketing) virão depois, mesmo molde.
+>
+> **Rotas de self-service (D-56, `app/api/imports.py`):** `POST /admin/import/trinks/clients`
+> e `.../appointments` (gestor; corpo = CSV bruto, sem multipart; `commit=false` dry-run →
+> `commit=true` grava; RLS pela org do token). Deixa o dono migrar a própria base pelo painel,
+> reusando `trinks_import`/`trinks_appointments`. Parsers aceitam `bytes` ou path.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
