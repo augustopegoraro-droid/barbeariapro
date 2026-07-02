@@ -245,10 +245,13 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > `trinks_appointments.py`, de-para de serviços + fuso; 45 clientes casados + 2 criados → 2.913 clientes).
 > Próximos imports (estoque/pacotes/financeiro/marketing) virão depois, mesmo molde.
 >
-> **Rotas de self-service (D-56, `app/api/imports.py`):** `POST /admin/import/trinks/clients`
-> e `.../appointments` (gestor; corpo = CSV bruto, sem multipart; `commit=false` dry-run →
-> `commit=true` grava; RLS pela org do token). Deixa o dono migrar a própria base pelo painel,
-> reusando `trinks_import`/`trinks_appointments`. Parsers aceitam `bytes` ou path.
+> **Rotas de self-service (D-56, `app/api/imports.py`):** `POST /admin/import/trinks/{clients,
+> appointments,ranking,debts}` (gestor; corpo = CSV bruto, sem multipart; `commit=false` dry-run →
+> `commit=true` grava; RLS pela org do token). Parsers aceitam `bytes` ou path.
+> **Ranking** (`trinks_ranking.py`): enriquece clientes (preenche email/nascimento faltantes por
+> telefone, nunca sobrescreve). **Débitos** (`trinks_debts.py` + migration `0023` `client_debts` +
+> API `app/api/debts.py`: `GET /admin/debts`, `/summary`, `POST /{id}/pay|reopen`): contas a receber
+> (não cabia em `payments`); casa cliente por nome, `client_id` nullable, idempotente.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

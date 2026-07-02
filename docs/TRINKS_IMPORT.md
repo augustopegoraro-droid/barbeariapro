@@ -140,6 +140,33 @@ const rep = await fetch(`/admin/import/trinks/clients?commit=${commit}`, {
 }).then(r => r.json());   // 1º com commit=false p/ preview; depois commit=true
 ```
 
+## Ranking → enriquecer clientes — `scripts/enrich_trinks_ranking.py`
+
+O ranking traz Email/Nascimento de quem teve atividade. Usamos só para **preencher
+lacunas** (nunca sobrescreve): casa por telefone e completa `email`/`birth_date`.
+
+```bash
+python scripts/enrich_trinks_ranking.py --org-id 1 --file <ranking.csv>            # dry-run
+python scripts/enrich_trinks_ranking.py --org-id 1 --file <ranking.csv> --commit
+```
+Rota: `POST /admin/import/trinks/ranking?commit=`.
+
+## Débitos → contas a receber — `scripts/import_trinks_debts.py` + `client_debts` (migration 0023)
+
+Débito não cabe em `payments` (dinheiro recebido) → tabela própria `client_debts`
+(migration `0023`). Casa cliente por **nome** (o export não traz telefone); sem casar
+ou nome ambíguo, guarda `client_name` e deixa `client_id` nulo (não perde o débito).
+**Idempotente** (pula débito idêntico já existente). Prefira o `_LIMPO.csv` (o `.xlsx`
+exigiria leitura de Excel).
+
+```bash
+python scripts/import_trinks_debts.py --org-id 1 --file <debitos_LIMPO.csv>            # dry-run
+python scripts/import_trinks_debts.py --org-id 1 --file <debitos_LIMPO.csv> --commit
+```
+Rotas: importar `POST /admin/import/trinks/debts?commit=`; gerir
+`GET /admin/debts?status=aberto`, `GET /admin/debts/summary`,
+`POST /admin/debts/{id}/pay`, `POST /admin/debts/{id}/reopen` (gestor).
+
 ## Teste
 `tests/test_trinks_import.py` valida o parser (mapeamento, telefone, dedup, data,
 e-mail, canal, encoding latin-1) contra `tests/fixtures/trinks/clientes_sample.csv`

@@ -27,7 +27,9 @@ from app.services.trinks_appointments import (
     import_appointments,
     parse_appointments,
 )
+from app.services.trinks_debts import import_debts, parse_debts
 from app.services.trinks_import import import_clients, parse_clients
+from app.services.trinks_ranking import enrich_clients, parse_ranking
 from models import User
 
 router = APIRouter(prefix="/admin/import/trinks", tags=["import"])
@@ -90,6 +92,48 @@ async def import_trinks_appointments(
     records, parse_report = parse_appointments(raw)
     report = await import_appointments(
         db, current_user.organization_id, records, dry_run=not commit
+    )
+    return {
+        "commit": commit,
+        "parse": parse_report.as_dict(),
+        "import": report.as_dict(),
+    }
+
+
+@router.post("/ranking")
+async def enrich_from_trinks_ranking(
+    request: Request,
+    db: TenantDB,
+    current_user: CurrentUser,
+    commit: Annotated[bool, Query(description="false=dry-run (padrão); true=grava")] = False,
+) -> dict:
+    """Enriquece clientes (email/nascimento faltantes) a partir do ranking da Trinks."""
+    await _guard(db, current_user)
+    raw = await _read_body(request)
+    rows, parse_report = parse_ranking(raw)
+    report = await enrich_clients(
+        db, current_user.organization_id, rows, dry_run=not commit
+    )
+    return {
+        "commit": commit,
+        "parse": parse_report.as_dict(),
+        "enrich": report.as_dict(),
+    }
+
+
+@router.post("/debts")
+async def import_trinks_debts(
+    request: Request,
+    db: TenantDB,
+    current_user: CurrentUser,
+    commit: Annotated[bool, Query(description="false=dry-run (padrão); true=grava")] = False,
+) -> dict:
+    """Importa débitos (contas a receber) de um export da Trinks para a org."""
+    await _guard(db, current_user)
+    raw = await _read_body(request)
+    rows, parse_report = parse_debts(raw)
+    report = await import_debts(
+        db, current_user.organization_id, rows, dry_run=not commit
     )
     return {
         "commit": commit,
