@@ -34,6 +34,10 @@ class QueryOut(BaseModel):
 
     intent: str
     message: str
+    # action ∈ {navigate, reschedule, answer, config, erro}. Com 'navigate', `route`
+    # é a rota do frontend para onde encaminhar o usuário.
+    action: str = "answer"
+    route: Optional[str] = None
     task_id: Optional[str] = Field(default=None, alias="taskId")
 
 
@@ -59,5 +63,9 @@ async def query(body: QueryIn, db: TenantDB, current_user: CurrentUser) -> Query
         user_id=current_user.id,
     )
     return QueryOut(
-        intent=result["intent"], message=result["message"], task_id=result.get("task_id")
+        intent=result["intent"],
+        message=result["message"],
+        action=result.get("action", "answer"),
+        route=result.get("route"),
+        task_id=result.get("task_id"),
     )
