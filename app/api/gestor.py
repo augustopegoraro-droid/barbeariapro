@@ -28,6 +28,8 @@ from app.services.management import (
     financial_summary,
     inactive_clients,
     mrr,
+    payroll_summary,
+    recurring_coverage,
     resolve_period,
 )
 from models import Unit, User
@@ -239,6 +241,65 @@ async def mrr_endpoint(
     """Receita recorrente das assinaturas vigentes + quantas vencem em 30 dias."""
     await _require_manager(db, current_user)
     return MrrOut(**await mrr(db))
+
+
+# ─── folha / gestão de equipe (doc gestaointeligente) ─────────────────────────
+
+class FolhaMemberOut(BaseModel):
+    barber_id: int
+    barber_name: str
+    work_model: str
+    monthly_cost: float
+    commission: float
+    chair_rent: float
+    total_cost: float
+
+
+class CoverageOut(BaseModel):
+    mrr: float
+    active_subscriptions: int
+    fixed_payroll: float
+    chair_rent_income: float
+    net_fixed_payroll: float
+    covered: bool
+    coverage_pct: Optional[float] = None
+    surplus: float
+
+
+class FolhaOut(BaseModel):
+    period: str
+    date_from: str
+    date_to: str
+    team: list[FolhaMemberOut]
+    fixed_total: float
+    commissions_total: float
+    chair_rent_income: float
+    payroll_total: float
+    net_cost: float
+    coverage: CoverageOut
+
+
+@router.get("/folha", response_model=FolhaOut)
+async def folha(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    period: Optional[str] = Query(None, description="hoje|ontem|semana|mes (comissões)"),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+) -> FolhaOut:
+    """Folha da equipe (fixo + comissões − aluguel de cadeira) e a resposta à
+    pergunta do doc de gestão: **a receita recorrente cobre a folha fixa?**"""
+    await _require_manager(db, current_user)
+    df, dt, label = resolve_period(period or "mes", date_from, date_to)
+    data = await payroll_summary(db, df, dt)
+    coverage = await recurring_coverage(db)
+    return FolhaOut(
+        period=label,
+        date_from=df.isoformat(),
+        date_to=dt.isoformat(),
+        coverage=CoverageOut(**coverage),
+        **data,
+    )
 
 
 # ─── Fase C — push proativo (cron n8n, auth X-Bot-Token) ──────────────────────

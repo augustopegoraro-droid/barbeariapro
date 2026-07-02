@@ -529,6 +529,106 @@ async def mrr(db: AsyncSession) -> dict:
     }
 
 
+# ─── folha / custo de equipe (gestão inteligente — doc gestaointeligente/) ─────
+
+async def payroll_summary(db: AsyncSession, date_from: date, date_to: date) -> dict:
+    """Custo da equipe: fixo mensal + comissões do período + aluguel de cadeira.
+
+    Por profissional ativo: modelo de trabalho (`work_model`, NULL→'comissionado'),
+    custo fixo mensal (`monthly_cost` — salário+encargos no CLT, fixo no MEI/híbrido),
+    comissão do período (receita concluída × `commission_pct`) e aluguel de cadeira
+    que ele PAGA à empresa (`chair_rent`, receita).
+
+    Totais: `fixed_total` (fixo/mês), `commissions_total` (período), `chair_rent_income`
+    (mês), `payroll_total` = fixo + comissões, `net_cost` = payroll − aluguéis.
+    """
+    barbers = (
+        await db.execute(
+            select(
+                Barber.id, Barber.name, Barber.work_model,
+                Barber.monthly_cost, Barber.chair_rent,
+            )
+            .where(Barber.deleted_at.is_(None))
+            .order_by(Barber.name)
+        )
+    ).all()
+    commissions_by_id: dict[int, Decimal] = {}
+    for r in await barber_revenue_rows(db, date_from, date_to):
+        commissions_by_id[r.id] = (Decimal(str(r.revenue)) * r.commission_pct).quantize(
+            Decimal("0.01")
+        )
+
+    team: list[dict] = []
+    fixed_total = commissions_total = rent_total = Decimal("0")
+    for b in barbers:
+        fixed = Decimal(b.monthly_cost or 0)
+        rent = Decimal(b.chair_rent or 0)
+        commission = commissions_by_id.get(b.id, Decimal("0.00"))
+        fixed_total += fixed
+        commissions_total += commission
+        rent_total += rent
+        team.append(
+            {
+                "barber_id": b.id,
+                "barber_name": b.name,
+                "work_model": b.work_model or "comissionado",
+                "monthly_cost": float(fixed),
+                "commission": float(commission),
+                "chair_rent": float(rent),
+                "total_cost": float(fixed + commission),
+            }
+        )
+
+    payroll_total = fixed_total + commissions_total
+    return {
+        "team": team,
+        "fixed_total": float(fixed_total),
+        "commissions_total": float(commissions_total),
+        "chair_rent_income": float(rent_total),
+        "payroll_total": float(payroll_total),
+        "net_cost": float(payroll_total - rent_total),
+    }
+
+
+async def recurring_coverage(db: AsyncSession) -> dict:
+    """Responde: **a receita recorrente cobre a folha fixa?** (doc gestaointeligente).
+
+    Compara o MRR (assinaturas ativas) com o custo FIXO líquido da equipe
+    (Σ `monthly_cost` − Σ `chair_rent`). Comissões ficam de fora de propósito: são
+    variáveis e autofinanciadas pela própria receita que as gera — a pergunta do
+    gestor é sobre o custo garantido no início do mês. `surplus` é a folga mensal
+    (quanto cabe de custo fixo novo — ex.: contratar mais um profissional).
+    """
+    m = await mrr(db)
+    row = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(Barber.monthly_cost), 0),
+                func.coalesce(func.sum(Barber.chair_rent), 0),
+            ).where(Barber.deleted_at.is_(None))
+        )
+    ).one()
+    fixed, rent = Decimal(row[0]), Decimal(row[1])
+    net_fixed = fixed - rent
+    mrr_val = Decimal(str(m["mrr"]))
+    surplus = mrr_val - net_fixed
+    coverage_pct = (
+        float((mrr_val / net_fixed * 100).quantize(Decimal("0.1")))
+        if net_fixed > 0
+        else None
+    )
+    return {
+        "mrr": m["mrr"],
+        "active_subscriptions": m["active_count"],
+        "fixed_payroll": float(fixed),
+        "chair_rent_income": float(rent),
+        "net_fixed_payroll": float(net_fixed),
+        "covered": mrr_val >= net_fixed,
+        "coverage_pct": coverage_pct,
+        "surplus": float(surplus),
+    }
+
+
 # ===========================================================================
 # Fase C — push proativo: destinatários, resumo diário, alertas
 # ===========================================================================

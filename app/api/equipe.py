@@ -46,11 +46,18 @@ class TimeOffOut(BaseModel):
     reason: Optional[str]
 
 
+# Modelos de trabalho suportados (doc gestaointeligente; migration 0025).
+WORK_MODELS = {"clt", "mei", "comissionado", "aluguel_cadeira", "hibrido"}
+
+
 class BarberOut(BaseModel):
     id: int
     name: str
     specialty: Optional[str]
     commission_pct: float
+    work_model: Optional[str] = None
+    monthly_cost: float = 0.0
+    chair_rent: float = 0.0
     concluido_count: int
     agendado_count: int
     business_hours: list[BusinessHoursOut]
@@ -179,6 +186,9 @@ async def get_equipe(
                 name=b.name,
                 specialty=b.specialty,
                 commission_pct=float(b.commission_pct),
+                work_model=b.work_model,
+                monthly_cost=float(b.monthly_cost or 0),
+                chair_rent=float(b.chair_rent or 0),
                 concluido_count=stats[b.id]["concluido"],
                 agendado_count=stats[b.id]["agendado"],
                 business_hours=hours,
@@ -195,22 +205,42 @@ class BarberCreateIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
     specialty: Optional[str] = Field(None, max_length=100)
     commission_pct: float = Field(..., ge=0, le=1, description="Fração 0–1 (ex: 0.48)")
+    work_model: Optional[str] = Field(None, description="clt|mei|comissionado|aluguel_cadeira|hibrido")
+    monthly_cost: float = Field(0, ge=0, description="Custo fixo mensal total (R$)")
+    chair_rent: float = Field(0, ge=0, description="Aluguel de cadeira pago à empresa (R$/mês)")
 
     @field_validator("name", "specialty")
     @classmethod
     def strip_text(cls, v: Optional[str]) -> Optional[str]:
         return v.strip() if v else v
+
+    @field_validator("work_model")
+    @classmethod
+    def valid_work_model(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in WORK_MODELS:
+            raise ValueError(f"work_model deve ser um de: {sorted(WORK_MODELS)}")
+        return v
 
 
 class BarberEditIn(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=100)
     specialty: Optional[str] = Field(None, max_length=100)
     commission_pct: Optional[float] = Field(None, ge=0, le=1)
+    work_model: Optional[str] = None
+    monthly_cost: Optional[float] = Field(None, ge=0)
+    chair_rent: Optional[float] = Field(None, ge=0)
 
     @field_validator("name", "specialty")
     @classmethod
     def strip_text(cls, v: Optional[str]) -> Optional[str]:
         return v.strip() if v else v
+
+    @field_validator("work_model")
+    @classmethod
+    def valid_work_model(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in WORK_MODELS:
+            raise ValueError(f"work_model deve ser um de: {sorted(WORK_MODELS)}")
+        return v
 
 
 class BarberSimpleOut(BaseModel):
@@ -218,6 +248,9 @@ class BarberSimpleOut(BaseModel):
     name: str
     specialty: Optional[str]
     commission_pct: float
+    work_model: Optional[str] = None
+    monthly_cost: float = 0.0
+    chair_rent: float = 0.0
 
 
 async def _require_manager(db: AsyncSession, user: User) -> None:
@@ -244,6 +277,9 @@ def _barber_out(b: Barber) -> BarberSimpleOut:
     return BarberSimpleOut(
         id=b.id, name=b.name, specialty=b.specialty,
         commission_pct=float(b.commission_pct),
+        work_model=b.work_model,
+        monthly_cost=float(b.monthly_cost or 0),
+        chair_rent=float(b.chair_rent or 0),
     )
 
 
@@ -261,6 +297,9 @@ async def criar_barbeiro(
         name=body.name,
         specialty=body.specialty,
         commission_pct=Decimal(str(body.commission_pct)),
+        work_model=body.work_model,
+        monthly_cost=Decimal(str(body.monthly_cost)),
+        chair_rent=Decimal(str(body.chair_rent)),
     )
     db.add(barber)
     await db.flush()
@@ -301,6 +340,12 @@ async def editar_barbeiro(
         barber.specialty = body.specialty or None
     if body.commission_pct is not None:
         barber.commission_pct = Decimal(str(body.commission_pct))
+    if body.work_model is not None:
+        barber.work_model = body.work_model
+    if body.monthly_cost is not None:
+        barber.monthly_cost = Decimal(str(body.monthly_cost))
+    if body.chair_rent is not None:
+        barber.chair_rent = Decimal(str(body.chair_rent))
 
     await db.flush()
     return _barber_out(barber)

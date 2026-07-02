@@ -37,6 +37,11 @@ class Barber(Base):
             "commission_pct >= 0 AND commission_pct <= 1",
             name="barbers_commission_range",
         ),
+        CheckConstraint(
+            "work_model IS NULL OR work_model IN "
+            "('clt', 'mei', 'comissionado', 'aluguel_cadeira', 'hibrido')",
+            name="barbers_work_model_valid",
+        ),
         Index("idx_barbers_org", "organization_id"),
     )
 
@@ -50,6 +55,15 @@ class Barber(Base):
     specialty: Mapped[Optional[str]] = mapped_column(Text)
     commission_pct: Mapped[Decimal] = mapped_column(
         Numeric(5, 4), nullable=False, server_default=text("0")
+    )
+    # Gestão de equipe (migration 0025): modelo de trabalho + custos mensais.
+    # work_model NULL = não configurado (tratado como 'comissionado').
+    work_model: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    monthly_cost: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, server_default=text("0")
+    )
+    chair_rent: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, server_default=text("0")
     )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
