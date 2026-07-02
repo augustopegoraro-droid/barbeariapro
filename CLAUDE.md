@@ -253,6 +253,21 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > API `app/api/debts.py`: `GET /admin/debts`, `/summary`, `POST /{id}/pay|reopen`): contas a receber
 > (não cabia em `payments`); casa cliente por nome, `client_id` nullable, idempotente.
 
+**Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — local/staging; prod pendente):**
+- **Kernel IA = NAVEGADOR por linguagem natural (anti-alucinação):** `app/services/kernel_ia.py` +
+  `POST /kernel-ia/query` — o LLM (OpenAI `gpt-4o-mini`, `OPENAI_API_KEY`) só escolhe uma rota de
+  um **catálogo fechado** filtrado por papel (RBAC: barbeiro → só a própria agenda + tool
+  `solicitar_remarcacao_turno`); mensagem templada + `action=navigate`/`route` → o frontend
+  redireciona (FAB `kernel-ia-launcher.tsx` no admin). **Não responde dados no chat.**
+- **Remarcação (migration `0024`):** `appointment_reschedule_requests` + `/remarcacoes` (barbeiro
+  cria; gestor lista/conta/aprova) + sino `NotificationBell` no AdminHeader. Aprovar **não** move
+  os atendimentos (follow-up).
+- **Folha × receita recorrente (migration `0025`):** `barbers` += `work_model` (clt/mei/
+  comissionado/aluguel_cadeira/hibrido), `monthly_cost`, `chair_rent`. `management.py`:
+  `payroll_summary` + `recurring_coverage` (MRR × folha fixa líquida → covered/surplus).
+  `GET /admin/gestor/folha` + painel "Folha × Receita recorrente" em `/admin/gestor`; formulário
+  de equipe configura modelo/custos. Responde às perguntas do doc `gestaointeligente/`.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

@@ -956,6 +956,38 @@ Encrypt) e o DNS de subdomínios da D-54.
 
 ---
 
+### D-57 — Gestão inteligente de equipe: folha × receita recorrente + Kernel IA navegador — 2026-07-02
+
+**Contexto:** doc `gestaointeligente/Estrategia_Transicao_Receita_Recorrente_BarbeariaPro.md` —
+reduzir a dependência dos sócios via assinaturas (MRR) e responder: *a receita recorrente cobre
+a folha? cabe contratar? qual modelo de trabalho usar (CLT/MEI/comissionado/aluguel de
+cadeira/híbrido)?* Também: o gpt-4o-mini **alucinava** respondendo números no chat do Kernel IA.
+
+**Decisões:**
+1. **Kernel IA vira NAVEGADOR (anti-alucinação):** não responde dados — entende a intenção,
+   escolhe UMA rota de um **catálogo fechado** (enum, filtrado por papel/RBAC), responde com
+   mensagem **templada** ("Vou te encaminhar para X") e o frontend **redireciona**. O dado real
+   aparece na página. Barbeiro: só a própria agenda + `solicitar_remarcacao_turno` (cria pedido
+   pendente p/ o sino do gestor). Removidas as tools que devolviam números no chat.
+2. **Modelagem de folha (migration `0025`, aditiva):** `barbers` += `work_model` (5 modelos do
+   doc; NULL=comissionado), `monthly_cost` (custo fixo mensal total — salário+encargos no CLT)
+   e `chair_rent` (aluguel que o profissional PAGA — receita). Comissão variável segue em
+   `commission_pct`.
+3. **Cálculo (`management.py`):** `payroll_summary` (fixo + comissões do período + aluguéis,
+   por profissional/totais) e `recurring_coverage` — compara **MRR × folha fixa líquida**
+   (comissões fora de propósito: autofinanciadas pela receita que as gera); devolve
+   `covered`/`coverage_pct`/`surplus` (folga p/ contratação).
+4. **Superfícies:** `GET /admin/gestor/folha` (gestor) · painel **"Folha × Receita recorrente"**
+   em `/admin/gestor` (veredito verde/âmbar + tabela por profissional) · formulário de
+   `/admin/equipe` configura modelo/custos · Kernel IA roteia as perguntas do doc p/ `/admin/gestor`.
+
+**Validação (local, LLM real):** Pablo CLT R$2.500 + Sandra aluguel R$800 → folha fixa líquida
+R$1.700; MRR R$0 → `covered=false`, "faltam R$1.700"; *"a receita recorrente cobre a folha?"* →
+navega p/ `/admin/gestor`. Suíte **369 pass** / 2 fail ambientais. Migrations `0024`/`0025`
+aplicadas em local+staging (**prod pendente**).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
