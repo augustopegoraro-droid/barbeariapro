@@ -40,6 +40,7 @@ from .barber import Barber, BarberService, BarberUnit, TimeOff
 from .client import Client, ClientConsent
 from .service import Service
 from .appointment import Appointment, AppointmentItem
+from .appointment_reschedule import AppointmentRescheduleRequest
 from .payment import Expense, ExpenseCategory, Payment
 from .debt import ClientDebt
 from .integration import CalendarSync, IntegrationAccount, MessageLog
@@ -102,6 +103,7 @@ __all__ = [
     # agenda
     "Appointment",
     "AppointmentItem",
+    "AppointmentRescheduleRequest",
     # financeiro
     "Payment",
     "ExpenseCategory",

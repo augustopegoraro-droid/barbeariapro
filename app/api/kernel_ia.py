@@ -20,8 +20,9 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import get_current_user, get_tenant_db, resolve_current_role
-from app.services.kernel_ia import evaluate_request
+from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
+from app.services import reschedule as reschedule_svc
+from app.services.kernel_ia import KernelIntent, evaluate_request
 from models import User
 
 router = APIRouter(prefix="/kernel-ia", tags=["kernel-ia"])
@@ -47,7 +48,7 @@ async def query(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> KernelQueryOut:
-    role = await resolve_current_role(db, current_user)
+    role, barber_id = await resolve_current_role_with_barber(db, current_user)
     decision = evaluate_request(role, body.prompt)
 
     # Autorização é a barreira: intenção não permitida NUNCA é despachada.
@@ -56,8 +57,26 @@ async def query(
             intent=decision.intent.value, allowed=False, message=decision.message
         )
 
-    # TODO(kernel-ia): despachar a tarefa real para os serviços (agenda/folga/
-    # remarcação de turno). Por ora, só reconhece o pedido.
+    task_id: Optional[str] = None
+    message = decision.message
+    # Despacho: a remarcação de turno cria um PEDIDO pendente (aprovação do
+    # gestor). Só faz sentido para barbeiro (tem barber_id). Agenda/folga seguem
+    # como reconhecimento por ora (TODO: despachar para os serviços reais).
+    if (
+        decision.intent is KernelIntent.SOLICITAR_REMARCACAO_TURNO
+        and barber_id is not None
+    ):
+        req = await reschedule_svc.create_request(
+            db,
+            organization_id=current_user.organization_id,
+            barber_id=barber_id,
+            requested_by_user_id=current_user.id,
+            reason=body.prompt,
+            source="kernel_ia",
+        )
+        task_id = str(req.id)
+        message = "Solicitação de remarcação registrada — um gestor vai avaliar."
+
     return KernelQueryOut(
-        intent=decision.intent.value, allowed=True, message=decision.message
+        intent=decision.intent.value, allowed=True, message=message, task_id=task_id
     )
