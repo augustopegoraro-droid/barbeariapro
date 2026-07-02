@@ -1,20 +1,20 @@
 """Kernel IA — endpoint do assistente in-app (chat).
 
-`POST /kernel-ia/query {prompt}` → `{intent, message}`. Só gestor (owner/manager),
-pois expõe dados financeiros. Multi-tenant via RLS do token. A lógica de LLM+tools
-mora em `app/services/kernel_ia.py`.
+`POST /kernel-ia/query {prompt}` → `{intent, message, taskId?}`. Autenticado (JWT do
+tenant), multi-tenant via RLS. **RBAC por capacidade:** o serviço filtra as tools pelo
+papel (gestor = tools de negócio; barbeiro = agenda + solicitar remarcação). A lógica de
+LLM + tools + RBAC mora em `app/services/kernel_ia.py`.
 """
 from __future__ import annotations
 
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_manager_access
-from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
 from app.services import kernel_ia
 from models import Unit, User
 
@@ -29,9 +29,12 @@ class QueryIn(BaseModel):
 
 
 class QueryOut(BaseModel):
+    # by_alias na resposta → devolve `taskId` (camelCase) p/ o frontend.
+    model_config = ConfigDict(populate_by_name=True)
+
     intent: str
     message: str
-    taskId: Optional[str] = None
+    task_id: Optional[str] = Field(default=None, alias="taskId")
 
 
 async def _primary_unit_id(db: AsyncSession) -> Optional[int]:
@@ -42,9 +45,19 @@ async def _primary_unit_id(db: AsyncSession) -> Optional[int]:
     ).scalar_one_or_none()
 
 
-@router.post("/query", response_model=QueryOut)
+@router.post("/query", response_model=QueryOut, response_model_by_alias=True)
 async def query(body: QueryIn, db: TenantDB, current_user: CurrentUser) -> QueryOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    role, barber_id = await resolve_current_role_with_barber(db, current_user)
     unit_id = await _primary_unit_id(db)
-    result = await kernel_ia.answer(db, body.prompt, unit_id)
-    return QueryOut(intent=result["intent"], message=result["message"])
+    result = await kernel_ia.answer(
+        db,
+        body.prompt,
+        role=role,
+        org_id=current_user.organization_id,
+        unit_id=unit_id,
+        barber_id=barber_id,
+        user_id=current_user.id,
+    )
+    return QueryOut(
+        intent=result["intent"], message=result["message"], task_id=result.get("task_id")
+    )
