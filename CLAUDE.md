@@ -253,12 +253,14 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > API `app/api/debts.py`: `GET /admin/debts`, `/summary`, `POST /{id}/pay|reopen`): contas a receber
 > (não cabia em `payments`); casa cliente por nome, `client_id` nullable, idempotente.
 
-**Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — local/staging; prod pendente):**
+**Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — migrations `0024`/`0025`
+DEPLOYADAS em prod 2026-07-02, head agora `0025`; demais superfícies validadas em local/staging):**
 - **Kernel IA = NAVEGADOR por linguagem natural (anti-alucinação):** `app/services/kernel_ia.py` +
   `POST /kernel-ia/query` — o LLM (OpenAI `gpt-4o-mini`, `OPENAI_API_KEY`) só escolhe uma rota de
   um **catálogo fechado** filtrado por papel (RBAC: barbeiro → só a própria agenda + tool
   `solicitar_remarcacao_turno`); mensagem templada + `action=navigate`/`route` → o frontend
-  redireciona (FAB `kernel-ia-launcher.tsx` no admin). **Não responde dados no chat.**
+  redireciona (FAB `kernel-ia-launcher.tsx` no admin). **Não responde dados no chat** — exceto a
+  exceção controlada do D-58 abaixo.
 - **Remarcação (migration `0024`):** `appointment_reschedule_requests` + `/remarcacoes` (barbeiro
   cria; gestor lista/conta/aprova) + sino `NotificationBell` no AdminHeader. Aprovar **não** move
   os atendimentos (follow-up).
@@ -267,6 +269,18 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
   `payroll_summary` + `recurring_coverage` (MRR × folha fixa líquida → covered/surplus).
   `GET /admin/gestor/folha` + painel "Folha × Receita recorrente" em `/admin/gestor`; formulário
   de equipe configura modelo/custos. Responde às perguntas do doc `gestaointeligente/`.
+
+**Agente financeiro no Kernel IA (D-58, 2026-07-02 — só local/staging, prod pendente):** owner/manager
+(`MANAGER_ACCESS`) ganham a tool `consultar_financas` (`topico` + `periodo`, catálogo fechado igual
+ao `navegar`) — responde no chat um relatório financeiro REAL, sem reabrir a alucinação do D-57: os
+números vêm 100% de `management.py` via `app/services/kernel_ia_finance.py` (texto pt-BR
+determinístico, o LLM nunca os toca); só **1 frase de insight** por cima é gerada pelo LLM
+(2ª chamada, sem tools), grounded num playbook curado (`app/data/finance_playbook.py`, heurísticas
+gerais de mercado, editável sem tocar em código) + o próprio relatório, e passa por
+`kernel_ia_finance.guard_insight` — qualquer número citado que não esteja no relatório real nem no
+playbook é descartado (fail closed). Recepção e barbeiro seguem sem acesso a dados financeiros
+(regressão coberta em `tests/test_kernel_ia.py`). `action=finance_answer` novo no contrato do
+endpoint; frontend só precisou de `whitespace-pre-line` no balão + tipo do `action`.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
