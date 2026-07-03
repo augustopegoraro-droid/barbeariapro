@@ -4,6 +4,19 @@
 
 ## 2026-07-03
 
+- **✅ B-02 fase TESTE validada ponta a ponta no sandbox Stripe real** (CLI pareado
+  "Área restrita de BarbeariaPro"): sync criou Product/Price reais; checkout
+  hospedado pago com 4242 (R$49,90); túnel `stripe listen` entregou 5 webhooks —
+  todos `processed`; banco convergiu (fatura `paid`, `billing_payment succeeded`,
+  assinatura `active` com `sub_…` da Stripe); pause/resume/cancel/reactivate 200
+  com auditoria; estado local == Stripe mesmo com webhooks fora de ordem.
+  **Dois bugs reais encontrados e corrigidos** (commit `b020c36`, deployado em
+  prod): (1) SDK 15.x sem interface de dict nos StripeObject → `_to_dict` via
+  `json.loads(str(obj))` em todo retorno do SDK; (2) webhooks out-of-order
+  regravavam snapshot antigo → `_apply_subscription_state` rebusca o estado
+  atual no gateway (fallback ao payload). Ambiente de teste 100% limpo (org/
+  plano/admin purgados, assinatura cancelada na Stripe, credenciais efêmeras
+  apagadas). Produção segue `BILLING_PROVIDER=mock` até HTTPS/domínio (B-01).
 - **✅ COMMIT + DEPLOY EM PRODUÇÃO.** Commits: painel `2fec4b7`
   (barbearia-superadmin, +submódulo bumpado) e backend `b849b10` (barbeariapro,
   51 arquivos, +7.465 linhas) — pushed. VM: backup `~/predeploy_d61_20260703_165238.sql`
