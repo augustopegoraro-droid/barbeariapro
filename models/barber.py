@@ -42,6 +42,10 @@ class Barber(Base):
             "('clt', 'mei', 'comissionado', 'aluguel_cadeira', 'hibrido')",
             name="barbers_work_model_valid",
         ),
+        # Dinheiro nunca negativo (migration 0027) — protege o cálculo de folha/
+        # cobertura contra writers fora da API. Mesma defesa do commission_range.
+        CheckConstraint("monthly_cost >= 0", name="barbers_monthly_cost_nonneg"),
+        CheckConstraint("chair_rent >= 0", name="barbers_chair_rent_nonneg"),
         Index("idx_barbers_org", "organization_id"),
     )
 

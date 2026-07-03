@@ -123,3 +123,19 @@ async def test_equipe_work_model_invalido_422(client, auth_headers):
         headers=auth_headers,
     )
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_equipe_custo_negativo_422(client, auth_headers):
+    # F7: a API (Field ge=0) barra custo negativo; o CHECK de DB (migration 0027)
+    # é o backstop para writers fora da API (imports/scripts).
+    eq = (await client.get("/equipe", headers=auth_headers)).json()
+    bid = eq["barbers"][0]["id"]
+    neg_cost = await client.patch(
+        f"/equipe/barbeiros/{bid}", json={"monthly_cost": -1}, headers=auth_headers
+    )
+    assert neg_cost.status_code == 422, neg_cost.text
+    neg_rent = await client.patch(
+        f"/equipe/barbeiros/{bid}", json={"chair_rent": -1}, headers=auth_headers
+    )
+    assert neg_rent.status_code == 422, neg_rent.text

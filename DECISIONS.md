@@ -1095,6 +1095,81 @@ branches em andamento). Validado ao vivo (local + prod): janeiro/2026 populado, 
 
 ---
 
+### D-60 — Code review das migrations 0024/0025: CHECKs de integridade + guards de API (migration 0027) — 2026-07-03
+
+**Contexto:** revisão multi-agente (8 subagentes em paralelo: Security, Backend, Database, RBAC,
+Testing, Migration, Performance, Code Review — cada achado verificado lendo o arquivo real antes de
+aceitar) das migrations **0024** (`appointment_reschedule_requests`, D-57) e **0025** (custos de
+equipe em `barbers`, D-57). Como 0024/0025/0026 **já estão em prod → imutáveis**, a correção é uma
+migration **nova (0027)**, aditiva (só constraints), sobre `down_revision="0026_cash_daily_closings"`.
+
+**Achados corrigidos (4 CHECKs em 0027 + espelho no ORM — convenção do repo: constraint declarada
+na migration E no `__table_args__`):**
+- **F1 — período invertido:** `appointment_reschedule_requests` aceitava `period_end <= period_start`.
+  CHECK `reschedule_period_order` (`period_start IS NULL OR period_end IS NULL OR period_end >
+  period_start`, `>` estrito igual a TimeOff/Appointment/Membership; tolerante a NULL pois pedido do
+  Kernel IA não traz datas) + `@model_validator` em `RescheduleCreateIn` (`app/api/reschedule.py`) →
+  422 no request.
+- **F3 — `source` sem CHECK:** 0024 só constrangeu `status`. CHECK `reschedule_source_valid`
+  (`source IN ('app','kernel_ia')`) — paridade com o de status.
+- **F5 — filtro `?status=` silencioso:** `GET /remarcacoes?status=` (vazio) caía num `[]` mudo em vez
+  de "todos". Normalização em `listar_remarcacoes`: vazio/`todas`/`todos`/`all` → todos; valor do
+  catálogo → filtra; qualquer outro → 422 (nunca `[]` silencioso).
+- **F7 — custos de equipe sem CHECK:** `barbers.monthly_cost`/`chair_rent` (0025, colunas de dinheiro)
+  não tinham `>= 0` — única migration de coluna monetária que quebrou a convenção (~30 CHECKs). CHECKs
+  `barbers_monthly_cost_nonneg`/`barbers_chair_rent_nonneg`. A API (`BarberEditIn`/`BarberCreateIn`,
+  `Field(ge=0)`) já barra; o DB é o backstop para writers fora da API (imports/scripts/onboarding) —
+  protege o cálculo de folha/cobertura (`management.recurring_coverage`).
+
+**Achados deferidos (decididos, não implementados):**
+- **F2 — `GRANT ... ALL SEQUENCES` sem REVOKE no downgrade da 0024/0026:** **não mexer.** Consenso dos
+  agentes de Security/Migration/Database: um `REVOKE ON ALL SEQUENCES` num downgrade revogaria grants
+  de OUTRAS tabelas (o grant é schema-wide, idempotente). Nunca adicionar.
+- **F4 — múltiplos pedidos `pendente` por barbeiro:** **intencional (confirmado pelo dono).** O barbeiro
+  pode ter vários pedidos abertos para períodos diferentes. Sem índice único parcial / sem dedup. TODO
+  registrado caso o produto queira 1-pendente-por-período no futuro.
+- **F6 — `reviewed_at = func.now()` (relógio do DB) vs relógio da app:** **sem mudança.** Não há bug vivo;
+  manter `func.now()` por consistência com o `server_default` de `created_at`.
+- **F8 — `list_requests` sem `ORDER BY` determinístico:** fica para PR próprio de RBAC/ordenação (adicionar
+  `ORDER BY created_at DESC, id DESC`); fora do escopo desta correção de integridade.
+
+**Cobertura de testes (motivador declarado: 0/100 → 90/100+):** `tests/test_reschedule_integration.py`
++6 (F1 invertido→422 / válido→201 / sem-período→201; F5 inválido→422 / vazio-traz-todos / filtra) e
+**fixture autouse de limpeza** (zera pedidos do tenant semeado antes/depois de cada teste — os testes
+commitam sem rollback e acumulavam pendentes, tornando contagens não-determinísticas; usa o GRANT
+DELETE do `barber_app` da 0024). `tests/test_gestao_equipe.py` +1 (F7 custo negativo→422).
+
+**Validação (local/staging):** pré-audit dos 4 CHECKs = **0 violações** (todas as orgs, role admin);
+0027 aplicada no staging (head `0027`); os 4 constraints existem e **rejeitam escrita inválida no nível
+do DB** provado via `barber_app`/RLS (backstop independente do guard de app), aceitando o período válido;
+`alembic check` **não acusa drift nos 4 constraints** (só o ruído pré-existente de 5 índices
+parciais/de-expressão — limitação conhecida do autogenerate, tabelas não tocadas). Suíte: **407 pass /
+2 fail ambientais** (as de sempre: `bypass_hours` do workflow n8n + e2e link barbeiro↔serviço — nenhuma
+tocada por esta mudança) **/ 2 skip. 0 regressões.**
+
+> ⏳ **NÃO aplicado em prod (por decisão).** 0027 fica pronta; runbook de deploy:
+> 1. **Backup:** `pg_dump` da VM antes de tudo.
+> 2. **Pré-audit** (role admin, todas as orgs) — os 4 counts abaixo **devem dar 0**. Em especial
+>    `reschedule_period_order`: a API só passou a barrar período invertido AGORA (F1) — se prod já
+>    tiver linha invertida, o CHECK falha o upgrade; investigar/corrigir a linha antes.
+>    ```sql
+>    SELECT count(*) FROM barbers WHERE monthly_cost < 0;
+>    SELECT count(*) FROM barbers WHERE chair_rent < 0;
+>    SELECT count(*) FROM appointment_reschedule_requests WHERE source NOT IN ('app','kernel_ia');
+>    SELECT count(*) FROM appointment_reschedule_requests
+>      WHERE period_start IS NOT NULL AND period_end IS NOT NULL AND period_end <= period_start;
+>    ```
+> 3. **`git pull`** (traz 0027 + models + `reschedule.py`).
+> 4. **Migration + rebuild juntos** (para os guards F1/F5 e os CHECKs subirem no mesmo passo):
+>    `DATABASE_URL="$ADMIN_DATABASE_URL" alembic upgrade head` → o `env.py` lê **`DATABASE_URL`** (não
+>    `ADMIN_DATABASE_URL`), então sobrepor é obrigatório; a role precisa poder alterar `barbers` — em
+>    staging `barbers` pertence a `barber_owner` mas o admin é `postgres` (superuser), que altera assim
+>    mesmo. `ADMIN_DATABASE_URL` segue **ausente no `.env` da VM** (dívida conhecida) → usar a URL admin
+>    inline. Depois, rebuild do backend (compose) para carregar F1/F5.
+> 5. **Verificar:** `alembic current` = `0027`; os 4 `conname` presentes em `pg_constraint`.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
