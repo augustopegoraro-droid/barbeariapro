@@ -257,9 +257,10 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > `POST /admin/import/trinks/cash-closing`. Lê a 2ª tabela do export "Movimentação Financeira"
 > (o "Resumo de Movimentação de Entradas e Saídas"; a 1ª tabela, pagamentos por comanda, é fora de
 > escopo — exigiria agendamentos de todo o período). Upsert por `(org, dia)`, idempotente.
-> **✅ Aplicado em staging (org 1): 149 dias (05/01–02/07/2026).** Ainda **não existe módulo de
-> Caixa vivo** (abrir/fechar em tempo real) — isto é só o histórico migrado para consulta/relatório.
-> **Prod pendente.**
+> **✅ DEPLOYADO em prod 2026-07-02:** migration `0026` aplicada (head `0026`) + 149 dias reais
+> importados na org 1 (05/01–02/07/2026), totais conferindo com o relatório da Trinks. Ainda
+> **não existe módulo de Caixa vivo** (abrir/fechar em tempo real) — isto é só o histórico
+> migrado para consulta/relatório.
 
 **Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — ✅ DEPLOYADO em prod 2026-07-02,
 código + migrations `0024`/`0025`, head `0025`):**

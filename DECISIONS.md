@@ -1074,9 +1074,15 @@ Saídas"** — um fechamento por dia (abertura/recebido/troco/despesas/sangria/s
 22.906,00) e `other_methods_received` (R$ 389.762,15) **conferem exatamente** com o rodapé "Total
 período" do próprio relatório da Trinks. Rodar o import 2x atualiza (upsert), não duplica.
 ✅ **Aplicado em staging (org 1):** migration `0026` + 149 dias importados. Suíte **370 pass** /
-2 fail ambientais (mesmas de sempre). **Prod pendente** (aplicar `0026` + rodar o CLI com o
-arquivo real). Fora de escopo desta entrada: importar a tabela 1 (pagamentos por comanda) e
-construir o módulo de Caixa vivo (abrir/fechar em tempo real).
+2 fail ambientais (mesmas de sempre).
+
+> ✅ **DEPLOYADO em prod 2026-07-02:** backup pré-deploy (`~/predeploy_d59_cash_closing_*.sql` na
+> VM) + migration `0026` aplicada (head `0026`) + backend rebuildado (commit `0ae1470`) + CLI
+> rodado com o arquivo real (org 1) — **149 dias importados**, totais conferindo com o relatório
+> (mesmos R$ 22.906,00 / R$ 389.762,15). Containers `backend`/`frontend` healthy pós-deploy.
+
+Fora de escopo desta entrada: importar a tabela 1 (pagamentos por comanda) e construir o módulo
+de Caixa vivo (abrir/fechar em tempo real).
 
 ---
 
