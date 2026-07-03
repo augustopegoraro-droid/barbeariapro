@@ -983,8 +983,69 @@ cadeira/híbrido)?* Também: o gpt-4o-mini **alucinava** respondendo números no
 
 **Validação (local, LLM real):** Pablo CLT R$2.500 + Sandra aluguel R$800 → folha fixa líquida
 R$1.700; MRR R$0 → `covered=false`, "faltam R$1.700"; *"a receita recorrente cobre a folha?"* →
-navega p/ `/admin/gestor`. Suíte **369 pass** / 2 fail ambientais. Migrations `0024`/`0025`
-aplicadas em local+staging (**prod pendente**).
+navega p/ `/admin/gestor`. Suíte **369 pass** / 2 fail ambientais.
+
+> ✅ **Migrations `0024`/`0025` DEPLOYADAS em prod 2026-07-02** (head `0025`). Demais superfícies
+> do D-57 (Kernel IA navegador, remarcação, painel de folha) seguem validadas em local/staging.
+
+---
+
+### D-58 — Agente financeiro no Kernel IA (grounded, sem reabrir a alucinação do D-57) — 2026-07-02
+
+**Contexto:** pedido do usuário — um "agente de IA especialista em finanças de gestão de
+barbearia" respondendo no chat do Kernel IA. Tensão direta com o D-57 (mesmo dia): o Kernel IA
+tinha acabado de virar navegador puro porque o gpt-4o-mini alucinava números financeiros no chat.
+Alinhado com o usuário antes de implementar: (1) grau de liberdade do LLM — relatório 100% fiel
+aos dados + 1 frase de insight por cima (não recusar, nem responder livre); (2) fonte do insight —
+playbook curado agora, heurísticas gerais de mercado, sem citação de fonte específica, editável
+depois pelo usuário sem tocar em código.
+
+**Decisões:**
+1. **Grounding em vez de reversão do D-57:** o LLM continua proibido de calcular/inventar números.
+   Ele só (a) escolhe, via function-calling de catálogo fechado (`consultar_financas`, enum
+   `topico`+`periodo` — mesmo padrão do `navegar`), qual indicador buscar, e (b) gera 1 frase curta
+   de insight — nunca o relatório em si.
+2. **Bloco de dados 100% determinístico (`app/services/kernel_ia_finance.py`):** despacha pro
+   `management.py` já existente (mesma fonte usada por `/bot/gestor/*` e `/admin/gestor/*`:
+   `financial_summary`, `barber_ranking`, `mrr`, `payroll_summary`+`recurring_coverage`,
+   `ai_generated_revenue`, `inactive_clients`, `agenda_gaps`) e formata em texto pt-BR — o LLM não
+   toca nesses números.
+3. **RBAC — `MANAGER_ACCESS`, não `FULL_ACCESS`:** a tool só existe para owner/manager. Corrige de
+   passagem um gap: o catálogo de *navegação* do D-57 usava `FULL_ACCESS` (inclui `reception`), mas
+   dados financeiros sempre foram `MANAGER_ACCESS` em `/admin/gestor/*` — recepção não deve ganhar
+   `consultar_financas`. Coberto por teste de regressão.
+4. **Guardrail numérico (defesa em profundidade):** a frase de insight (2ª chamada OpenAI, sem
+   tools, temperature 0.3) passa por `kernel_ia_finance.guard_insight` — qualquer número citado que
+   não apareça, verbatim, no bloco de dados real **nem** no playbook usado como referência, derruba
+   a frase inteira (fail closed; o relatório de dados nunca é perdido, só o insight).
+5. **Playbook curado (`app/data/finance_playbook.py`):** dict Python por tópico, heurísticas gerais
+   de mercado para pequenos negócios de serviço (faixas de comissão, folha fixa vs. receita
+   recorrente, janela de reativação, valor da ociosidade de agenda etc.), comentado como não sendo
+   citação de fonte específica — editável livremente depois pelo usuário sem tocar em nenhum código.
+6. **Contrato:** novo `action="finance_answer"` em `POST /kernel-ia/query`. Frontend
+   (`kernel-ia-launcher.tsx`) não precisou de lógica nova (qualquer `action` ≠ `navigate` já só
+   exibe o balão) — só `whitespace-pre-line` no balão do assistente (relatório multi-linha) e o tipo
+   do `action` no hook.
+
+**Validação:** suíte **396 pass** / 2 fail ambientais (mesmas do D-57: `bypass_hours` do workflow
+n8n e o par hardcoded do teste e2e barbeiro↔serviço — nenhuma nova). 21 testes puros novos de
+formatação/guardrail (`tests/test_kernel_ia_finance.py`) + testes de RBAC/dispatch fail-closed em
+`tests/test_kernel_ia.py` (owner/manager ganham a tool; reception e barber não; dispatch nunca toca
+o banco se o papel não autoriza).
+
+> ✅ **DEPLOYADO em prod 2026-07-02** (backend `652fc2a` + frontend `5f35099`; sem migration nova —
+> `0025` já era head). `docker compose up -d --build backend frontend` na VM; ambos containers
+> `healthy`; `/kernel-ia/query` no openapi; bundle do frontend confirmado com o FAB (`grep -rl
+> "Kernel IA" .next` no container). **Esta foi, na prática, a 1ª vez que o Kernel IA inteiro
+> (D-57 navegação + D-58 finanças) chegou ao frontend de produção** — só as migrations do D-57
+> tinham ido antes.
+>
+> ⚠️ **Bloqueado por chave OpenAI inválida em prod:** `OPENAI_API_KEY` da VM devolve 401
+> (`invalid_api_key`) — confirmado invocando `kernel_ia.answer()` diretamente no container contra
+> o org 1 real. Degrada com graça (`action=config`), sem erro 500, mas o chat não funciona para
+> ninguém até a chave ser rotacionada em `/opt/barbeariapro/.env`. **A validação manual "LLM real"
+> deste D-58 segue pendente** por causa disso — repetir os prompts de teste assim que a chave for
+> corrigida.
 
 ---
 
@@ -1041,3 +1102,4 @@ construir o módulo de Caixa vivo (abrir/fechar em tempo real).
 | VM sem política de reinício automático | GCP VM | ⚠️ Alto | WhatsApp cai toda vez que VM reinicia; usar /admin/integracoes |
 | ~~Migrations 0012–0014 + telas novas não deployadas~~ | VM / `barbearia-frontend` | ✅ Resolvido | D-46 (2026-06-27): 0012/0013 já estavam; 0014 aplicada; `/admin/assinaturas`+`/admin/empresa` deployadas. Falta só smoke test visual. |
 | `ADMIN_DATABASE_URL` ausente no `.env` da VM | `/opt/barbeariapro/.env` | Médio | Só nos `.example`; `deploy/update.sh` quebra no passo de migration (`set -u`). Provisionar p/ deploy automatizado (D-46). |
+| `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Médio | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas OpenAI. Preexistente ao D-58, ficou mais visível com o custo do agente financeiro. |

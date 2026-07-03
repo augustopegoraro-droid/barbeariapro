@@ -1,9 +1,10 @@
 """Kernel IA — endpoint do assistente in-app (chat).
 
-`POST /kernel-ia/query {prompt}` → `{intent, message, taskId?}`. Autenticado (JWT do
-tenant), multi-tenant via RLS. **RBAC por capacidade:** o serviço filtra as tools pelo
-papel (gestor = tools de negócio; barbeiro = agenda + solicitar remarcação). A lógica de
-LLM + tools + RBAC mora em `app/services/kernel_ia.py`.
+`POST /kernel-ia/query {prompt}` → `{intent, message, action, route?, taskId?}`.
+Autenticado (JWT do tenant), multi-tenant via RLS. **RBAC por capacidade:** o
+serviço filtra as tools pelo papel (owner/manager = navegação + `consultar_financas`
+[D-58]; recepção = só navegação; barbeiro = agenda + solicitar remarcação). A
+lógica de LLM + tools + RBAC mora em `app/services/kernel_ia.py`.
 """
 from __future__ import annotations
 
@@ -34,8 +35,8 @@ class QueryOut(BaseModel):
 
     intent: str
     message: str
-    # action ∈ {navigate, reschedule, answer, config, erro}. Com 'navigate', `route`
-    # é a rota do frontend para onde encaminhar o usuário.
+    # action ∈ {navigate, reschedule, finance_answer, answer, config, erro}. Com
+    # 'navigate', `route` é a rota do frontend para onde encaminhar o usuário.
     action: str = "answer"
     route: Optional[str] = None
     task_id: Optional[str] = Field(default=None, alias="taskId")
