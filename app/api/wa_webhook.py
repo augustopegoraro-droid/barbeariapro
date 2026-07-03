@@ -23,8 +23,10 @@ from app.core.config import settings
 from app.core.security import secrets_match
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.services import conversation as conv_svc
+from app.services import opt_out as opt_out_svc
 from app.services.conversation import MediaIn
 from app.services.tenant import org_id_by_wa_instance
+from app.services.whatsapp import send_text
 from models.enums import AttachmentMediaType, MessageSenderType, MessageType
 
 _logger = logging.getLogger(__name__)
@@ -149,19 +151,28 @@ async def evolution_webhook(
         event, payload.get("instance"), list(payload.get("data", {}).keys()),
     )
 
-    # Não encaminha send.message ao n8n para evitar loop (bot responde, n8n recebe, gera outra resposta...)
-    if event != "send.message":
-        background_tasks.add_task(_forward_to_n8n, payload)
-
-    _MSG_EVENTS = ("messages.upsert", "send.message")
-    if event not in _MSG_EVENTS:
-        return {"ok": True, "skipped": True, "reason": f"event={event}"}
-
     data: dict = payload.get("data", {})
     key: dict = data.get("key", {})
 
     # send.message é sempre fromMe=true; messages.upsert depende do campo
     from_me: bool = (event == "send.message") or key.get("fromMe", False)
+
+    msg_type_raw: str = data.get("messageType", "conversation")
+    body, media = _extract_content(msg_type_raw, data.get("message", {}))
+
+    # Opt-out por palavra-chave (só depende do texto). Se o cliente pediu para
+    # parar de receber, NÃO encaminhamos ao n8n — a Raquel não deve puxar
+    # conversa com quem acabou de mandar "SAIR" (isso gera denúncia). O registro
+    # do consent acontece mais abaixo, já com RLS setado.
+    client_opt_out = (not from_me) and opt_out_svc.is_opt_out_keyword(body)
+
+    # Encaminha ao n8n, exceto: send.message (evita loop bot→n8n→bot) e opt-out.
+    if event != "send.message" and not client_opt_out:
+        background_tasks.add_task(_forward_to_n8n, payload)
+
+    _MSG_EVENTS = ("messages.upsert", "send.message")
+    if event not in _MSG_EVENTS:
+        return {"ok": True, "skipped": True, "reason": f"event={event}"}
 
     # Filtra apenas mensagens de contatos individuais
     phone = _extract_phone(key.get("remoteJid", ""))
@@ -189,11 +200,9 @@ async def evolution_webhook(
     _logger.info("wa_webhook event=%s phone=%s sender=%s", event, phone, sender_type.value)
 
     wa_message_id: Optional[str] = key.get("id")
-    msg_type_raw: str = data.get("messageType", "conversation")
     crm_msg_type = _MSG_TYPE_MAP.get(msg_type_raw, MessageType.text)
-    message_dict: dict = data.get("message", {})
-    body, media = _extract_content(msg_type_raw, message_dict)
 
+    opt_out_registered = False
     try:
         await conv_svc.record_message(
             db,
@@ -205,9 +214,23 @@ async def evolution_webhook(
             wa_message_id=wa_message_id,
             media=media,
         )
+        # Grava o opt-out na MESMA transação da mensagem (atômico). Barra
+        # lembrete + reativação, que filtram por esse consent.
+        if client_opt_out:
+            registered_id = await opt_out_svc.register_opt_out(
+                db, org_id=org_id, phone=phone
+            )
+            opt_out_registered = registered_id is not None
         await db.commit()
     except Exception as exc:
         _logger.error("wa_webhook record_message falhou phone=%s: %s", phone, exc)
         await db.rollback()
+        opt_out_registered = False
+
+    # Confirmação fora da transação (I/O de rede; send_text nunca lança e
+    # respeita a trava de staging). Só confirma se de fato registrou o consent.
+    if opt_out_registered:
+        _logger.info("wa_webhook opt-out registrado phone=%s", phone)
+        await send_text(phone=phone, message=opt_out_svc.CONFIRMATION)
 
     return {"ok": True}

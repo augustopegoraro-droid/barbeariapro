@@ -21,6 +21,7 @@ from models import (
     DeliveryStatus,
     MessageDirection,
     MessageLog,
+    Organization,
     Service,
 )
 from models.enums import LoyaltyStatus, MessageSenderType, MessageType
@@ -30,17 +31,34 @@ _logger = logging.getLogger(__name__)
 
 _TEMPLATE = "reactivation_v1"
 
+# Teto de ENVIOS novos por rodada — evita rajada quando a fila de inativos
+# encher (ex.: pós-import de milhares de clientes). Sem isto o loop dispararia
+# todos de uma vez, o que o WhatsApp lê como spam. O cooldown já espaça o resto
+# ao longo dos dias. Ajustável por chamada.
+_DEFAULT_BATCH_LIMIT = 40
+# Teto de candidatos lidos por rodada (proteção de memória — não carregar
+# milhares de linhas quando só vamos enviar algumas dezenas).
+_CANDIDATE_SCAN_CAP = 500
 
-async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
+
+async def run(
+    org_id: int,
+    session: AsyncSession,
+    batch_limit: int = _DEFAULT_BATCH_LIMIT,
+) -> dict[str, int]:
     """Envia mensagens de reativação para clientes em risco ou inativos.
 
-    Verifica cooldown via message_log antes de enviar.
-    Retorna contagem de enviados, ignorados e total de alvos.
+    Verifica cooldown via message_log antes de enviar. Envia no máximo
+    ``batch_limit`` mensagens NOVAS por rodada (anti-rajada); o cooldown
+    espalha o restante pelas rodadas seguintes. Retorna contagem de
+    enviados, ignorados e total de alvos lidos.
     """
     cooldown_cutoff = datetime.now(timezone.utc) - timedelta(
         days=settings.reactivation_cooldown_days
     )
 
+    # Prioriza quem saiu há menos tempo (maior chance de retorno) e limita a
+    # leitura — o corte real de ritmo é o `break` no batch_limit abaixo.
     targets = (
         await session.execute(
             select(ClientLoyalty, Client)
@@ -51,12 +69,24 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
             )
             .where(Client.deleted_at.is_(None))
             .where(Client.is_blocked.is_(False))
+            .order_by(ClientLoyalty.last_visit_at.desc().nulls_last())
+            .limit(_CANDIDATE_SCAN_CAP)
         )
     ).all()
 
     sent = skipped = 0
 
+    # Nome comercial p/ identificar o remetente (uma busca por run).
+    business_name = (
+        await session.execute(
+            select(Organization.name).where(Organization.id == org_id)
+        )
+    ).scalar_one_or_none()
+
     for loyalty, client in targets:
+        # Anti-rajada: para no teto de envios da rodada; o resto vai na próxima.
+        if sent >= batch_limit:
+            break
         # Cooldown: pula se já recebeu mensagem de reativação recentemente
         already_sent = (
             await session.execute(
@@ -121,6 +151,7 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
             barber_name=barber_name,
             service_name=service_name,
             benefit=resolve_benefit(loyalty.nivel, loyalty.categoria),
+            business_name=business_name,
         )
 
         success = await send_text(phone=client.phone_e164, message=message)
@@ -159,23 +190,38 @@ def _build_message(
     barber_name: str | None,
     service_name: str | None,
     benefit: str,
+    business_name: str | None = None,
 ) -> str:
     first_name = name.split()[0] if name else "cliente"
-    days_part = (
-        f"Faz {days_away} dias que não te vemos por aqui"
-        if days_away
-        else "Há um tempo que você não aparece por aqui"
+    greeting = (
+        f"Oi {first_name}! 👋 Aqui é da *{business_name}*."
+        if business_name
+        else f"Oi {first_name}! 👋"
     )
-    barber_part = f"O {barber_name} tá com agenda aberta" if barber_name else "Nossa equipe está pronta"
-    service_part = f" — que tal um {service_name}?" if service_name else "?"
+    # Sem número exato de dias: "faz 90 dias" soa robótico e denuncia automação.
+    # A saudação varia pela faixa de inatividade (personalização honesta, não
+    # técnica de evasão — reflete o dado real de quão tempo o cliente sumiu).
+    if days_away and days_away >= 120:
+        saudade = "Já faz um bom tempo que você não aparece e a saudade bateu! 😊"
+    elif days_away and days_away >= 45:
+        saudade = "Faz um tempinho que você não passa por aqui e bateu a saudade! 😊"
+    else:
+        saudade = "Senti sua falta por aqui! 😊"
+    if barber_name:
+        convite = f"O {barber_name} tá com horários abertos"
+    else:
+        convite = "A equipe tá com horários abertos"
+    convite += (
+        f" — bora marcar um {service_name}?" if service_name else " essa semana. Bora marcar?"
+    )
     benefit_part = (
-        f"\n\nComo cliente especial, você tem direito a: *{benefit}*."
+        f"\n\nE tem um mimo te esperando: *{benefit}*. 🎁"
         if benefit != "Sem benefício"
         else ""
     )
 
     return (
-        f"Oi {first_name}! 👋\n\n"
-        f"{days_part}. {barber_part}{service_part}{benefit_part}\n\n"
-        f"Responda aqui para agendar. 🗓️"
+        f"{greeting}\n\n"
+        f"{saudade} {convite}{benefit_part}\n\n"
+        f"Se quiser, é só me responder por aqui. 🗓️"
     )

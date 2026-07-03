@@ -76,3 +76,25 @@ def test_build_message_nome_vazio():
         barber_name="Thedy",
     )
     assert "Oi cliente!" in msg
+
+
+def test_build_message_identifica_remetente():
+    from app.services.reminders import build_message
+    msg = build_message(
+        client_name="João Silva",
+        start_local=_local(2026, 6, 12, 14, 30),
+        service_name="Corte",
+        barber_name="Taylor",
+        business_name="Taylor & Thedy",
+    )
+    assert "Aqui é da *Taylor & Thedy*" in msg
+    assert "Oi João!" in msg
+    assert "SIM" in msg
+    # sem business_name → não injeta a linha de identificação
+    sem = build_message(
+        client_name="João",
+        start_local=_local(2026, 6, 12, 14, 30),
+        service_name="Corte",
+        barber_name="Taylor",
+    )
+    assert "Aqui é da" not in sem

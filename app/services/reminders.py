@@ -33,6 +33,7 @@ from models import (
     DeliveryStatus,
     MessageDirection,
     MessageLog,
+    Organization,
     Service,
 )
 from models.enums import MessageSenderType, MessageType
@@ -54,18 +55,26 @@ def build_message(
     start_local: datetime,
     service_name: str | None,
     barber_name: str | None,
+    business_name: str | None = None,
 ) -> str:
     first_name = client_name.split()[0] if client_name else "cliente"
     weekday = _WEEKDAY_PT[start_local.weekday()]
     when = f"amanhã ({weekday}) às {start_local.strftime('%H:%M')}"
     svc = f" para *{service_name}*" if service_name else ""
     barber = f" com o {barber_name}" if barber_name else ""
+    # Identifica o remetente (número novo/reativado): reduz "quem é esse?" e
+    # o risco de denúncia — o cliente reconhece o negócio no 1º contato.
+    greeting = (
+        f"Oi {first_name}! 👋 Aqui é da *{business_name}*."
+        if business_name
+        else f"Oi {first_name}! 👋"
+    )
 
     return (
-        f"Oi {first_name}! 👋\n\n"
-        f"Passando para lembrar do seu horário {when}{svc}{barber}. ✂️\n\n"
-        f"Posso confirmar sua presença? Responda *SIM* para confirmar — "
-        f"ou me avise aqui se precisar remarcar ou cancelar."
+        f"{greeting}\n\n"
+        f"Passando pra lembrar do seu horário {when}{svc}{barber}. ✂️\n\n"
+        f"Consegue confirmar presença? Responde *SIM* que já deixo certinho — "
+        f"ou me avisa aqui se precisar remarcar. 🙂"
     )
 
 
@@ -95,6 +104,13 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
     ).all()
 
     sent = skipped = 0
+
+    # Nome comercial p/ identificar o remetente nas mensagens (uma busca por run).
+    business_name = (
+        await session.execute(
+            select(Organization.name).where(Organization.id == org_id)
+        )
+    ).scalar_one_or_none()
 
     for appt, client in rows:
         key = idempotency_key(appt.id, appt.start_at)
@@ -164,6 +180,7 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
             start_local=start_at.astimezone(local_tz()),
             service_name=service_name,
             barber_name=barber_name,
+            business_name=business_name,
         )
 
         success = await send_text(phone=client.phone_e164, message=message)
