@@ -5,6 +5,35 @@
 
 ---
 
+## 0.0000000 SESSÃO 2026-07-03 (2ª) — Redesenho dos blocos da Agenda em produção
+
+> ✅ **DEPLOYADO em prod 2026-07-03** — frontend `main` = **`e985d85`** na VM (pull + rebuild;
+> containers healthy; smoke 307/200). Só frontend — sem migration, sem mudança de backend.
+
+- **O quê:** cards de agendamento da grade do dia (`barbearia-frontend/components/agenda/`)
+  redesenhados: fundo suave via `color-mix` 12–14% do token do status + **barra de acento de 3px
+  na esquerda** (âmbar `--primary` agendado / verde `--chart-2` concluído / `--destructive`
+  cancelado+faltou), **texto nunca âmbar** (nome em `--foreground` semibold; linha 2 "hora ·
+  serviço" 11px `--muted-foreground`); cancelado com `opacity .6` + `line-through`. Célula de
+  30min: 36px → **52px** (`PX_PER_MIN = 52/30`) com linha-guia de 1px `var(--border)` a cada
+  célula (antes só na hora cheia). Novos exports em `constants.ts`: `STATUS_BLOCK`,
+  `STATUS_BLOCK_TEXT`, `TIME_OFF_HATCH` (hachurado p/ folgas — **a API `/agenda?date=` ainda não
+  devolve folgas**, padrão pronto aguardando backend). `STATUS_BADGE`/`STATUS_STYLE` antigos
+  intactos (usados pelo diálogo de ações e card do barbeiro).
+- **Deploy:** padrão cherry-pick isolado (branch de trabalho `feat/multi-tenant-org-id` commit
+  `7a05332` → cherry-pick sobre `origin/main` → push = `e985d85`). Na VM o frontend é clone git
+  com deploy key (`git -C /opt/barbeariapro/barbearia-frontend pull` + rebuild do compose; o
+  compose recriou backend junto por dependência — sem efeito, mesmo código).
+- **Validação (browser, staging local, temas claro+escuro):** 3 estados na mesma tela + modo
+  compacto (bloco de 20min) + fluxo concluir (âmbar→verde ao vivo). Dados de teste da validação
+  **já limpos** (agendamentos+payment+ledger/client_loyalty no dev DB; revert do 473 no staging).
+- **⚠️ Descoberta de ambiente:** local há DOIS Postgres — `barbeariapro-postgres` :5432 =
+  **dev vivo** (backend :8000 + UI local, `.env`); `barbeariapro-staging-postgres` :5433 = **só
+  pytest** (`.env.staging`). A UI local NÃO grava no staging. Concluir atendimento cria
+  `payments` + `loyalty_point_ledger` + `client_loyalty` — limpar tudo junto.
+
+---
+
 ## 0.000000 SESSÃO 2026-07-03 — Deploy D-60 (migration 0027, CHECKs de integridade) + F8 em produção
 
 > ✅ **DEPLOYADO e verificado em produção 2026-07-03.** Migration head **`0026 → 0027`**; os 4
