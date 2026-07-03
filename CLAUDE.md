@@ -315,12 +315,11 @@ precisou de `whitespace-pre-line` no balão + tipo do `action`.
 > só ficou visível agora porque foi a 1ª vez que o Kernel IA (FAB do frontend) foi de fato
 > deployado em prod. Validação manual "LLM real" do D-58 **ainda pendente** por causa disso.
 
-**Painel SuperAdmin completo + Billing (D-61, 2026-07-03 — 🟡 SÓ STAGING, não commitado):**
+**Painel SuperAdmin completo + Billing (D-61, 2026-07-03 — ✅ DEPLOYADO EM PROD, head `0034`):**
 missão autônoma implementou M1–MF do painel de plataforma (dashboard executivo,
 central de operações, gestão/detalhe 360° de barbearias, onboarding derivado,
 billing Stripe via `BillingProvider` desacoplado + mock, assinaturas/dunning,
-impersonação auditada, configurações) — migrations `0028`–`0034` aplicadas no
-staging (head local `0034`; prod segue `0027`). Fonte de verdade da missão:
+impersonação auditada, configurações) — migrations `0028`–`0034` aplicadas em STAGING e PROD (head `0034`). Fonte de verdade da missão:
 **`docs/superadmin/`**. Envs novos de billing no `Settings`; dep `stripe`.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.

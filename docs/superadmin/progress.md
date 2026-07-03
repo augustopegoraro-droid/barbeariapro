@@ -4,6 +4,15 @@
 
 ## 2026-07-03
 
+- **✅ COMMIT + DEPLOY EM PRODUÇÃO.** Commits: painel `2fec4b7`
+  (barbearia-superadmin, +submódulo bumpado) e backend `b849b10` (barbeariapro,
+  51 arquivos, +7.465 linhas) — pushed. VM: backup `~/predeploy_d61_20260703_165238.sql`
+  (597K) → migrations **0028→0034 aplicadas em prod** (head `0034`) → backend
+  rebuildado (dep `stripe`) e **healthy**. Smoke: `/health` ok; 5 rotas novas
+  respondem 401 (existem + guard); tenant sem regressão (`/auth/tenant` 200,
+  `/agenda` 401); log do container limpo. Billing operando em `BILLING_PROVIDER=mock`
+  (default fail-safe) até as chaves Stripe (B-02); painel roda em localhost:3100
+  contra prod até o domínio (B-01); cron do lifecycle agora acionável (B-03).
 - **Auditoria arquitetural pré-commit (9 verificações, todas ✅).** SDK/segredos
   Stripe ausentes do frontend (único import: `stripe_provider.py`, nem testes);
   zero imports cruzados frontend→backend; painel fala SÓ com `/platform/*`

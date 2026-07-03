@@ -1182,7 +1182,7 @@ tocada por esta mudança) **/ 2 skip. 0 regressões.** (408 = 407 + o teste do F
 
 ### D-61 — Painel SuperAdmin completo + arquitetura de Billing (Stripe via BillingProvider) — 2026-07-03
 
-**Status: implementado e testado em STAGING (migrations 0028–0034; suíte 448 pass). NÃO deployado e NÃO commitado — aguardando revisão.**
+**Status: ✅ DEPLOYADO EM PROD 2026-07-03 (commits `b849b10` backend / `2fec4b7` painel; migrations 0028–0034 aplicadas, head `0034`; backend rebuildado healthy; backup `predeploy_d61_20260703_165238.sql` na VM). Billing em `mock` até chaves Stripe (B-02); painel via localhost até domínio (B-01); criar cron do lifecycle no n8n (B-03).**
 
 Missão autônoma executada de ponta a ponta — documentação completa e viva em
 **`docs/superadmin/`** (architecture, decisions SA-D01…SA-D09, roadmap M1–MF,
