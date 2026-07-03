@@ -27,6 +27,7 @@ from app.services.trinks_appointments import (
     import_appointments,
     parse_appointments,
 )
+from app.services.trinks_cash_closing import import_cash_closings, parse_cash_closings
 from app.services.trinks_debts import import_debts, parse_debts
 from app.services.trinks_import import import_clients, parse_clients
 from app.services.trinks_ranking import enrich_clients, parse_ranking
@@ -133,6 +134,27 @@ async def import_trinks_debts(
     raw = await _read_body(request)
     rows, parse_report = parse_debts(raw)
     report = await import_debts(
+        db, current_user.organization_id, rows, dry_run=not commit
+    )
+    return {
+        "commit": commit,
+        "parse": parse_report.as_dict(),
+        "import": report.as_dict(),
+    }
+
+
+@router.post("/cash-closing")
+async def import_trinks_cash_closing(
+    request: Request,
+    db: TenantDB,
+    current_user: CurrentUser,
+    commit: Annotated[bool, Query(description="false=dry-run (padrão); true=grava")] = False,
+) -> dict:
+    """Importa o fechamento de caixa diário (Movimentação Financeira) da Trinks."""
+    await _guard(db, current_user)
+    raw = await _read_body(request)
+    rows, parse_report = parse_cash_closings(raw)
+    report = await import_cash_closings(
         db, current_user.organization_id, rows, dry_run=not commit
     )
     return {

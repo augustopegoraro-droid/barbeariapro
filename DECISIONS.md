@@ -988,6 +988,37 @@ aplicadas em local+staging (**prod pendente**).
 
 ---
 
+### D-59 — Fechamento de caixa diário: histórico migrado da Trinks — 2026-07-02
+
+**Contexto:** export `movimentacaofinanceira2026.csv` (Trinks) traz DUAS tabelas no mesmo
+arquivo: (1) pagamentos por comanda (~3.688 linhas) — fora de escopo, exigiria casar/importar
+agendamentos de jan-jun inteiros (só temos julho); (2) **"Resumo de Movimentação de Entradas e
+Saídas"** — um fechamento por dia (abertura/recebido/troco/despesas/sangria/saldo), 149 dias
+(05/01 a 02/07/2026). O sistema **ainda não tem módulo de Caixa** (abrir/fechar em tempo real —
+`CLAUDE.md §6`); esta é só a migração do histórico, no mesmo molde de `client_debts` (D-56/0023).
+
+**Decisões:**
+1. **Tabela nova `cash_daily_closings`** (migration `0026`, aditiva): `organization_id` CASCADE +
+   RLS + `UNIQUE(organization_id, closing_date)`. Colunas espelham o export: `opening_balance`,
+   `cash_received`, `change_given`, `cash_expenses`, `cash_total`, `withdrawal` (sangria),
+   `closing_balance`, `other_methods_received`, `other_methods_expenses`, `opening_history`.
+2. **`app/services/trinks_cash_closing.py`** (parse puro + persistência), mesmo molde da
+   `trinks_debts.py`: localiza a 2ª tabela pelo cabeçalho ("data" + "abertura do caixa"), ignora
+   o rodapé "Total período" (1ª coluna vazia). **Upsert por `(org, dia)`** — idempotente, sem
+   duplicar em re-importações (diferente de `client_debts`, que só pula duplicata).
+3. **Superfícies:** CLI `scripts/import_trinks_cash_closing.py` (roda na VM, `--commit`) + rota
+   self-service `POST /admin/import/trinks/cash-closing` (`app/api/imports.py`, dry-run padrão).
+
+**Validação:** parser bateu 149/149 linhas com o arquivo real; soma de `cash_received` (R$
+22.906,00) e `other_methods_received` (R$ 389.762,15) **conferem exatamente** com o rodapé "Total
+período" do próprio relatório da Trinks. Rodar o import 2x atualiza (upsert), não duplica.
+✅ **Aplicado em staging (org 1):** migration `0026` + 149 dias importados. Suíte **370 pass** /
+2 fail ambientais (mesmas de sempre). **Prod pendente** (aplicar `0026` + rodar o CLI com o
+arquivo real). Fora de escopo desta entrada: importar a tabela 1 (pagamentos por comanda) e
+construir o módulo de Caixa vivo (abrir/fechar em tempo real).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

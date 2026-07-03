@@ -252,6 +252,14 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > telefone, nunca sobrescreve). **Débitos** (`trinks_debts.py` + migration `0023` `client_debts` +
 > API `app/api/debts.py`: `GET /admin/debts`, `/summary`, `POST /{id}/pay|reopen`): contas a receber
 > (não cabia em `payments`); casa cliente por nome, `client_id` nullable, idempotente.
+> **Fechamento de caixa diário (D-59, 2026-07-02):** `trinks_cash_closing.py` + migration `0026`
+> `cash_daily_closings` + `scripts/import_trinks_cash_closing.py` + rota
+> `POST /admin/import/trinks/cash-closing`. Lê a 2ª tabela do export "Movimentação Financeira"
+> (o "Resumo de Movimentação de Entradas e Saídas"; a 1ª tabela, pagamentos por comanda, é fora de
+> escopo — exigiria agendamentos de todo o período). Upsert por `(org, dia)`, idempotente.
+> **✅ Aplicado em staging (org 1): 149 dias (05/01–02/07/2026).** Ainda **não existe módulo de
+> Caixa vivo** (abrir/fechar em tempo real) — isto é só o histórico migrado para consulta/relatório.
+> **Prod pendente.**
 
 **Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — local/staging; prod pendente):**
 - **Kernel IA = NAVEGADOR por linguagem natural (anti-alucinação):** `app/services/kernel_ia.py` +

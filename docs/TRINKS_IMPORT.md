@@ -167,6 +167,22 @@ Rotas: importar `POST /admin/import/trinks/debts?commit=`; gerir
 `GET /admin/debts?status=aberto`, `GET /admin/debts/summary`,
 `POST /admin/debts/{id}/pay`, `POST /admin/debts/{id}/reopen` (gestor).
 
+## Fechamento de caixa diário → `scripts/import_trinks_cash_closing.py` + `cash_daily_closings` (migration 0026)
+
+O export "Movimentação Financeira" da Trinks traz **duas tabelas no mesmo arquivo**:
+pagamentos por comanda (fora de escopo — exigiria agendamentos de todo o período) e o
+**"Resumo de Movimentação de Entradas e Saídas"**, um fechamento por dia (abertura,
+recebido em dinheiro, troco, despesas, sangria, saldo, recebido em outras formas).
+O sistema ainda **não tem módulo de Caixa vivo** (abrir/fechar em tempo real) — isto é
+só o histórico migrado para consulta/relatório. **Upsert por `(org, dia)`** (diferente
+dos débitos: rodar de novo **atualiza** o dia, não só pula duplicata).
+
+```bash
+python scripts/import_trinks_cash_closing.py --org-id 1 --file <movimentacaofinanceira.csv>            # dry-run
+python scripts/import_trinks_cash_closing.py --org-id 1 --file <movimentacaofinanceira.csv> --commit
+```
+Rota: `POST /admin/import/trinks/cash-closing?commit=`.
+
 ## Teste
 `tests/test_trinks_import.py` valida o parser (mapeamento, telefone, dedup, data,
 e-mail, canal, encoding latin-1) contra `tests/fixtures/trinks/clientes_sample.csv`

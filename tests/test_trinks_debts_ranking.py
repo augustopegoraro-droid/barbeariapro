@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+from app.services.trinks_cash_closing import parse_cash_closings
 from app.services.trinks_debts import parse_debts
 from app.services.trinks_ranking import parse_ranking
 
@@ -33,3 +34,21 @@ def test_parse_ranking():
     assert joao.phone == "+5563992287396"
     assert joao.email == "joao@x.com"  # normalizado p/ minúsculas
     assert joao.birth_date == date(1990, 3, 15)
+
+
+def test_parse_cash_closings():
+    rows, rep = parse_cash_closings(FIXT / "fechamento_caixa_sample.csv")
+    assert rep.total_rows == 2
+    assert rep.parsed == 2
+    assert rep.no_date == 0
+    first, second = rows
+    assert first.closing_date == date(2026, 1, 5)
+    assert first.opening_balance == Decimal("969.00")
+    assert first.cash_received == Decimal("445.00")
+    assert first.closing_balance == Decimal("1414.00")
+    assert first.other_methods_received == Decimal("2068.00")
+    assert second.closing_date == date(2026, 1, 6)
+    assert second.withdrawal == Decimal("8.00")
+    assert second.other_methods_expenses == Decimal("-7312.02")
+    # rodapé "Total período" (1ª coluna vazia) não vira registro (só 2 linhas, não 3)
+    assert len(rows) == 2

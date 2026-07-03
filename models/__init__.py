@@ -42,6 +42,7 @@ from .service import Service
 from .appointment import Appointment, AppointmentItem
 from .payment import Expense, ExpenseCategory, Payment
 from .debt import ClientDebt
+from .cash_closing import CashDailyClosing
 from .appointment_reschedule import AppointmentRescheduleRequest
 from .integration import CalendarSync, IntegrationAccount, MessageLog
 from .loyalty import (
@@ -108,6 +109,7 @@ __all__ = [
     "ExpenseCategory",
     "Expense",
     "ClientDebt",
+    "CashDailyClosing",
     "AppointmentRescheduleRequest",
     # integrações
     "IntegrationAccount",
