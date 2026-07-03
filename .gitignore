@@ -54,6 +54,12 @@ backup-*.tar.gz
 workflows-backup*.json
 *.tar.gz
 *.bak
+# Dumps pg_dump (pré-deploy/pré-import) — podem conter PII/financeiro; mesmo
+# fora de backups/, nunca versionar (schema.sql, sem dados, segue rastreado).
+predeploy_*.sql
+backup_*.sql
+*_backup.sql
+*-backup.sql
 
 # ── n8n — exports de workflow (podem conter API keys e webhooks) ──────────────
 # workflows.json é versionado de propósito (scripts patcham ele; credenciais já
