@@ -44,6 +44,24 @@ _STATUS_MAP = {
 }
 
 
+def _to_dict(obj: Any) -> dict:
+    """Normaliza objetos tipados do SDK para dict PURO (recursivo).
+
+    Os StripeObject não expõem interface de dict estável entre versões
+    (`.get`/`dict()` levantam KeyError — validado em teste real contra o
+    sandbox). `str(StripeObject)` é JSON completo em todas as versões; no
+    SDK 15.x é a única serialização recursiva disponível. Todo retorno do
+    SDK passa por aqui antes dos normalizadores `_sub_state`/`_invoice_state`.
+    """
+    if isinstance(obj, dict) and type(obj) is dict:
+        return obj
+    if hasattr(obj, "to_dict_recursive"):
+        return obj.to_dict_recursive()
+    import json
+
+    return json.loads(str(obj))
+
+
 def _ts(value: Optional[int]) -> Optional[datetime]:
     return datetime.fromtimestamp(value, tz=timezone.utc) if value else None
 
@@ -114,11 +132,11 @@ class StripeBillingProvider(BillingProvider):
         if trial_days:
             params["trial_period_days"] = trial_days
         sub = self._client.subscriptions.create(params=params)
-        return self._sub_state(sub)
+        return self._sub_state(_to_dict(sub))
 
     async def update_subscription(self, provider_subscription_id: str, *,
                                   price_id: str) -> SubscriptionState:
-        sub = self._client.subscriptions.retrieve(provider_subscription_id)
+        sub = _to_dict(self._client.subscriptions.retrieve(provider_subscription_id))
         item_id = sub["items"]["data"][0]["id"]
         updated = self._client.subscriptions.update(
             provider_subscription_id,
@@ -127,7 +145,7 @@ class StripeBillingProvider(BillingProvider):
                 "proration_behavior": "create_prorations",
             },
         )
-        return self._sub_state(updated)
+        return self._sub_state(_to_dict(updated))
 
     async def cancel_subscription(self, provider_subscription_id: str, *,
                                   at_period_end: bool = True) -> SubscriptionState:
@@ -137,20 +155,20 @@ class StripeBillingProvider(BillingProvider):
             )
         else:
             sub = self._client.subscriptions.cancel(provider_subscription_id)
-        return self._sub_state(sub)
+        return self._sub_state(_to_dict(sub))
 
     async def reactivate_subscription(self, provider_subscription_id: str) -> SubscriptionState:
         sub = self._client.subscriptions.update(
             provider_subscription_id, params={"cancel_at_period_end": False}
         )
-        return self._sub_state(sub)
+        return self._sub_state(_to_dict(sub))
 
     async def pause_subscription(self, provider_subscription_id: str) -> SubscriptionState:
         sub = self._client.subscriptions.update(
             provider_subscription_id,
             params={"pause_collection": {"behavior": "void"}},
         )
-        state = self._sub_state(sub)
+        state = self._sub_state(_to_dict(sub))
         state.status, state.paused = "paused", True
         return state
 
@@ -158,14 +176,14 @@ class StripeBillingProvider(BillingProvider):
         sub = self._client.subscriptions.update(
             provider_subscription_id, params={"pause_collection": ""}
         )
-        return self._sub_state(sub)
+        return self._sub_state(_to_dict(sub))
 
     async def get_subscription(self, provider_subscription_id: str) -> SubscriptionState:
-        return self._sub_state(self._client.subscriptions.retrieve(provider_subscription_id))
+        return self._sub_state(_to_dict(self._client.subscriptions.retrieve(provider_subscription_id)))
 
     async def get_invoices(self, customer_id: str, *, limit: int = 24) -> list[InvoiceState]:
         invoices = self._client.invoices.list(params={"customer": customer_id, "limit": limit})
-        return [self._invoice_state(i) for i in invoices.data]
+        return [self._invoice_state(_to_dict(i)) for i in invoices.data]
 
     async def refund_payment(self, provider_payment_id: str, *, amount=None) -> None:
         params: dict[str, Any] = {"payment_intent": provider_payment_id}
@@ -212,15 +230,8 @@ class StripeBillingProvider(BillingProvider):
             event = stripe.Webhook.construct_event(body, signature, secret)
         except Exception as exc:  # assinatura inválida/payload corrompido
             raise BillingProviderError(f"webhook rejeitado: {exc}") from exc
-        # Normalizamos sobre dict PURO: objetos tipados do SDK não expõem a
-        # interface de dict de forma estável entre versões.
-        if hasattr(event, "to_dict_recursive"):
-            raw = event.to_dict_recursive()
-        else:
-            import json
-
-            raw = json.loads(body.decode("utf-8"))
-        return [self._normalize_event(raw)]
+        # Normalizamos sobre dict PURO (mesma razão do _to_dict).
+        return [self._normalize_event(_to_dict(event))]
 
     def parse_payload(self, payload: dict) -> ProviderEvent:
         return self._normalize_event(payload)
@@ -238,7 +249,7 @@ class StripeBillingProvider(BillingProvider):
             )
         if etype == "checkout.session.completed" and obj.get("subscription"):
             sub = self._client.subscriptions.retrieve(obj["subscription"])
-            state = self._sub_state(sub)
+            state = self._sub_state(_to_dict(sub))
             return ProviderEvent(
                 **base, kind="subscription_updated",
                 provider_customer_id=state.provider_customer_id, subscription=state,

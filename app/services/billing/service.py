@@ -557,6 +557,19 @@ async def apply_provider_event(event: ProviderEvent) -> Optional[int]:
 async def _apply_subscription_state(session: AsyncSession, org_id: int, event: ProviderEvent) -> None:
     state = event.subscription
     assert state is not None
+    # Webhooks chegam FORA DE ORDEM (comportamento documentado da Stripe): o
+    # payload pode ser snapshot antigo e regravar estado obsoleto por cima do
+    # atual (visto no sandbox: resume seguido de webhook atrasado do pause).
+    # Regra canônica: rebuscar o estado ATUAL no gateway e aplicar esse;
+    # payload do evento é fallback se o gateway estiver inacessível.
+    try:
+        provider = get_billing_provider(event.provider)
+        state = await provider.get_subscription(state.provider_subscription_id)
+    except Exception as exc:  # noqa: BLE001 — degrada para o payload do evento
+        _logger.warning(
+            "refresh da assinatura %s no gateway falhou (%s) — aplicando payload do evento",
+            state.provider_subscription_id, exc,
+        )
     sub = (
         await session.execute(
             select(Subscription).where(
