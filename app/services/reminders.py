@@ -2,8 +2,10 @@
 """Lembrete de agendamento via WhatsApp (anti no-show).
 
 Roda por cron (n8n, a cada hora). Alvo: agendamentos 'agendado' que entram na
-janela de `reminder_lead_hours` antes do início. Idempotente por agendamento
-via `message_log.idempotency_key` — rodadas sobrepostas não duplicam envio.
+janela de `reminder_lead_hours` antes do início. Idempotente por agendamento: a
+`message_log.idempotency_key` é RESERVADA atomicamente (INSERT ... ON CONFLICT DO
+NOTHING na UNIQUE) ANTES do envio — rodadas concorrentes (retry do n8n, cron
+sobreposto, multi-processo) perdem o claim e não reenviam.
 """
 
 from __future__ import annotations
@@ -11,7 +13,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -96,15 +99,7 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
     for appt, client in rows:
         key = idempotency_key(appt.id, appt.start_at)
 
-        already = (
-            await session.execute(
-                select(MessageLog.id).where(MessageLog.idempotency_key == key).limit(1)
-            )
-        ).first()
-        if already:
-            skipped += 1
-            continue
-
+        # opt-out é filtro read-only (sem corrida) — barra antes de reservar a key.
         opted_out = (
             await session.execute(
                 select(ClientConsent.id)
@@ -115,6 +110,34 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
             )
         ).first()
         if opted_out:
+            skipped += 1
+            continue
+
+        # Claim ATÔMICO da idempotency_key ANTES do envio — fecha o TOCTOU que
+        # duplicava. O antigo SELECT-then-send deixava rodadas concorrentes verem
+        # "ainda não enviado" ao mesmo tempo e disparar todas (2x/4x com retry do
+        # n8n). `INSERT ... ON CONFLICT DO NOTHING` adquire o lock do índice unique
+        # já no INSERT: só o vencedor do claim envia; as concorrentes recebem
+        # `None` (DO NOTHING, sem IntegrityError) e pulam sem reenviar.
+        claimed_id = (
+            await session.execute(
+                pg_insert(MessageLog)
+                .values(
+                    organization_id=org_id,
+                    client_id=client.id,
+                    appointment_id=appt.id,
+                    direction=MessageDirection.outbound,
+                    idempotency_key=key,
+                    template=_TEMPLATE,
+                    delivery_status=DeliveryStatus.pending,
+                    attempt_count=1,
+                )
+                .on_conflict_do_nothing(index_elements=["idempotency_key"])
+                .returning(MessageLog.id)
+            )
+        ).scalar_one_or_none()
+        if claimed_id is None:
+            # outra rodada dentro da janela já reservou/enviou este lembrete.
             skipped += 1
             continue
 
@@ -145,22 +168,12 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
 
         success = await send_text(phone=client.phone_e164, message=message)
 
-        # Falha não grava a idempotency_key: a próxima rodada dentro da janela
-        # tenta de novo (ex.: Evolution API fora do ar por alguns minutos).
-        log = MessageLog(
-            organization_id=org_id,
-            client_id=client.id,
-            appointment_id=appt.id,
-            direction=MessageDirection.outbound,
-            idempotency_key=key if success else None,
-            template=_TEMPLATE,
-            delivery_status=DeliveryStatus.sent if success else DeliveryStatus.failed,
-            attempt_count=1,
-        )
-        session.add(log)
-        await session.flush()
-
         if success:
+            await session.execute(
+                update(MessageLog)
+                .where(MessageLog.id == claimed_id)
+                .values(delivery_status=DeliveryStatus.sent)
+            )
             await _conv_svc.record_message(
                 session,
                 org_id=org_id,
@@ -168,12 +181,18 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
                 sender_type=MessageSenderType.system,
                 body=message,
                 message_type=MessageType.text,
-                message_log_id=log.id,
+                message_log_id=claimed_id,
             )
-
-        if success:
             sent += 1
         else:
+            # Envio falhou (ex.: Evolution fora do ar): LIBERA a reserva
+            # (idempotency_key=NULL) para a próxima rodada dentro da janela
+            # retentar — sem a reserva presa bloqueando o retry.
+            await session.execute(
+                update(MessageLog)
+                .where(MessageLog.id == claimed_id)
+                .values(delivery_status=DeliveryStatus.failed, idempotency_key=None)
+            )
             skipped += 1
 
     return {"sent": sent, "skipped": skipped, "total_targets": len(rows)}
