@@ -30,6 +30,10 @@ class SubscriptionStatus(str, enum.Enum):
     active = "active"
     past_due = "past_due"
     canceled = "canceled"
+    # Billing SaaS (migration 0032): pausada pelo suporte/gateway; criada no
+    # gateway aguardando o 1º pagamento (Stripe 'incomplete').
+    paused = "paused"
+    incomplete = "incomplete"
 
 
 class MembershipStatus(str, enum.Enum):

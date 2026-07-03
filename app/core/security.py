@@ -50,6 +50,28 @@ def create_access_token(*, user_id: int, organization_id: int) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_impersonation_token(
+    *, user_id: int, organization_id: int, admin_id: int, minutes: int = 30
+) -> str:
+    """JWT de TENANT emitido pela PLATAFORMA para suporte (superadmin M10).
+
+    Mesmo shape do token de tenant (sub/org — aceito por get_token_data sem
+    mudanças) + claim `imp_by` (id do superadmin) para rastreabilidade, e
+    expiração CURTA (default 30 min). O motivo fica no platform_audit_log,
+    não no token.
+    """
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=max(5, min(minutes, 60)))
+    payload: dict[str, Any] = {
+        "sub": str(user_id),
+        "org": organization_id,
+        "imp_by": admin_id,
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp()),
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
 def create_platform_token(*, admin_id: int) -> str:
     """Emite um JWT de PLATAFORMA (superadmin do SaaS).
 

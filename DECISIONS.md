@@ -1180,6 +1180,39 @@ tocada por esta mudança) **/ 2 skip. 0 regressões.** (408 = 407 + o teste do F
 
 ---
 
+### D-61 — Painel SuperAdmin completo + arquitetura de Billing (Stripe via BillingProvider) — 2026-07-03
+
+**Status: implementado e testado em STAGING (migrations 0028–0034; suíte 448 pass). NÃO deployado e NÃO commitado — aguardando revisão.**
+
+Missão autônoma executada de ponta a ponta — documentação completa e viva em
+**`docs/superadmin/`** (architecture, decisions SA-D01…SA-D09, roadmap M1–MF,
+progress, api, blockers, bugs, todo). Resumo do que existe agora:
+
+- **Painel superadmin** (repo `barbearia-superadmin`): Dashboard executivo (MRR/
+  ARR/churn/LTV + séries), Central de Operações (alertas por regra), Barbearias
+  (tabela rica + detalhe 360° com notas internas/timeline/onboarding), Onboarding
+  (funil 11 etapas derivadas + overrides manuais), Assinaturas (dunning + 8 ações),
+  Financeiro, Logs (auditoria + webhooks com reprocesso), Configurações (planos
+  CRUD + sync gateway, cupons), paleta ⌘K, design system alinhado ao tenant.
+- **Billing** (`app/services/billing/`): domínio completo (migration 0032 —
+  invoices/billing_payments/payment_attempts/coupons/credits/billing_events/
+  webhook_events/plan_prices/plan_limits/feature_flags), interface `BillingProvider`
+  + `StripeBillingProvider` (único import de stripe; Checkout mode=subscription,
+  Portal, Prices, webhook assinado, API 2026-06-24.dahlia) + `MockBillingProvider`
+  (default sem chave), lifecycle manual (`/internal/billing/run-lifecycle`, cron
+  n8n pendente), entitlements com `BILLING_ENFORCEMENT=off|log|hard` (1º ponto:
+  criação de barbeiro).
+- **Plataforma**: `/platform/metrics|alerts|audit-log`, `/platform/orgs/overview`
+  + detalhe 360°, onboarding, `/platform/billing/*`, impersonação
+  (`POST /platform/orgs/{id}/impersonate` — motivo obrigatório, token 5–60 min
+  com claim `imp_by`, auditoria em `platform_audit_log` [migration 0034, molde
+  estrito sem GRANT]).
+- **Envs novos**: `BILLING_PROVIDER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+  `BILLING_GRACE_DAYS_PAST_DUE`, `BILLING_ENFORCEMENT`. Dep nova: `stripe`.
+- **Deploy**: aplicar 0028–0034 (aditivas), setar envs, criar cron do lifecycle,
+  webhook endpoint na Stripe. Bloqueios externos em `docs/superadmin/blockers.md`
+  (B-01 domínio, B-02 chaves Stripe, B-03 cron n8n).
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

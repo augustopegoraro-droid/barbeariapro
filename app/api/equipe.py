@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.entitlements import check_limit
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import (
@@ -291,6 +292,15 @@ async def criar_barbeiro(
 ) -> BarberSimpleOut:
     """Cria barbeiro vinculado a todas as unidades e serviços ativos da organização."""
     await _require_manager(db, current_user)
+
+    # Enforcement do limite de profissionais do plano (superadmin M7, SA-D06).
+    # Modo via BILLING_ENFORCEMENT: off → ignora; log → permite e loga; hard → 402.
+    current_barbers = (
+        await db.execute(
+            select(func.count()).select_from(Barber).where(Barber.deleted_at.is_(None))
+        )
+    ).scalar_one()
+    await check_limit(db, "barbers", current_count=int(current_barbers))
 
     barber = Barber(
         organization_id=current_user.organization_id,

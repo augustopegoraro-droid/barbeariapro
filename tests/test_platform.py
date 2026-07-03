@@ -72,6 +72,15 @@ async def platform_headers(client):
     assert resp.status_code == 200, resp.text
     yield {"Authorization": f"Bearer {resp.json()['access_token']}"}
     with Session(eng) as s, s.begin():
+        # Ações de plataforma geram auditoria (M9) com FK RESTRICT ao admin —
+        # limpar o audit antes do admin.
+        s.execute(
+            text(
+                "DELETE FROM platform_audit_log WHERE admin_id IN "
+                "(SELECT id FROM platform_admins WHERE email=:e)"
+            ),
+            {"e": PLATFORM_EMAIL},
+        )
         s.execute(text("DELETE FROM platform_admins WHERE email=:e"), {"e": PLATFORM_EMAIL})
 
 

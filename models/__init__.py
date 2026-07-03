@@ -33,7 +33,12 @@ from .enums import (
     UnitRole,
 )
 from .organization import Organization, Plan, Subscription
-from .platform_admin import PlatformAdmin
+from .platform_admin import (
+    PlatformAdmin,
+    PlatformAuditLog,
+    PlatformOnboardingOverride,
+    PlatformOrgNote,
+)
 from .unit import BusinessHours, Unit
 from .user import User, UserUnit
 from .barber import Barber, BarberService, BarberUnit, TimeOff
@@ -43,6 +48,22 @@ from .appointment import Appointment, AppointmentItem
 from .payment import Expense, ExpenseCategory, Payment
 from .debt import ClientDebt
 from .cash_closing import CashDailyClosing
+from .billing import (
+    BillingCredit,
+    BillingCustomer,
+    BillingEvent,
+    BillingPayment,
+    Coupon,
+    Discount,
+    FeatureFlag,
+    Invoice,
+    PaymentAttempt,
+    PlanFeature,
+    PlanLimit,
+    PlanPrice,
+    UsageMetric,
+    WebhookEvent,
+)
 from .appointment_reschedule import AppointmentRescheduleRequest
 from .integration import CalendarSync, IntegrationAccount, MessageLog
 from .loyalty import (
@@ -86,6 +107,24 @@ __all__ = [
     "Plan",
     "Subscription",
     "PlatformAdmin",
+    "PlatformOrgNote",
+    "PlatformOnboardingOverride",
+    "PlatformAuditLog",
+    # billing SaaS
+    "PlanPrice",
+    "FeatureFlag",
+    "PlanFeature",
+    "PlanLimit",
+    "BillingCustomer",
+    "Invoice",
+    "BillingPayment",
+    "PaymentAttempt",
+    "Coupon",
+    "Discount",
+    "BillingCredit",
+    "UsageMetric",
+    "BillingEvent",
+    "WebhookEvent",
     # estrutura
     "Unit",
     "BusinessHours",

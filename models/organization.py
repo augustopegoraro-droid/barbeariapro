@@ -54,9 +54,18 @@ class Plan(Base):
     )
     max_units: Mapped[int] = mapped_column(Integer, nullable=False)
     max_barbers: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Congelado (nunca foi lido por código) — substituído por plan_features/
+    # plan_limits normalizados na migration 0032. Mantido por retrocompat.
     features: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSONB), nullable=False, server_default=text("'{}'::jsonb")
     )
+    # Billing SaaS (migration 0032). slug estável p/ código/integrações;
+    # stripe_product_id espelha o Product na Stripe (nullable até sincronizar).
+    slug: Mapped[Optional[str]] = mapped_column(Text, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    stripe_product_id: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
@@ -147,6 +156,22 @@ class Subscription(Base):
         TIMESTAMP(timezone=True), nullable=False
     )
     canceled_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+    # Billing SaaS (migration 0032). provider 'manual' = sem gateway (estado
+    # gerido pelo lifecycle job); 'stripe' = estado dirigido por webhooks.
+    provider: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'manual'")
+    )
+    provider_customer_id: Mapped[Optional[str]] = mapped_column(Text)
+    provider_subscription_id: Mapped[Optional[str]] = mapped_column(Text)
+    cancel_at_period_end: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("false")
+    )
+    trial_end: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+    paused_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+    resumes_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     # Endpoints de debug (ex.: /bot/debounce/debug-set-session) — manter False em produção
     enable_debug_endpoints: bool = False
 
+    # Billing do SaaS (superadmin M7). 'mock' é o default fail-safe: sem chave
+    # Stripe o sistema opera com o provider de desenvolvimento. Enforcement de
+    # limites de plano: off (não checa) | log (permite e loga) | hard (bloqueia).
+    billing_provider: str = "mock"
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    billing_grace_days_past_due: int = 7
+    billing_enforcement: str = "log"
+
     # Bot / n8n chatbot
     bot_api_key: str = ""
     bot_organization_id: int = 0

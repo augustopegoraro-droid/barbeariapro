@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agenda, auth, barbeiro, bot, chatwoot, clientes, conversations, crm, dashboard, debts, empresa, equipe, financeiro, gestor, health, imports, integracoes, kernel_ia, loyalty, memberships, platform, reminders, reschedule, servicos, wa_webhook
+from app.api import agenda, auth, barbeiro, billing, platform_billing, bot, chatwoot, clientes, conversations, crm, dashboard, debts, empresa, equipe, financeiro, gestor, health, imports, integracoes, kernel_ia, loyalty, memberships, platform, reminders, reschedule, servicos, wa_webhook
 from app.core.config import settings
 from app.db.session import engine
 
@@ -57,6 +57,9 @@ app.include_router(debts.router)
 app.include_router(kernel_ia.router)
 app.include_router(reschedule.router)
 app.include_router(platform.router)
+app.include_router(billing.router)
+app.include_router(billing.internal_router)
+app.include_router(platform_billing.router)
 
 
 @app.get("/")
