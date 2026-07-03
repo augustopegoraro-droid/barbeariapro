@@ -1084,6 +1084,15 @@ período" do próprio relatório da Trinks. Rodar o import 2x atualiza (upsert),
 Fora de escopo desta entrada: importar a tabela 1 (pagamentos por comanda) e construir o módulo
 de Caixa vivo (abrir/fechar em tempo real).
 
+**Consumo dos dados (mesmo dia):** `GET /financeiro/caixa?month=` (`app/api/financeiro.py`) lista
+os dias de `cash_daily_closings` do mês (mesmo guard de gestor dos demais endpoints de
+`/financeiro`; mês sem dados devolve lista vazia). Frontend: card **"Histórico de caixa"** na
+visão Mês de `/admin/financeiro` (`components/financeiro/caixa-historico.tsx`), tabela com
+scroll interno + header fixo; estado vazio explícito para meses fora do período migrado.
+✅ **DEPLOYADO em prod 2026-07-02** (backend commit `8514fb3`; frontend commit `72931b3` —
+cherry-pick isolado sobre o `main` do submódulo, sem arrastar trabalho não relacionado de outras
+branches em andamento). Validado ao vivo (local + prod): janeiro/2026 populado, agosto/2026 vazio.
+
 ---
 
 ## Dívida técnica conhecida (não resolver sem discussão)

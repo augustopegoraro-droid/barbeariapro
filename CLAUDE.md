@@ -260,7 +260,8 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > **✅ DEPLOYADO em prod 2026-07-02:** migration `0026` aplicada (head `0026`) + 149 dias reais
 > importados na org 1 (05/01–02/07/2026), totais conferindo com o relatório da Trinks. Ainda
 > **não existe módulo de Caixa vivo** (abrir/fechar em tempo real) — isto é só o histórico
-> migrado para consulta/relatório.
+> migrado para consulta/relatório. **Consumo:** `GET /financeiro/caixa?month=` + card "Histórico
+> de caixa" em `/admin/financeiro` (visão Mês) — **✅ DEPLOYADO em prod 2026-07-02**.
 
 **Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — ✅ DEPLOYADO em prod 2026-07-02,
 código + migrations `0024`/`0025`, head `0025`):**
