@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status as http_status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_manager_access
@@ -26,6 +26,7 @@ from app.deps import (
 )
 from app.services import reschedule as svc
 from models import AppointmentRescheduleRequest, User
+from models.appointment_reschedule import RESCHEDULE_STATUSES
 
 router = APIRouter(prefix="/remarcacoes", tags=["remarcacoes"])
 
@@ -36,6 +37,19 @@ class RescheduleCreateIn(BaseModel):
     period_start: Optional[datetime] = None
     period_end: Optional[datetime] = None
     reason: Optional[str] = Field(None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _check_period_order(self) -> "RescheduleCreateIn":
+        # Só valida quando ambos os limites vêm preenchidos — pedido sem período
+        # (ex.: Kernel IA por texto livre) é legítimo. `>` estrito, igual ao CHECK
+        # de DB (migration 0027) e ao padrão de TimeOff/Appointment.
+        if (
+            self.period_start is not None
+            and self.period_end is not None
+            and self.period_end <= self.period_start
+        ):
+            raise ValueError("period_end deve ser depois de period_start")
+        return self
 
 
 class RescheduleReviewIn(BaseModel):
@@ -112,6 +126,10 @@ async def criar_remarcacao(
 
 # ─── gestor: listar / contar / decidir ───────────────────────────────────────
 
+# Filtro ?status= : vazio ou uma destas sentinelas → todos os status.
+_STATUS_ALL = {"", "todas", "todos", "all"}
+
+
 @router.get("", response_model=list[RescheduleOut])
 async def listar_remarcacoes(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -119,7 +137,23 @@ async def listar_remarcacoes(
     status: Annotated[Optional[str], Query()] = "pendente",
 ) -> list[RescheduleOut]:
     require_manager_access(await resolve_current_role(db, current_user))
-    rows = await svc.list_requests(db, status=status)
+    # Normaliza o filtro: vazio/sentinela → todos; valor do catálogo → filtra;
+    # qualquer outra coisa → 422 (nunca [] silencioso). `status=None` na service
+    # devolve todos os status.
+    raw = (status or "").strip().lower()
+    if raw in _STATUS_ALL:
+        effective: Optional[str] = None
+    elif raw in RESCHEDULE_STATUSES:
+        effective = raw
+    else:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"status inválido: {status!r}. "
+                f"Use um de {list(RESCHEDULE_STATUSES)} ou 'todas'."
+            ),
+        )
+    rows = await svc.list_requests(db, status=effective)
     return [_to_out(r) for r in rows]
 
 

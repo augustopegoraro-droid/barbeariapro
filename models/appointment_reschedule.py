@@ -41,6 +41,17 @@ class AppointmentRescheduleRequest(Base):
             "status IN ('pendente', 'aprovada', 'recusada')",
             name="reschedule_status_valid",
         ),
+        # Paridade com o CHECK de status (migration 0027): origem no catálogo fechado.
+        CheckConstraint(
+            "source IN ('app', 'kernel_ia')",
+            name="reschedule_source_valid",
+        ),
+        # Ordem do período quando ambos os limites vêm preenchidos (`>` estrito, igual
+        # a TimeOff/Appointment). Tolerante a NULL — pedido do Kernel IA não traz datas.
+        CheckConstraint(
+            "period_start IS NULL OR period_end IS NULL OR period_end > period_start",
+            name="reschedule_period_order",
+        ),
         Index("idx_reschedule_org_status", "organization_id", "status"),
         Index("idx_reschedule_barber", "barber_id"),
     )
