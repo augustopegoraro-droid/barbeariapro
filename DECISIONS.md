@@ -1130,28 +1130,35 @@ na migration E no `__table_args__`):**
   registrado caso o produto queira 1-pendente-por-período no futuro.
 - **F6 — `reviewed_at = func.now()` (relógio do DB) vs relógio da app:** **sem mudança.** Não há bug vivo;
   manter `func.now()` por consistência com o `server_default` de `created_at`.
-- **F8 — `list_requests` sem `ORDER BY` determinístico:** fica para PR próprio de RBAC/ordenação (adicionar
-  `ORDER BY created_at DESC, id DESC`); fora do escopo desta correção de integridade.
+- **F8 — `list_requests` sem `ORDER BY` determinístico:** ✅ **implementado 2026-07-03** (logo após o
+  deploy da 0027; code-only, sem migration). `list_requests` já ordenava por `created_at DESC`, mas
+  empates (inserts na mesma transação compartilham `func.now()`) ficavam com ordem indefinida — o sort
+  do Postgres não é estável. Desempate por `id DESC` em `app/services/reschedule.py`; teste em
+  `tests/test_reschedule_integration.py` insere 3 pedidos na mesma transação e exige id DESC.
 
 **Cobertura de testes (motivador declarado: 0/100 → 90/100+):** `tests/test_reschedule_integration.py`
-+6 (F1 invertido→422 / válido→201 / sem-período→201; F5 inválido→422 / vazio-traz-todos / filtra) e
-**fixture autouse de limpeza** (zera pedidos do tenant semeado antes/depois de cada teste — os testes
-commitam sem rollback e acumulavam pendentes, tornando contagens não-determinísticas; usa o GRANT
-DELETE do `barber_app` da 0024). `tests/test_gestao_equipe.py` +1 (F7 custo negativo→422).
++7 (F1 invertido→422 / válido→201 / sem-período→201; F5 inválido→422 / vazio-traz-todos / filtra; F8
+ordena id DESC no empate) e **fixture autouse de limpeza** (zera pedidos do tenant semeado antes/depois
+de cada teste — os testes commitam sem rollback e acumulavam pendentes, tornando contagens
+não-determinísticas; usa o GRANT DELETE do `barber_app` da 0024). `tests/test_gestao_equipe.py` +1
+(F7 custo negativo→422).
 
 **Validação (local/staging):** pré-audit dos 4 CHECKs = **0 violações** (todas as orgs, role admin);
 0027 aplicada no staging (head `0027`); os 4 constraints existem e **rejeitam escrita inválida no nível
 do DB** provado via `barber_app`/RLS (backstop independente do guard de app), aceitando o período válido;
 `alembic check` **não acusa drift nos 4 constraints** (só o ruído pré-existente de 5 índices
-parciais/de-expressão — limitação conhecida do autogenerate, tabelas não tocadas). Suíte: **407 pass /
+parciais/de-expressão — limitação conhecida do autogenerate, tabelas não tocadas). Suíte: **408 pass /
 2 fail ambientais** (as de sempre: `bypass_hours` do workflow n8n + e2e link barbeiro↔serviço — nenhuma
-tocada por esta mudança) **/ 2 skip. 0 regressões.**
+tocada por esta mudança) **/ 2 skip. 0 regressões.** (408 = 407 + o teste do F8.)
 
-> ⏳ **NÃO aplicado em prod (por decisão).** 0027 fica pronta; runbook de deploy:
-> 1. **Backup:** `pg_dump` da VM antes de tudo.
-> 2. **Pré-audit** (role admin, todas as orgs) — os 4 counts abaixo **devem dar 0**. Em especial
->    `reschedule_period_order`: a API só passou a barrar período invertido AGORA (F1) — se prod já
->    tiver linha invertida, o CHECK falha o upgrade; investigar/corrigir a linha antes.
+> ✅ **DEPLOYADO em prod 2026-07-03.** Migration head `0026 → 0027`, os **4 constraints presentes** em
+> `pg_constraint`; backend rebuildado (F1/F5) e healthy; `/remarcacoes` responde 401 (viva + protegida).
+> Runbook executado (o mesmo molde da D-54/D-55):
+> 1. **Backup:** `pg_dump` → `backups/predeploy_d60_20260703_112029.sql` (585K).
+> 2. **Pré-audit** (role `postgres`, todas as orgs) — os 4 counts abaixo deram **0** (tabela de
+>    remarcação vazia: a feature D-57 nunca foi usada — coerente com a `OPENAI_API_KEY` inválida).
+>    Crítico o `reschedule_period_order`: a API só passou a barrar período invertido com o F1 — se prod
+>    tivesse linha invertida, o CHECK falharia o upgrade.
 >    ```sql
 >    SELECT count(*) FROM barbers WHERE monthly_cost < 0;
 >    SELECT count(*) FROM barbers WHERE chair_rent < 0;
@@ -1159,14 +1166,17 @@ tocada por esta mudança) **/ 2 skip. 0 regressões.**
 >    SELECT count(*) FROM appointment_reschedule_requests
 >      WHERE period_start IS NOT NULL AND period_end IS NOT NULL AND period_end <= period_start;
 >    ```
-> 3. **`git pull`** (traz 0027 + models + `reschedule.py`).
-> 4. **Migration + rebuild juntos** (para os guards F1/F5 e os CHECKs subirem no mesmo passo):
->    `DATABASE_URL="$ADMIN_DATABASE_URL" alembic upgrade head` → o `env.py` lê **`DATABASE_URL`** (não
->    `ADMIN_DATABASE_URL`), então sobrepor é obrigatório; a role precisa poder alterar `barbers` — em
->    staging `barbers` pertence a `barber_owner` mas o admin é `postgres` (superuser), que altera assim
->    mesmo. `ADMIN_DATABASE_URL` segue **ausente no `.env` da VM** (dívida conhecida) → usar a URL admin
->    inline. Depois, rebuild do backend (compose) para carregar F1/F5.
-> 5. **Verificar:** `alembic current` = `0027`; os 4 `conname` presentes em `pg_constraint`.
+> 3. **`git pull`** na VM (`--ff-only`, sem recursar o submódulo do frontend) — traz 0027 + models +
+>    `reschedule.py` (merge `c08aa94`, PR #17).
+> 4. **Migration:** a imagem do backend **não copia `alembic/`** → montar o repo do host e conectar como
+>    superuser. `PGPW` lido **na VM** (`docker exec barbeariapro-postgres printenv POSTGRES_PASSWORD`,
+>    nunca inline), URL `postgresql+psycopg://postgres:…@host.docker.internal:5432/barbeariapro`, e
+>    `docker compose -f docker-compose.app.yml run --rm --user root -v /opt/barbeariapro:/repo:ro -w /repo
+>    -e DATABASE_URL="$URL" backend python -m alembic upgrade head`. (`env.py` lê `DATABASE_URL`; o
+>    `postgres` superuser altera `barbers` mesmo pertencendo a `barber_owner`.) `ADMIN_DATABASE_URL`
+>    segue **ausente no `.env` da VM** (dívida conhecida) → URL admin montada inline.
+> 5. **Rebuild** do backend (`up -d --build backend`) para carregar os guards F1/F5.
+> 6. **Verificado:** `alembic_version` = `0027_reschedule_and_cost_checks`; os 4 `conname` presentes.
 
 ---
 

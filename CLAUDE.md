@@ -280,18 +280,21 @@ código + migrations `0024`/`0025`, head `0025`):**
   `GET /admin/gestor/folha` + painel "Folha × Receita recorrente" em `/admin/gestor`; formulário
   de equipe configura modelo/custos. Responde às perguntas do doc `gestaointeligente/`.
 
-**Hardening de integridade das 0024/0025 (D-60, 2026-07-03 — código pronto, ⏳ só staging, prod
-pendente):** code review multi-agente das migrations 0024/0025 → migration **0027** (aditiva, só
+**Hardening de integridade das 0024/0025 (D-60, 2026-07-03 — ✅ DEPLOYADO em prod 2026-07-03, head
+`0027`):** code review multi-agente das migrations 0024/0025 → migration **0027** (aditiva, só
 constraints, `down_revision=0026`) com 4 CHECKs espelhados no ORM: `barbers_{monthly_cost,chair_rent}_nonneg`
 (dinheiro ≥ 0), `reschedule_source_valid` (`source IN ('app','kernel_ia')`), `reschedule_period_order`
 (`period_end > period_start`, tolerante a NULL). + guards de API em `reschedule.py`: `@model_validator`
 barra período invertido (F1→422) e `?status=` normaliza vazio/sentinela→todos / inválido→422 (F5, nunca
-`[]` mudo). Testes: +6 remarcação (F1/F5) com **fixture autouse de limpeza** + 1 equipe (F7 custo neg→422);
-suíte **407 pass / 2 ambientais / 0 regressões**. Backstop de DB provado via `barber_app`/RLS. **Deferidos
+`[]` mudo). **F8 também implementado** (code-only, logo após o deploy da 0027): desempate `id DESC` em
+`list_requests` (`created_at` iguais em inserts da mesma transação ficavam com ordem indefinida). Testes:
++7 remarcação (F1/F5/F8) com **fixture autouse de limpeza** + 1 equipe (F7 custo neg→422); suíte
+**408 pass / 2 ambientais / 0 regressões**. Backstop de DB provado via `barber_app`/RLS. **Deferidos
 (decididos):** F2 (nunca REVOKE ALL SEQUENCES no downgrade), F4 (múltiplos pendentes por barbeiro é
-intencional — sem dedup), F6 (manter `func.now()`), F8 (`ORDER BY` determinístico em PR próprio de RBAC).
-Runbook de prod na D-60 (`DECISIONS.md`): backup → pré-audit (4 counts = 0) → `alembic upgrade head` com
-`DATABASE_URL=$ADMIN_DATABASE_URL` (o `env.py` lê `DATABASE_URL`; role precisa alterar `barbers`).
+intencional — sem dedup), F6 (manter `func.now()`). Deploy de prod: pré-audit = **0 violações** (tabela de
+remarcação vazia), backup `predeploy_d60_20260703_112029.sql`; migration rodada montando o repo do host
+(a imagem não copia `alembic/`) como superuser `postgres` (`env.py` lê `DATABASE_URL`; `ADMIN_DATABASE_URL`
+ausente na VM → URL inline). Registro completo na D-60 (`DECISIONS.md`) e em `PROJECT_CONTEXT.md`.
 
 **Agente financeiro no Kernel IA (D-58, 2026-07-02 — ✅ DEPLOYADO em prod 2026-07-02, backend
 + frontend; sem migration nova):** owner/manager (`MANAGER_ACCESS`) ganham a tool

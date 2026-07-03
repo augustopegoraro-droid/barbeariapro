@@ -5,6 +5,36 @@
 
 ---
 
+## 0.000000 SESSÃO 2026-07-03 — Deploy D-60 (migration 0027, CHECKs de integridade) + F8 em produção
+
+> ✅ **DEPLOYADO e verificado em produção 2026-07-03.** Migration head **`0026 → 0027`**; os 4
+> constraints presentes; backend healthy; `/remarcacoes` responde 401 (viva + protegida).
+
+- **Backend** `c08aa94` (merge do PR #17): `git pull` na VM (`--ff-only`, sem recursar submódulo).
+  Traz a migration **0027** (aditiva, só constraints) + espelho no ORM + guards de API F1/F5 +
+  desempate F8. **Rebuild** `docker compose -f docker-compose.app.yml up -d --build backend`.
+- **Migration 0027** (mesmo molde da D-54/D-55): a imagem do backend **não copia `alembic/`** →
+  montar o repo do host (`-v /opt/barbeariapro:/repo:ro -w /repo`) e conectar como superuser
+  `postgres`. `PGPW` lido **na VM** (`docker exec barbeariapro-postgres printenv POSTGRES_PASSWORD`,
+  nunca inline) → URL `postgresql+psycopg://postgres:…@host.docker.internal:5432/barbeariapro` via
+  `-e DATABASE_URL=` no `docker compose run`. `ADMIN_DATABASE_URL` **segue ausente no `.env` da VM**
+  (dívida conhecida) → URL admin montada inline. (`env.py` lê `DATABASE_URL`; o superuser altera
+  `barbers` mesmo pertencendo a `barber_owner`.)
+- **Pré-audit** (role `postgres`, todas as orgs, ANTES da migration): os 4 counts = **0**. A tabela
+  `appointment_reschedule_requests` estava **vazia** (a feature D-57 nunca foi usada em prod —
+  coerente com a `OPENAI_API_KEY` inválida). Sem linha invertida → o CHECK `reschedule_period_order`
+  subiu sem risco. `pg_dump` pré-deploy: `backups/predeploy_d60_20260703_112029.sql` (585K).
+- **F8** (implementado nesta sessão, code-only): `list_requests` já ordenava por `created_at DESC`,
+  mas empates (inserts na mesma transação → `func.now()` idêntico) ficavam indefinidos (sort do
+  Postgres não é estável). Desempate `id DESC` em `app/services/reschedule.py` + teste que insere 3
+  na mesma transação e exige id DESC. Foi no **mesmo** rebuild do backend (sem migration).
+- **Verificado:** `alembic_version` = `0027_reschedule_and_cost_checks`; os 4 `conname` presentes em
+  `pg_constraint`; container `app-backend` healthy com startup limpo (o `reschedule.py` novo importou —
+  um import quebrado derrubaria o boot); `GET /remarcacoes` → 401 (rota viva + protegida). Suíte local
+  **408 pass / 2 ambientais / 2 skip / 0 regressões** antes do deploy.
+
+---
+
 ## 0.00000 SESSÃO 2026-07-02 (2ª) — Deploy Kernel IA (D-57) + agente financeiro (D-58) em produção
 
 > ✅ **DEPLOYADO em produção 2026-07-02** (containers `app-backend`/`app-frontend` healthy).
