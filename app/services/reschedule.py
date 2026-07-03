@@ -52,7 +52,12 @@ async def list_requests(
     stmt = (
         select(AppointmentRescheduleRequest)
         .options(selectinload(AppointmentRescheduleRequest.barber))
-        .order_by(AppointmentRescheduleRequest.created_at.desc())
+        # F8: `id` desempata created_at iguais (inserts na mesma transação
+        # compartilham func.now()) → ordem estável, nunca indefinida.
+        .order_by(
+            AppointmentRescheduleRequest.created_at.desc(),
+            AppointmentRescheduleRequest.id.desc(),
+        )
     )
     if status is not None:
         stmt = stmt.where(AppointmentRescheduleRequest.status == status)

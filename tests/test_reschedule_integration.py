@@ -13,6 +13,7 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from app.db.session import AsyncSessionLocal, set_current_org
+from app.services.reschedule import create_request, list_requests
 
 pytestmark = pytest.mark.asyncio
 
@@ -204,6 +205,45 @@ async def test_listar_filtra_por_status(client, barber_headers, auth_headers):
     ).json()
     assert all(i["status"] == "pendente" for i in pendentes)
     assert rid not in [i["id"] for i in pendentes]
+
+
+# ─── F8: ordenação determinística (desempate por id em created_at iguais) ──────
+
+async def test_listar_ordena_deterministico_no_empate():
+    """3 pedidos criados na MESMA transação compartilham `created_at` (func.now()
+    é constante na transação); sem o desempate por `id` a ordem entre eles é
+    indefinida. `list_requests` deve devolvê-los sempre em id DESC."""
+    try:
+        async with AsyncSessionLocal() as s:
+            await set_current_org(s, SEED_ORG_ID)
+            bid = (
+                await s.execute(
+                    text("SELECT id FROM barbers WHERE deleted_at IS NULL ORDER BY id LIMIT 1")
+                )
+            ).scalar()
+    except Exception:
+        pytest.skip("DB não disponível")
+    if bid is None:
+        pytest.skip("sem barbeiro semeado")
+
+    async with AsyncSessionLocal() as s:
+        await set_current_org(s, SEED_ORG_ID)
+        ids = []
+        for i in range(3):
+            req = await create_request(
+                s,
+                organization_id=SEED_ORG_ID,
+                barber_id=bid,
+                requested_by_user_id=None,
+                reason=f"empate {i}",
+            )
+            ids.append(req.id)
+        rows = await list_requests(s, status="pendente")
+        # created_at idêntico → o único critério estável é id DESC
+        got = [r.id for r in rows if r.id in ids]
+        # (sessão sem commit → rollback ao sair; a fixture autouse também limpa)
+
+    assert got == sorted(ids, reverse=True), got
 
 
 # Nota: o disparo de remarcação VIA Kernel IA (texto livre → tool) depende do LLM
