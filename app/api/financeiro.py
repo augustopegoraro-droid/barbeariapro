@@ -23,6 +23,7 @@ from models import (
     AppointmentItem,
     AppointmentStatus,
     Barber,
+    CashDailyClosing,
     Client,
     Expense,
     ExpenseCategory,
@@ -317,6 +318,69 @@ async def get_financeiro_mensal(
         by_method=by_method,
         by_barber=by_barber,
         expenses=expenses,
+    )
+
+
+# ─── GET /financeiro/caixa — histórico de fechamento de caixa (D-59) ──────────
+
+class CaixaDiaOut(BaseModel):
+    date: str
+    opening_balance: float
+    cash_received: float
+    change_given: float
+    cash_expenses: float
+    cash_total: float
+    withdrawal: float
+    closing_balance: float
+    other_methods_received: float
+    other_methods_expenses: float
+
+
+class CaixaHistoricoOut(BaseModel):
+    month: str
+    days: list[CaixaDiaOut]
+
+
+@router.get("/caixa", response_model=CaixaHistoricoOut)
+async def get_financeiro_caixa(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    month: str = Query(..., description="Mês no formato YYYY-MM"),
+) -> CaixaHistoricoOut:
+    """Histórico de fechamento de caixa diário migrado da Trinks (D-59).
+
+    Só existe para o período importado (hist. jan-jul/2026); não é um caixa
+    vivo (abrir/fechar em tempo real) — ver `CLAUDE.md`.
+    """
+    await _require_manager(db, current_user)
+    date_from, date_to = _month_range(month)
+
+    rows = (
+        await db.execute(
+            select(CashDailyClosing)
+            .where(CashDailyClosing.closing_date >= date_from)
+            .where(CashDailyClosing.closing_date <= date_to)
+            .order_by(CashDailyClosing.closing_date)
+        )
+    ).scalars().all()
+
+    return CaixaHistoricoOut(
+        month=month,
+        days=[
+            CaixaDiaOut(
+                date=r.closing_date.isoformat(),
+                opening_balance=float(r.opening_balance),
+                cash_received=float(r.cash_received),
+                change_given=float(r.change_given),
+                cash_expenses=float(r.cash_expenses),
+                cash_total=float(r.cash_total),
+                withdrawal=float(r.withdrawal),
+                closing_balance=float(r.closing_balance),
+                other_methods_received=float(r.other_methods_received),
+                other_methods_expenses=float(r.other_methods_expenses),
+            )
+            for r in rows
+        ],
     )
 
 
