@@ -1213,6 +1213,34 @@ progress, api, blockers, bugs, todo). Resumo do que existe agora:
   webhook endpoint na Stripe. Bloqueios externos em `docs/superadmin/blockers.md`
   (B-01 domínio, B-02 chaves Stripe, B-03 cron n8n).
 
+### D-62 — Sincronização de fidelidade a partir do ranking da Trinks (destrava a reativação) — 2026-07-03
+**Contexto:** a reativação de clientes filtra por `client_loyalty.status` (`em_risco`/`inativo`),
+mas `client_loyalty` só nascia ao **concluir atendimentos pelo próprio sistema**. Como a base de
+prod (org 1) veio migrada da Trinks (~2,9k clientes com histórico fora do sistema), a tabela estava
+**vazia** → a reativação enxergava **0 alvos**; idem a visão de inativos em Clientes/Fidelidade. O
+pedido "sincronizar o CRM" era exatamente destravar isso.
+**Decisão:** semear `client_loyalty` + o ledger de pontos a partir do **ranking da Trinks** — coluna
+"Último Atendimento" → status via `compute_status`; "Total"/"Visitas" → pontos históricos (1 pt/R$ +
+10/visita, regra D-50). Bootstrap único: quando um atendimento real concluir, `recalculate()`
+sobrescreve os campos de snapshot com os agregados do sistema, mas os pontos do ledger (append-only)
+permanecem.
+**Implementação:** `app/services/trinks_ranking.py::sync_loyalty_from_ranking` (dry-run + idempotente —
+pontos creditados 1×/cliente via marcador de `reason` no ledger; snapshot reescrito a cada run) + rota
+`POST /admin/import/trinks/loyalty` (gestor, mesmo molde das demais) + `scripts/import_trinks_loyalty.py`
+(CLI, roda na VM) + `tests/test_trinks_loyalty.py` (8 testes: parsers puros + integração RLS com rollback).
+**Cron (parte A do pedido):** o `CronReactivation1` do n8n **já** roda 1×/dia às 11h BRT (`0 11 * * *`,
+ativo, execuções ok) — nada a ajustar; o que travava a reativação era a fidelidade vazia, não a cadência.
+**✅ DADOS GRAVADOS EM PROD 2026-07-03 (org 1, via CLI):** 2.442 linhas do ranking casadas por telefone
+(0 órfãs; 23 sem telefone) → **2.197 clientes únicos** com fidelidade: 640 ativos / 290 em risco / 1.267
+inativos → **1.557 alvos de reativação** (antes: 0). 965.181 pontos históricos no ledger (saldo do
+snapshot confere com a soma do ledger). **Reativação continua DESLIGADA** — o número restrito (D-41)
+exige Cloud API para entrega confiável; isto só populou os dados.
+**Consequências / ressalvas:** casar por telefone tem a imperfeição conhecida de telefone não-único
+(245 linhas duplicadas colapsaram no mesmo cliente — vale o snapshot da última linha, pontos 1×);
+aceitável para o bootstrap. **Código pendente de commit/deploy permanente:** o sync foi rodado via CLI
+injetado no container (uvicorn sem reload → processo vivo intacto) e a rota `/loyalty` ainda **não** está
+no backend de prod; falta commit + rebuild para persistir (dados independem disso).
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
