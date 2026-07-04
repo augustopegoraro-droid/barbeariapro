@@ -1241,6 +1241,43 @@ aceitável para o bootstrap. **Código pendente de commit/deploy permanente:** o
 injetado no container (uvicorn sem reload → processo vivo intacto) e a rota `/loyalty` ainda **não** está
 no backend de prod; falta commit + rebuild para persistir (dados independem disso).
 
+### D-63 — Import de transações de pagamento da Trinks (histórico analítico, tabela dedicada) — 2026-07-04
+**Contexto:** o usuário perguntou se o export **"Pagamentos/Estornos"** da Trinks
+(`taylorethedy26pagamentos.csv`) já estava implementado. Não estava — é justamente o **pagamento por
+comanda** que o D-59 (fechamento de caixa) marcou **fora de escopo**. Ele não cabe no `Payment` do
+sistema: `Payment.appointment_id` é NOT NULL / FK RESTRICT e não temos o histórico de agendamentos do
+período; e o enum `PaymentMethod` (só dinheiro/cartão/pix) não captura taxa de operadora, antecipação,
+parcela, estorno nem conta financeira.
+**Decisão (do usuário, via pergunta dirigida):** importar como **tabela analítica dedicada**
+`payment_transactions`, espelhando o export **como está** — base para relatórios de mix de formas de
+pagamento, custo de cartão e fluxo de recebíveis. **Não** toca em `payments` (sistema) nem exige vínculo
+a agendamento. Mesmo molde dos demais imports Trinks (parser puro + persistência + rota self-service +
+CLI + testes).
+**Implementação:** migration **`0035`** (`payment_transactions`; RLS + policy `tenant_isolation` + grants
+a `barber_app` no molde da `0026`; índice `(org, movement_date)`; **sem UNIQUE**) + `models/payment_transaction.py`
++ `app/services/trinks_payments.py` (`parse_payments` puro + `import_payments`) + rota
+`POST /admin/import/trinks/payments` (gestor, corpo = CSV bruto, `commit` dry-run/grava) +
+`scripts/import_trinks_payments.py` (CLI, roda na VM) + `tests/test_trinks_payments.py` (8 testes:
+moeda BR com sinal / data / extração de colunas / descarte sem data + integração RLS com rollback).
+**Decisões de design:**
+1. **Sem CHECK constraints** (ao contrário do D-60): desconto de operadora e troco carregam valores
+   **legitimamente negativos** — CHECK de não-negatividade quebraria a importação do histórico real.
+2. **Idempotência por substituição de período** (delete-by-range de `movement_date` filtrado a
+   `source='trinks'`), **não upsert**: o export não tem chave natural única (pagamentos idênticos no
+   mesmo dia são possíveis). Re-rodar o mesmo arquivo converge; reexportar um período corrigido o
+   substitui.
+3. **Minimização de PII (LGPD):** a tabela **exclui** nome do cliente / quem fechou a conta / comentário
+   — o objetivo analítico (mix, taxa, recebíveis) não precisa deles. `movement_date` cai para a data do
+   atendimento quando a de movimentação falta.
+**Validação:** migration aplicada no **staging** (head `0035`); suíte **472 pass / 2 falhas ambientais
+(as de sempre: `bypass_hours` do workflow n8n + e2e login/cliente/agendamento) / 0 regressões** (+8
+testes novos verdes). Arquivo real inspecionado só em agregados (23 colunas, ~3,7k linhas, latin-1, `;`;
+soma Valor Pago ≈ R$ 414 mil) — o cru é PII/financeiro, **nunca versionado** (`.gitignore`); fixture
+anonimizada (`tests/fixtures/trinks/payments_sample.csv`) versionada.
+**Pendente:** **deploy em prod não autorizado ainda** — aguarda dry-run na VM + revisão do usuário →
+commit/PR → aplicar `0035` + rebuild backend + import (mesmo molde de deploy do D-59). Consumo
+(relatórios de mix/taxa/recebíveis no frontend) fica para um passo próprio.
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
