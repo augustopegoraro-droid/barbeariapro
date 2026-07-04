@@ -246,10 +246,20 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > Próximos imports (estoque/pacotes/financeiro/marketing) virão depois, mesmo molde.
 >
 > **Rotas de self-service (D-56, `app/api/imports.py`):** `POST /admin/import/trinks/{clients,
-> appointments,ranking,debts}` (gestor; corpo = CSV bruto, sem multipart; `commit=false` dry-run →
+> appointments,ranking,loyalty,debts}` (gestor; corpo = CSV bruto, sem multipart; `commit=false` dry-run →
 > `commit=true` grava; RLS pela org do token). Parsers aceitam `bytes` ou path.
 > **Ranking** (`trinks_ranking.py`): enriquece clientes (preenche email/nascimento faltantes por
-> telefone, nunca sobrescreve). **Débitos** (`trinks_debts.py` + migration `0023` `client_debts` +
+> telefone, nunca sobrescreve).
+> **Fidelidade (D-62, 2026-07-03)** (`trinks_ranking.py::sync_loyalty_from_ranking` + rota `/loyalty` +
+> `scripts/import_trinks_loyalty.py`): semeia `client_loyalty` (última visita → `compute_status`) + pontos
+> históricos no ledger (1 pt/R$ + 10/visita, D-50) a partir do mesmo ranking. Idempotente (pontos 1×/cliente
+> por marcador de `reason`; snapshot reescrito). Bootstrap que **destrava a reativação** — sem isto
+> `client_loyalty` só nasceria ao concluir atendimentos pelo sistema. **✅ DADOS EM PROD 2026-07-03 (org 1,
+> via CLI):** 2.197 clientes únicos (640 ativos / 290 em risco / 1.267 inativos = **1.557 alvos de
+> reativação**, antes 0); 965.181 pontos. Reativação **segue DESLIGADA** (número restrito D-41 exige Cloud
+> API). O `CronReactivation1` do n8n já roda 1×/dia às 11h BRT — nada a ajustar. Código pendente de
+> commit/rebuild (o sync rodou via CLI injetado no container; a rota `/loyalty` ainda não está no prod).
+> **Débitos** (`trinks_debts.py` + migration `0023` `client_debts` +
 > API `app/api/debts.py`: `GET /admin/debts`, `/summary`, `POST /{id}/pay|reopen`): contas a receber
 > (não cabia em `payments`); casa cliente por nome, `client_id` nullable, idempotente.
 > **Fechamento de caixa diário (D-59, 2026-07-02):** `trinks_cash_closing.py` + migration `0026`
