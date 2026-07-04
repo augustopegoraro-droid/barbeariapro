@@ -1274,9 +1274,16 @@ moeda BR com sinal / data / extração de colunas / descarte sem data + integra�
 testes novos verdes). Arquivo real inspecionado só em agregados (23 colunas, ~3,7k linhas, latin-1, `;`;
 soma Valor Pago ≈ R$ 414 mil) — o cru é PII/financeiro, **nunca versionado** (`.gitignore`); fixture
 anonimizada (`tests/fixtures/trinks/payments_sample.csv`) versionada.
-**Pendente:** **deploy em prod não autorizado ainda** — aguarda dry-run na VM + revisão do usuário →
-commit/PR → aplicar `0035` + rebuild backend + import (mesmo molde de deploy do D-59). Consumo
-(relatórios de mix/taxa/recebíveis no frontend) fica para um passo próprio.
+**✅ DEPLOYADO em prod 2026-07-04 (molde D-59):** PR #22 mergeado (merge `c050b0d`, commit do D-63 `9fa6f91`);
+`git pull` na VM; backup `~/predeploy_d63_20260704_163707.sql` (1,2 MB, 15.715 linhas); migration `0035`
+aplicada como superuser `postgres` montando o repo do host (a imagem não copia `alembic/`; `ADMIN_DATABASE_URL`
+ausente na VM → URL inline; head agora `0035`); rebuild do backend (`/health` = `{"status":"ok"}`); import
+via CLI na org 1: **3.714 transações** (1 linha sem data descartada), período **05/01–03/07/2026**,
+**R$ 414.137,15** pagos / **R$ 407.315,12** a receber / **−R$ 6.823,55** de taxa de operadora — validação
+independente via `psql` (filtro org 1) conferiu count + somas, batendo com o relatório da Trinks.
+`removed_existing=0` (tabela nova, idempotência por substituição de período confirmada no dry-run). CSV cru
+apagado da VM (minimização de PII, LGPD). **Falta:** consumo — relatórios de mix de formas / custo de cartão /
+recebíveis no frontend — passo próprio.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 

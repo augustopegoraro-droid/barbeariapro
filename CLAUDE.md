@@ -272,7 +272,7 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > **não existe módulo de Caixa vivo** (abrir/fechar em tempo real) — isto é só o histórico
 > migrado para consulta/relatório. **Consumo:** `GET /financeiro/caixa?month=` + card "Histórico
 > de caixa" em `/admin/financeiro` (visão Mês) — **✅ DEPLOYADO em prod 2026-07-02**.
-> **Pagamentos/Estornos (D-63, 2026-07-04 — construído + testado, NÃO deployado):** o export
+> **Pagamentos/Estornos (D-63, 2026-07-04 — ✅ DEPLOYADO em prod 2026-07-04, head `0035`):** o export
 > "Pagamentos/Estornos" (`…26pagamentos.csv`) é o **pagamento por comanda** que o D-59 deixou fora de
 > escopo. Não cabe em `payments` (exige `appointment_id`, ausente para o período; enum `PaymentMethod`
 > não captura taxa de operadora/antecipação/parcela/conta). Decisão: **tabela analítica dedicada**
@@ -283,8 +283,12 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > `POST /admin/import/trinks/payments` + `scripts/import_trinks_payments.py` (roda na VM) +
 > `tests/test_trinks_payments.py` (8 testes). **Sem CHECKs** (≠ D-60: taxa de operadora e troco são
 > legitimamente negativos). **PII minimizada (LGPD):** não guarda nome do cliente/quem fechou/comentário.
-> **Validado em staging (head `0035`):** suíte 472 pass / 2 ambientais / 0 regressões. **Pendente:**
-> dry-run na VM → revisão → commit + aplicar `0035` + rebuild + import (molde do D-59).
+> **Validado em staging (head `0035`):** suíte 472 pass / 2 ambientais / 0 regressões.
+> **✅ DEPLOYADO em prod 2026-07-04 (molde D-59):** PR #22 (merge `c050b0d`) → `0035` aplicada (head `0035`;
+> backup `~/predeploy_d63_20260704_163707.sql`) → rebuild backend (`/health` ok) → import na org 1 de
+> **3.714 transações** (05/01–03/07/2026; **R$ 414.137,15** pagos / **−R$ 6.823,55** de taxa de operadora),
+> validado por `psql` independente, conferindo com a Trinks. CSV cru removido da VM (LGPD). **Falta:**
+> consumo no frontend (relatórios de mix de formas / custo de cartão / recebíveis).
 
 **Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — ✅ DEPLOYADO em prod 2026-07-02,
 código + migrations `0024`/`0025`, head `0025`):**
