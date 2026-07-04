@@ -272,6 +272,19 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > **não existe módulo de Caixa vivo** (abrir/fechar em tempo real) — isto é só o histórico
 > migrado para consulta/relatório. **Consumo:** `GET /financeiro/caixa?month=` + card "Histórico
 > de caixa" em `/admin/financeiro` (visão Mês) — **✅ DEPLOYADO em prod 2026-07-02**.
+> **Pagamentos/Estornos (D-63, 2026-07-04 — construído + testado, NÃO deployado):** o export
+> "Pagamentos/Estornos" (`…26pagamentos.csv`) é o **pagamento por comanda** que o D-59 deixou fora de
+> escopo. Não cabe em `payments` (exige `appointment_id`, ausente para o período; enum `PaymentMethod`
+> não captura taxa de operadora/antecipação/parcela/conta). Decisão: **tabela analítica dedicada**
+> `payment_transactions` (migration `0035`, RLS no molde da `0026`, **sem UNIQUE**) espelhando o export
+> para relatórios (mix de formas, custo de cartão, recebíveis) — **não** toca em `payments` nem exige
+> agendamento. `app/services/trinks_payments.py` (parser puro + `import_payments` idempotente por
+> **substituição de período** de `movement_date`, não upsert — export sem chave única) + rota
+> `POST /admin/import/trinks/payments` + `scripts/import_trinks_payments.py` (roda na VM) +
+> `tests/test_trinks_payments.py` (8 testes). **Sem CHECKs** (≠ D-60: taxa de operadora e troco são
+> legitimamente negativos). **PII minimizada (LGPD):** não guarda nome do cliente/quem fechou/comentário.
+> **Validado em staging (head `0035`):** suíte 472 pass / 2 ambientais / 0 regressões. **Pendente:**
+> dry-run na VM → revisão → commit + aplicar `0035` + rebuild + import (molde do D-59).
 
 **Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — ✅ DEPLOYADO em prod 2026-07-02,
 código + migrations `0024`/`0025`, head `0025`):**

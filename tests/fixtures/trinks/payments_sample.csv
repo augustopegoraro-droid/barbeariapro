@@ -1,0 +1,9 @@
+Relatório de Pagamentos/Estornos
+Data Início: 01/01/2026
+Data Fim: 28/02/2026
+Forma de Pagamento: Todas
+
+Mês da Data do Pagamento/Estorno;Tipo de Forma de Pagamento;Forma de Pagamento;Data Atendimento/Venda;Dia da Semana Atendimento/Venda;Data Movimentação;Data Prevista Recebimento;Parcela;Antecipada;Tipo;Cliente;Comanda;Valor Pago;Percentual de Desconto da Operadora;Valor de Desconto da Operadora (R$);Percentual antecipação;Desconto antecipação;Valor a ser Recebido;Valor a ser recebido anterior;Data Prevista Recebimento anterior;Quem Fechou a Conta;Comentário sobre o Fechamento;Conta Financeira
+Janeiro / 2026;À Vista;Dinheiro;05/01/2026;Segunda-feira;05/01/2026;05/01/2026;1 de 1;Não;Pagamento;Cliente Um;;50,00;0,00;0,00;0,00;0,00;50,00;0,00;;Recepção;;
+Janeiro / 2026;Crédito;Mastercard;05/01/2026;Segunda-feira;05/01/2026;07/01/2026;1 de 1;Não;Pagamento;Cliente Dois;C-1002;180,00;2,99;-5,38;0,00;0,00;174,62;0,00;;Recepção;;BANCO ITAU
+Fevereiro / 2026;PIX;PIX;10/02/2026;Terça-feira;10/02/2026;10/02/2026;1 de 1;Não;Pagamento;Cliente Três;;90,00;0,00;0,00;0,00;0,00;90,00;0,00;;Recepção;;BANCO CORA
