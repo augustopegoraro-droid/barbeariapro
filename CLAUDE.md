@@ -125,14 +125,16 @@ dentro do frontend de tenant.
   `./barbearia-superadmin`), consumindo `/platform/*` de prod. Telas: login, dashboard
   (2 MRR + uso por tenant), tenants (listar/suspender/reativar/editar), onboarding.
   next-auth Credentials → token `typ=platform`; **sem** org/subdomínio; porta dev 3100.
-  **Deploy preparado, não ativado:** serviço `superadmin` no `docker-compose.app.yml` sob
-  **profile `superadmin`** (não sobe no `up` padrão) + `Dockerfile` + server block
-  `admin.taylorethedy.com`→:3100 em `deploy/nginx.conf` + `.env.superadmin.example`.
-  Ativação pós-domínio (mesma VM, **não** precisa VM nova): DNS + `up --profile superadmin`
-  + certbot.
-- **Pendente:** compra do domínio (`admin.taylorethedy.com`) + ativação do deploy acima;
-  saúde de bot ao vivo (conectado/restrito) exige Evolution API (hoje só o proxy
-  `wa_instance_name`).
+  **Deploy preparado, container ainda não ativado:** serviço `superadmin` no
+  `docker-compose.app.yml` sob **profile `superadmin`** (não sobe no `up` padrão) + `Dockerfile`
+  + server block `admin.taylorethedy.com`→:3100 em `deploy/nginx.conf` + `.env.superadmin.example`.
+  **Domínio ativo em prod (D-64, 2026-07-05):** `taylorethedy.com` + TLS coringa via Cloudflare
+  DNS-01 (certbot por snap); `admin.taylorethedy.com` já responde via nginx+HTTPS (502 até o
+  container subir — esperado). Falta só: `docker compose -f docker-compose.app.yml --profile
+  superadmin up -d --build superadmin` (com `.env.superadmin` preenchido e
+  `SUPERADMIN_API_URL=https://api.taylorethedy.com` no build, não o default `localhost:8000`).
+- **Pendente:** ativar o container do superadmin (domínio já não é mais bloqueio); saúde de bot
+  ao vivo (conectado/restrito) exige Evolution API (hoje só o proxy `wa_instance_name`).
 
 ### Financeiro (`app/api/financeiro.py`)
 - Receita = soma de `AppointmentItem.price_charged` de agendamentos `concluido`.
@@ -366,8 +368,9 @@ Detalhe completo (com `arquivo:linha`) na auditoria:
 
 **🔴 Crítico:** `credentials.json` no histórico git (rotacionar credencial OpenAI/n8n + limpar histórico) ·
 portas Postgres/n8n/Evolution abertas ao mundo + sem HTTPS · SSE single-process (não escala) ·
-~~multi-tenant só de fachada no frontend (`NEXT_PUBLIC_ORG_ID` fixo em build)~~ (✅ D-54 DEPLOYADO em prod 2026-06-30:
-resolução por subdomínio (login) e instância WhatsApp (bot); falta só DNS de subdomínios + n8n `X-Instance`) · VM única sem HA.
+~~multi-tenant só de fachada no frontend (`NEXT_PUBLIC_ORG_ID` fixo em build)~~ (✅ D-54 DEPLOYADO em prod 2026-06-30,
+DNS ativo desde D-64 2026-07-05: resolução por subdomínio (`taylor.taylorethedy.com`, confirmado em prod)
+e instância WhatsApp (bot); falta só n8n `X-Instance`) · VM única sem HA.
 
 **🟠 Alto:** webhook secret opcional (tornar obrigatório após provisionar nos dois lados) · `except
 Exception` mudos · SQL via f-string em advisory lock · pool DB no default / sem PgBouncer / sem

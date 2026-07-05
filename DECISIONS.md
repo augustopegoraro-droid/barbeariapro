@@ -1285,6 +1285,57 @@ independente via `psql` (filtro org 1) conferiu count + somas, batendo com o rel
 apagado da VM (minimização de PII, LGPD). **Falta:** consumo — relatórios de mix de formas / custo de cartão /
 recebíveis no frontend — passo próprio.
 
+### D-64 — Domínio próprio ativado: `taylorethedy.com` com TLS coringa (Cloudflare DNS-01) — 2026-07-05
+**Contexto:** o domínio `taylorethedy.com` foi comprado (guarda-chuva, DNS gerenciado na Cloudflare) para
+destravar duas frentes que dependiam dele: o multi-tenant real por subdomínio (D-54, código pronto desde
+2026-06-30 mas sem DNS pra ser alcançado) e o painel de Superadmin (D-55/D-56, deploy preparado mas não
+ativado). Também é a base para uma futura "porta" de agendamento self-service do cliente final (discutida,
+não implementada).
+**Decisão:** subdomínio **coringa** (`*.taylorethedy.com`) em vez de registros individuais por tenant —
+uma barbearia nova vira acessível sem tocar em DNS de novo. Isso exige certificado TLS coringa, que só é
+validável por **DNS-01** (não HTTP-01) — logo, Cloudflare + `certbot-dns-cloudflare` (token de API restrito
+à zona, escopo `Zone:DNS:Edit`, não o Global API Key).
+**Registros DNS:** `A @ → 34.95.199.134` + `A * → 34.95.199.134`, ambos **DNS only** (nuvem cinza, sem
+proxy da Cloudflare) — mantém o TLS terminando direto na VM via nginx/certbot, sem reconfigurar modo SSL
+da Cloudflare nem repasse de IP real.
+**Migração do certbot de apt → snap:** `certbot certonly --dns-cloudflare` via apt travou com
+`AttributeError: module 'lib' has no attribute 'GEN_EMAIL'` — descompasso de versão entre `pyOpenSSL` e
+`cryptography` do sistema (bug conhecido do certbot instalado via apt). Como nenhum certificado válido
+existia ainda (DNS nunca tinha propagado antes), a troca para o método oficialmente recomendado (snap,
+isolado das libs Python do sistema) foi feita sem risco:
+```
+snap install --classic certbot && ln -sf /snap/bin/certbot /usr/bin/certbot
+snap install certbot-dns-cloudflare
+snap set certbot trust-plugin-with-root=ok
+snap connect certbot:plugin certbot-dns-cloudflare
+certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/certbot/cloudflare.ini \
+  -d taylorethedy.com -d "*.taylorethedy.com"
+```
+Renovação automática via timer do próprio snap (`snap.certbot.renew.timer`), sem passo manual a cada 90 dias.
+**`deploy/nginx.conf`:** corrigida a inconsistência de domínio do rascunho anterior (frontend estava em
+`taylorethedy.app`, backend/superadmin já em `.com`) — tudo unificado em `taylorethedy.com`. Estrutura final:
+bloco 80→443 redirect (todos os hosts) + bloco 443 `taylorethedy.com`/`*.taylorethedy.com` → frontend de
+tenant (:3000, D-54) + bloco 443 `api.taylorethedy.com` → backend (:8000) + bloco 443
+`admin.taylorethedy.com` → superadmin (:3100, D-55/56). Nginx prioriza `server_name` exato sobre coringa,
+então `admin.`/`api.` nunca são capturados pelo bloco coringa dos tenants.
+**`deploy/setup-vm.sh`:** reordenado — SSL (passo 3) agora roda **antes** do nginx (passo 4), porque o
+`nginx.conf` referencia os arquivos do certificado; carregar o nginx primeiro faria o `nginx -t` falhar por
+o certificado ainda não existir. Também trocado `apt install certbot` por `snapd` + instruções do snap, e
+corrigidas as referências a `taylorethedy.app`.
+**Validado em prod (VM já provisionada, fora do `setup-vm.sh`):** `git pull` (`ce80710`) + `nginx -t` OK +
+`systemctl reload nginx`. Testes:
+- `https://api.taylorethedy.com/health` → 405 em `HEAD` (só aceita `GET`, comportamento normal do
+  FastAPI) — confirma TLS + proxy pro backend OK.
+- `https://admin.taylorethedy.com` → 502 (esperado: container do superadmin ainda não ativado, D-56
+  segue como próximo passo separado).
+- `https://taylor.taylorethedy.com` (subdomínio real da org 1) → 307 para `/login` com cookies do
+  next-auth (`callback-url=https://taylor.taylorethedy.com`) — **primeira confirmação em produção de que
+  a resolução multi-tenant por subdomínio (D-54) funciona de ponta a ponta.**
+**Pendente:** ativar o container do superadmin (`docker compose --profile superadmin up -d --build
+superadmin`, D-56) agora que `admin.taylorethedy.com` já responde via nginx+TLS; ajustar `SUPERADMIN_API_URL`
+para `https://api.taylorethedy.com` no build (hoje default `http://localhost:8000`, que não serve pra
+chamadas client-side do browser em produção).
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -1293,7 +1344,7 @@ recebíveis no frontend — passo próprio.
 | ~~Debug print temporário no webhook~~ | `app/api/wa_webhook.py` | ✅ Resolvido | D-40: trocado por `logger.debug` (commit `13822a1`) |
 | Bot responses não confirmadas no CRM | fluxo n8n + Evolution | ⚠️ Alto | Pendente confirmação end-to-end |
 | ~~Frontend sem remote git funcional~~ | `barbearia-frontend/.git` | ✅ Resolvido | 2026-06-29: remote movido p/ `augustopegoraro-droid/barbearia-frontend` (privado) + submódulo registrado (`.gitmodules`) + ponteiro bumpado para `8ba47e1` |
-| HTTPS / domínio não configurado | infra VM | Médio | nginx pronto; falta registrar taylorethedy.app |
+| ~~HTTPS / domínio não configurado~~ | infra VM | ✅ Resolvido | D-64 (2026-07-05): `taylorethedy.com` + wildcard TLS (Cloudflare DNS-01) ativos em prod. |
 | Portas abertas ao mundo na VM | firewall GCP | Médio (reduzido) | D-40: 5678/8080 fechadas; 5432 já fechada. Restam 8000/3000 (uso direto do browser) — mover p/ nginx+HTTPS |
 | Estado do bot em memória (debounce) | `app/api/bot.py` | Médio | Restart perde estado. Aguarda Redis. |
 | SSE single-process | `app/services/sse_broker.py` | Baixo | Não funciona com múltiplos workers |
