@@ -13,7 +13,7 @@ log() { echo "━━━ $* ━━━"; }
 # ── 1. Pacotes do sistema ──────────────────────────────────────────────────────
 log "1/7  Pacotes do sistema"
 apt-get update -y -q
-apt-get install -y -q git nginx certbot python3-certbot-nginx
+apt-get install -y -q git nginx snapd
 
 # ── 2. Docker ─────────────────────────────────────────────────────────────────
 log "2/7  Docker"
@@ -25,34 +25,58 @@ fi
 # Adiciona usuário corrente ao grupo docker (aplica na próxima sessão)
 usermod -aG docker "${SUDO_USER:-$USER}" 2>/dev/null || true
 
-# ── 3. Nginx ──────────────────────────────────────────────────────────────────
-log "3/7  Nginx"
+# ── 3. SSL (Let's Encrypt, certificado coringa via DNS-01/Cloudflare) ─────────
+# Roda ANTES do nginx (passo 4): o certbot aqui não depende de nginx nem de
+# porta 80 (valida por DNS, não HTTP), e o nginx.conf deste repo já referencia
+# os arquivos do certificado — se o nginx fosse carregado primeiro, o
+# `nginx -t` falharia por o certificado ainda não existir.
+#
+# certbot instalado via SNAP (não apt): o certbot do apt puxa pyOpenSSL/
+# cryptography do sistema, que já quebrou 1x em produção com
+# `AttributeError: module 'lib' has no attribute 'GEN_EMAIL'`. O snap roda
+# isolado do Python do sistema e evita esse problema.
+log "3/7  SSL — certbot (snap, plugin DNS Cloudflare — cobre wildcard)"
+echo ""
+echo "  ⚠️  IMPORTANTE: DNS já deve apontar taylorethedy.com e *.taylorethedy.com"
+echo "  para o IP desta VM. Teste: dig +short taylorethedy.com"
+echo ""
+echo "  Pré-requisito manual (uma vez só): token de API da Cloudflare (escopo"
+echo "  Zone:DNS:Edit, restrito à zona taylorethedy.com — não o Global API Key)"
+echo "  salvo em /root/.secrets/certbot/cloudflare.ini (chmod 600). Não versionar."
+echo ""
+read -rp "  DNS propagado e arquivo de credenciais pronto? [s/N] " dns_ok
+if [[ "${dns_ok,,}" != "s" ]]; then
+  echo "  Configure DNS/token e rode manualmente depois:"
+  echo "    snap install --classic certbot && ln -sf /snap/bin/certbot /usr/bin/certbot"
+  echo "    snap install certbot-dns-cloudflare"
+  echo "    snap set certbot trust-plugin-with-root=ok"
+  echo "    snap connect certbot:plugin certbot-dns-cloudflare"
+  echo "    certbot certonly --dns-cloudflare \\"
+  echo "      --dns-cloudflare-credentials /root/.secrets/certbot/cloudflare.ini \\"
+  echo "      -d taylorethedy.com -d '*.taylorethedy.com'"
+  echo "  Continuando sem SSL por enquanto (o nginx do passo 4 vai falhar até o"
+  echo "  certificado existir — rode este passo antes de tentar de novo)."
+else
+  snap install --classic certbot
+  ln -sf /snap/bin/certbot /usr/bin/certbot
+  snap install certbot-dns-cloudflare
+  snap set certbot trust-plugin-with-root=ok
+  snap connect certbot:plugin certbot-dns-cloudflare
+  certbot certonly --dns-cloudflare \
+    --dns-cloudflare-credentials /root/.secrets/certbot/cloudflare.ini \
+    -d taylorethedy.com -d "*.taylorethedy.com"
+  # Renovação automática via timer do snap (snap.certbot.renew.timer) — já
+  # habilitado por padrão pela instalação do snap, sem passo extra aqui.
+fi
+
+# ── 4. Nginx ──────────────────────────────────────────────────────────────────
+log "4/7  Nginx"
 cp "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/barbeariapro
 ln -sf /etc/nginx/sites-available/barbeariapro /etc/nginx/sites-enabled/barbeariapro
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl enable nginx
 systemctl reload nginx
-
-# ── 4. SSL (Let's Encrypt) ────────────────────────────────────────────────────
-log "4/7  SSL — certbot"
-echo ""
-echo "  ⚠️  IMPORTANTE: verifique que os DNS já propagaram antes de continuar."
-echo "  taylorethedy.app e api.taylorethedy.com devem apontar para este IP."
-echo "  Teste: dig +short taylorethedy.app"
-echo ""
-read -rp "  DNS OK? [s/N] " dns_ok
-if [[ "${dns_ok,,}" != "s" ]]; then
-  echo "  Configure o DNS e re-execute a partir deste passo:"
-  echo "    certbot --nginx -d taylorethedy.app -d api.taylorethedy.com --redirect --agree-tos --no-eff-email"
-  echo "  Continuando sem SSL por enquanto..."
-else
-  certbot --nginx \
-    -d taylorethedy.app \
-    -d api.taylorethedy.com \
-    --redirect --agree-tos --no-eff-email
-  # Renovação automática via cron já configurada pelo certbot
-fi
 
 # ── 5. Infra (PostgreSQL + n8n + Evolution) ───────────────────────────────────
 log "5/7  Infra (postgres / n8n / evolution)"
@@ -82,7 +106,7 @@ docker compose -f docker-compose.app.yml up -d --build
 echo ""
 echo "✅ Deploy concluído!"
 echo ""
-echo "  Frontend : https://taylorethedy.app"
+echo "  Frontend : https://taylorethedy.com (+ subdomínio por barbearia-cliente)"
 echo "  API      : https://api.taylorethedy.com"
 echo "  API Docs : https://api.taylorethedy.com/docs"
 echo ""
