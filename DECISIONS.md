@@ -954,6 +954,26 @@ Encrypt) e o DNS de subdomínios da D-54.
 **Verificações:** `npm run build` ✅ · `docker build` ✅ · container serve (`/login` 200, `/`→
 307 login) ✅ · YAML do compose ✅ · submódulo no SHA certo ✅.
 
+**✅ ATIVADO em prod (2026-07-05, pós-D-64):** domínio já respondia via nginx+TLS (502
+esperado); faltava só subir o container. Submódulo nunca tinha sido de fato clonado na VM
+(pasta `barbearia-superadmin` existia vazia). Deploy key SSH somente-leitura nova
+(`bsuperadmin_deploy`, ED25519) criada na VM + alias `github-bsuperadmin` em
+`/root/.ssh/config`, no mesmo molde do `bfrontend_deploy`; chave pública registrada no repo
+privado via `gh repo deploy-key add` (o link direto de Settings→Deploy keys deu 404 porque a
+sessão do navegador estava logada numa conta GitHub diferente da dona do repo — resolvido
+usando a `gh` CLI local, já autenticada como a conta certa, com autorização explícita do
+dono). URL do submódulo sobrescrita via `git config submodule.barbearia-superadmin.url`
+(SSH, sem tocar `.gitmodules`) → `git submodule update --init` clonou o commit `2fec4b7`.
+`.env.superadmin` (existia mas vazio desde 1º/jul) preenchido: `AUTH_SECRET` gerado com
+`openssl rand -base64 32` direto na VM (nunca exposto), `API_URL_INTERNAL`,
+`AUTH_TRUST_HOST=true`, permissões `600`. Subida com `SUPERADMIN_API_URL=https://api.
+taylorethedy.com` (o build embute essa URL em `NEXT_PUBLIC_API_URL`; o default
+`localhost:8000` não serve para chamadas client-side do browser em produção). Efeito
+colateral sem incidente: o compose recriou também o `backend` (build compartilhado no bake),
+voltou `healthy`. **Validado:** `https://admin.taylorethedy.com` → `307` para `/login` com
+cookies do next-auth (`__Host-authjs.csrf-token`, `__Secure-authjs.callback-url`); containers
+`superadmin` e `backend` `healthy`; logs do superadmin limpos (`✓ Ready`).
+
 ---
 
 ### D-57 — Gestão inteligente de equipe: folha × receita recorrente + Kernel IA navegador — 2026-07-02
@@ -1331,10 +1351,8 @@ corrigidas as referências a `taylorethedy.app`.
 - `https://taylor.taylorethedy.com` (subdomínio real da org 1) → 307 para `/login` com cookies do
   next-auth (`callback-url=https://taylor.taylorethedy.com`) — **primeira confirmação em produção de que
   a resolução multi-tenant por subdomínio (D-54) funciona de ponta a ponta.**
-**Pendente:** ativar o container do superadmin (`docker compose --profile superadmin up -d --build
-superadmin`, D-56) agora que `admin.taylorethedy.com` já responde via nginx+TLS; ajustar `SUPERADMIN_API_URL`
-para `https://api.taylorethedy.com` no build (hoje default `http://localhost:8000`, que não serve pra
-chamadas client-side do browser em produção).
+**Pendente:** ~~ativar o container do superadmin~~ — feito em 2026-07-05, ver D-56 (seção "✅ ATIVADO em
+prod").
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 

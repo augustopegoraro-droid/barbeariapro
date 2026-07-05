@@ -125,16 +125,18 @@ dentro do frontend de tenant.
   `./barbearia-superadmin`), consumindo `/platform/*` de prod. Telas: login, dashboard
   (2 MRR + uso por tenant), tenants (listar/suspender/reativar/editar), onboarding.
   next-auth Credentials → token `typ=platform`; **sem** org/subdomínio; porta dev 3100.
-  **Deploy preparado, container ainda não ativado:** serviço `superadmin` no
-  `docker-compose.app.yml` sob **profile `superadmin`** (não sobe no `up` padrão) + `Dockerfile`
-  + server block `admin.taylorethedy.com`→:3100 em `deploy/nginx.conf` + `.env.superadmin.example`.
-  **Domínio ativo em prod (D-64, 2026-07-05):** `taylorethedy.com` + TLS coringa via Cloudflare
-  DNS-01 (certbot por snap); `admin.taylorethedy.com` já responde via nginx+HTTPS (502 até o
-  container subir — esperado). Falta só: `docker compose -f docker-compose.app.yml --profile
-  superadmin up -d --build superadmin` (com `.env.superadmin` preenchido e
-  `SUPERADMIN_API_URL=https://api.taylorethedy.com` no build, não o default `localhost:8000`).
-- **Pendente:** ativar o container do superadmin (domínio já não é mais bloqueio); saúde de bot
-  ao vivo (conectado/restrito) exige Evolution API (hoje só o proxy `wa_instance_name`).
+  Serviço `superadmin` no `docker-compose.app.yml` sob **profile `superadmin`** (não sobe no
+  `up` padrão) + `Dockerfile` + server block `admin.taylorethedy.com`→:3100 em
+  `deploy/nginx.conf` + `.env.superadmin.example`. **Domínio ativo em prod (D-64,
+  2026-07-05):** `taylorethedy.com` + TLS coringa via Cloudflare DNS-01 (certbot por snap).
+  **✅ ATIVADO em prod (2026-07-05):** container no ar via `docker compose --profile
+  superadmin up -d --build superadmin` com `SUPERADMIN_API_URL=https://api.taylorethedy.com`
+  no build; `https://admin.taylorethedy.com` responde `307`→`/login` com cookies next-auth.
+  Deploy key SSH somente-leitura própria (`bsuperadmin_deploy`), mesmo molde do
+  `bfrontend_deploy`. Detalhes em DECISIONS.md D-56.
+- **Pendente:** mover portas 8000/3000 para trás do nginx e fechar acesso direto (débito de
+  segurança, ver tabela de dívida técnica); saúde de bot ao vivo (conectado/restrito) exige
+  Evolution API (hoje só o proxy `wa_instance_name`).
 
 ### Financeiro (`app/api/financeiro.py`)
 - Receita = soma de `AppointmentItem.price_charged` de agendamentos `concluido`.
