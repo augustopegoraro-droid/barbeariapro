@@ -29,6 +29,7 @@ from models import (
     Expense,
     ExpenseCategory,
     Payment,
+    PaymentTransaction,
     Service,
     Unit,
     User,
@@ -396,6 +397,14 @@ class DreMesOut(BaseModel):
     despesa_por_subgrupo: dict[str, float]
 
 
+class DreDespesaItemOut(BaseModel):
+    """Uma conta (linha-folha do DRE) agregada no período — alimenta o
+    drill-down por grupo e o Top de despesas no dashboard."""
+    subgrupo: str  # slug: fixa | variavel | pessoal | impostos | outros
+    item: str      # rótulo da conta (line_item): "Aluguel", "Energia"...
+    total: float
+
+
 class DreSerieOut(BaseModel):
     inicio: Optional[str]
     fim: Optional[str]
@@ -403,6 +412,8 @@ class DreSerieOut(BaseModel):
     receita_total: float
     despesa_total: float
     resultado_total: float
+    # Despesa detalhada por conta no período (ordenada por total desc).
+    despesa_por_item: list[DreDespesaItemOut]
 
 
 def _month_first(month: Optional[str]) -> Optional[date]:
@@ -483,6 +494,31 @@ async def get_financeiro_dre(
             )
         )
 
+    # Despesa detalhada por conta (agregada no período) — drill-down + Top N.
+    item_q = (
+        select(
+            DreMonthlyLine.subgroup,
+            DreMonthlyLine.line_item,
+            func.sum(DreMonthlyLine.amount).label("total"),
+        )
+        .where(DreMonthlyLine.section == "despesa")
+        .group_by(DreMonthlyLine.subgroup, DreMonthlyLine.line_item)
+        .order_by(func.sum(DreMonthlyLine.amount).desc())
+    )
+    if date_from is not None:
+        item_q = item_q.where(DreMonthlyLine.competence_month >= date_from)
+    if date_to is not None:
+        item_q = item_q.where(DreMonthlyLine.competence_month <= date_to)
+    item_rows = (await db.execute(item_q)).all()
+    despesa_por_item = [
+        DreDespesaItemOut(
+            subgrupo=r.subgroup or "outros",
+            item=r.line_item,
+            total=float(r.total),
+        )
+        for r in item_rows
+    ]
+
     return DreSerieOut(
         inicio=inicio or None,
         fim=fim or None,
@@ -490,6 +526,7 @@ async def get_financeiro_dre(
         receita_total=float(receita_total),
         despesa_total=float(despesa_total),
         resultado_total=float(receita_total - despesa_total),
+        despesa_por_item=despesa_por_item,
     )
 
 
@@ -663,4 +700,186 @@ async def export_faturamento_csv(
         f"faturamento-{month}.csv",
         ["Data", "Atendimentos concluídos", "Receita (R$)"],
         rows,
+    )
+
+
+# ─── GET /financeiro/pagamentos — mix de formas / custo de cartão (D-63) ──────
+
+
+def _next_month(d: date) -> date:
+    """1º dia do mês seguinte (limite superior exclusivo do período)."""
+    return date(d.year + (d.month // 12), (d.month % 12) + 1, 1)
+
+
+class PagamentoTipoOut(BaseModel):
+    tipo: str          # "Crédito" | "Débito" | "PIX" | "À Vista" | ...
+    count: int
+    recebido: float    # Σ amount_paid
+    taxa: float        # Σ operator_discount_amount (custo, tipicamente negativo)
+    liquido: float     # Σ amount_to_receive
+
+
+class PagamentoBandeiraOut(BaseModel):
+    bandeira: str      # "Visa" | "Mastercard" | "PIX" | "Dinheiro" | ...
+    count: int
+    recebido: float
+    taxa: float
+    taxa_pct: float    # custo relativo = |taxa| / recebido (0 se recebido ≤ 0)
+
+
+class PagamentoMesOut(BaseModel):
+    month: str         # YYYY-MM (de movement_date)
+    recebido: float
+    taxa: float
+    liquido: float
+
+
+class PagamentosOut(BaseModel):
+    inicio: Optional[str]
+    fim: Optional[str]
+    count: int
+    total_recebido: float
+    total_taxa: float        # custo de cartão no período (tipicamente negativo)
+    total_liquido: float
+    ticket_medio: float
+    pix_pct: float           # % do recebido pago em PIX
+    por_tipo: list[PagamentoTipoOut]
+    por_bandeira: list[PagamentoBandeiraOut]
+    por_mes: list[PagamentoMesOut]
+
+
+@router.get("/pagamentos", response_model=PagamentosOut)
+async def get_financeiro_pagamentos(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    inicio: Annotated[Optional[str], Query(description="Mês inicial YYYY-MM (opcional)")] = None,
+    fim: Annotated[Optional[str], Query(description="Mês final YYYY-MM (opcional)")] = None,
+) -> PagamentosOut:
+    """Mix de formas de pagamento, custo de cartão e evolução mensal — do histórico
+    analítico migrado da Trinks (`payment_transactions`, D-63). Espelha o export
+    "Pagamentos/Estornos" (recebimento por comanda); NÃO reconcilia 1:1 com o DRE
+    (competência). Considera todas as linhas do período (troco/estorno é marginal).
+    """
+    await _require_manager(db, current_user)
+    date_from = _month_first(inicio)
+    date_to_excl = _next_month(_month_first(fim)) if fim else None
+
+    def _period(q):
+        if date_from is not None:
+            q = q.where(PaymentTransaction.movement_date >= date_from)
+        if date_to_excl is not None:
+            q = q.where(PaymentTransaction.movement_date < date_to_excl)
+        return q
+
+    tipo_rows = (
+        await db.execute(
+            _period(
+                select(
+                    PaymentTransaction.payment_type,
+                    func.count().label("n"),
+                    func.coalesce(func.sum(PaymentTransaction.amount_paid), 0).label("recebido"),
+                    func.coalesce(
+                        func.sum(PaymentTransaction.operator_discount_amount), 0
+                    ).label("taxa"),
+                    func.coalesce(
+                        func.sum(PaymentTransaction.amount_to_receive), 0
+                    ).label("liquido"),
+                )
+                .group_by(PaymentTransaction.payment_type)
+                .order_by(func.sum(PaymentTransaction.amount_paid).desc())
+            )
+        )
+    ).all()
+
+    band_rows = (
+        await db.execute(
+            _period(
+                select(
+                    PaymentTransaction.payment_method,
+                    func.count().label("n"),
+                    func.coalesce(func.sum(PaymentTransaction.amount_paid), 0).label("recebido"),
+                    func.coalesce(
+                        func.sum(PaymentTransaction.operator_discount_amount), 0
+                    ).label("taxa"),
+                )
+                .group_by(PaymentTransaction.payment_method)
+                .order_by(func.sum(PaymentTransaction.amount_paid).desc())
+            )
+        )
+    ).all()
+
+    month_expr = func.to_char(PaymentTransaction.movement_date, "YYYY-MM")
+    mes_rows = (
+        await db.execute(
+            _period(
+                select(
+                    month_expr.label("month"),
+                    func.coalesce(func.sum(PaymentTransaction.amount_paid), 0).label("recebido"),
+                    func.coalesce(
+                        func.sum(PaymentTransaction.operator_discount_amount), 0
+                    ).label("taxa"),
+                    func.coalesce(
+                        func.sum(PaymentTransaction.amount_to_receive), 0
+                    ).label("liquido"),
+                )
+                .group_by(month_expr)
+                .order_by(month_expr)
+            )
+        )
+    ).all()
+
+    por_tipo = [
+        PagamentoTipoOut(
+            tipo=r.payment_type,
+            count=r.n,
+            recebido=float(r.recebido),
+            taxa=float(r.taxa),
+            liquido=float(r.liquido),
+        )
+        for r in tipo_rows
+    ]
+    por_bandeira = [
+        PagamentoBandeiraOut(
+            bandeira=r.payment_method,
+            count=r.n,
+            recebido=float(r.recebido),
+            taxa=float(r.taxa),
+            taxa_pct=(
+                round(abs(float(r.taxa)) / float(r.recebido) * 100, 2)
+                if float(r.recebido) > 0
+                else 0.0
+            ),
+        )
+        for r in band_rows
+    ]
+    por_mes = [
+        PagamentoMesOut(
+            month=r.month,
+            recebido=float(r.recebido),
+            taxa=float(r.taxa),
+            liquido=float(r.liquido),
+        )
+        for r in mes_rows
+    ]
+
+    total_recebido = sum(t.recebido for t in por_tipo)
+    total_taxa = sum(t.taxa for t in por_tipo)
+    total_liquido = sum(t.liquido for t in por_tipo)
+    count = sum(t.count for t in por_tipo)
+    pix_recebido = sum(t.recebido for t in por_tipo if t.tipo.upper() == "PIX")
+    ticket = (total_recebido / count) if count else 0.0
+    pix_pct = (pix_recebido / total_recebido * 100) if total_recebido else 0.0
+
+    return PagamentosOut(
+        inicio=inicio or None,
+        fim=fim or None,
+        count=count,
+        total_recebido=round(total_recebido, 2),
+        total_taxa=round(total_taxa, 2),
+        total_liquido=round(total_liquido, 2),
+        ticket_medio=round(ticket, 2),
+        pix_pct=round(pix_pct, 2),
+        por_tipo=por_tipo,
+        por_bandeira=por_bandeira,
+        por_mes=por_mes,
     )
