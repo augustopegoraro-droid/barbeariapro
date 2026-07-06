@@ -1354,6 +1354,51 @@ corrigidas as referências a `taylorethedy.app`.
 **Pendente:** ~~ativar o container do superadmin~~ — feito em 2026-07-05, ver D-56 (seção "✅ ATIVADO em
 prod").
 
+### D-65 — Import do DRE mensal da Trinks: histórico financeiro por competência (tabela analítica dedicada) — 2026-07-06
+**Contexto:** o sistema nunca teve histórico de custos/resultado — a tabela `Expense` está vazia e a
+receita só existe a partir dos atendimentos concluídos pelo próprio app. A Trinks exporta o **"DRE"**
+(Demonstrativo de Resultado) mensal: receita por tipo + despesa por categoria/subgrupo + resultado, mês a
+mês, desde mai/2020. É a peça que faltava pro dashboard executivo — custo **fixo × variável**, folha
+(alinha com o D-57), margem e evolução de ~6 anos. Complementa o D-59 (caixa/recebimento) e o D-63
+(pagamentos por comanda): o DRE é **competência** (accrual), não recebimento — **não reconcilia 1:1** com
+`payment_transactions`/`cash_daily_closings`; são lentes diferentes.
+**Formato do arquivo:** matriz **pivotada** — linhas = itens do DRE, colunas = meses (`"outubro / 2025"` …
++ `"Total do Período"`, esta ignorada). Seções `RECEITAS` e `(-) DESPESAS`; despesa tem 5 subgrupos
+(Fixas/Variáveis/Pessoal/Impostos/Outros), cada um com uma linha de **subtotal** seguida das folhas.
+Exportado dividido por ano (driblar o timeout síncrono do export da Trinks) — 6 arquivos contíguos.
+**Decisão:** **tabela analítica dedicada** `dre_monthly_lines` (migration **0036**, molde das 0026/0035:
+FK CASCADE + RLS por `organization_id` + GRANT ao `barber_app`). Guarda **só as linhas-folha**; subtotais
+de subgrupo e totais do arquivo são **recomputados** (evita dupla contagem). Colunas: `competence_month`
+(1º dia do mês), `section` (receita|despesa, **CHECK** `dre_section_valid`), `subgroup` (slug; NULL em
+receita), `line_item`, `amount Numeric(12,2)`, `source='trinks'`. **Sem CHECK de sinal** em `amount`
+(≠ D-60): contra-receitas — ex.: "Consumo de Pré-pago" — são legitimamente negativas, igual à taxa de
+operadora do D-63. **Sem UNIQUE**: idempotência por **substituição dos meses** cobertos pelo arquivo
+(delete-by-mês + insert), no molde do D-63.
+**Parser (`app/services/trinks_dre.py`):** despivota os meses (trata latin-1 + acento em `março`),
+detecta seções pelos cabeçalhos e subgrupos **estruturalmente** (o 1º item-com-valor após uma linha em
+branco, dentro de DESPESAS, é o subtotal do subgrupo → define o subgrupo e é pulado). Um **self-check**
+soma as folhas por mês e compara com os totais declarados no próprio arquivo (`checksum_ok`) — vira um
+detector de erro de parse. Pula valores zero (mantém a tabela enxuta). Parte pura (`parse_dre`) +
+persistência (`import_dre`).
+**Tooling (tríade + leitura):** rota self-service `POST /admin/import/trinks/dre` (`app/api/imports.py`,
+gestor, corpo = CSV bruto, `commit=false` dry-run) + CLI `scripts/import_trinks_dre.py` (roda **na VM**,
+aceita vários arquivos de uma vez — meses disjuntos) + endpoint de leitura `GET /financeiro/dre?inicio=&fim=`
+(série mensal: receita, despesa com quebra por subgrupo, resultado, margem). Testes
+`tests/test_trinks_dre.py` (9) com **fixture sintética** `dre_sample.csv` (o DRE é P&L sensível — nunca
+usar números reais de T&T no repo).
+**Débitos descartados:** em paralelo, o export "Débitos de clientes" da Trinks foi confirmado **inválido**
+pelo dono e sai do escopo (era um dos 5 blocos candidatos). Como `client_debts` é tabela-folha (nada a
+referencia; `client_id` é FK opcional de saída), removê-los não cascateia. Não há rota de DELETE no app →
+`scripts/delete_org_debts.py` (molde do `reset_org.py`: `barber_app`+RLS, dry-run, `--commit` exige
+`--confirm-name`). A remover na org 1 em prod (contas a receber da migration 0023 seguem existindo p/ orgs
+futuras, só a carga T&T é descartada).
+**Validação (só STAGING, head 0036):** parser rodado nos **6 arquivos reais** → `checksum_ok=True` e 0
+mismatches em **todos os 75 meses** (mai/2020 → jul/2026, contíguos, sem overlap), 2.752 linhas-folha, 5
+subgrupos detectados. Suíte **481 pass / 2 skip / 2 ambientais / 0 regressões**. Migration aplicada na
+staging com a role dona (`ADMIN_DATABASE_URL`; `barber_app` não cria em `public`).
+**Pendente:** deploy prod (aplicar 0036 + importar os 6 arquivos na org 1 + rodar o delete de débitos) e
+**consumo no dashboard** (gráfico de evolução receita×despesa, custo fixo×variável, margem) — follow-up.
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

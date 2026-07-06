@@ -25,6 +25,7 @@ from models import (
     Barber,
     CashDailyClosing,
     Client,
+    DreMonthlyLine,
     Expense,
     ExpenseCategory,
     Payment,
@@ -381,6 +382,114 @@ async def get_financeiro_caixa(
             )
             for r in rows
         ],
+    )
+
+
+# ─── GET /financeiro/dre — DRE mensal migrado da Trinks (D-65) ────────────────
+
+class DreMesOut(BaseModel):
+    month: str  # YYYY-MM
+    receita: float
+    despesa: float
+    resultado: float
+    margem_pct: float
+    despesa_por_subgrupo: dict[str, float]
+
+
+class DreSerieOut(BaseModel):
+    inicio: Optional[str]
+    fim: Optional[str]
+    months: list[DreMesOut]
+    receita_total: float
+    despesa_total: float
+    resultado_total: float
+
+
+def _month_first(month: Optional[str]) -> Optional[date]:
+    """'YYYY-MM' → 1º dia do mês. None/'' → None. Formato inválido → 422."""
+    if not month:
+        return None
+    if not _MONTH_RE.match(month):
+        raise HTTPException(422, "Mês inválido. Use o formato YYYY-MM.")
+    return date(int(month[:4]), int(month[5:7]), 1)
+
+
+@router.get("/dre", response_model=DreSerieOut)
+async def get_financeiro_dre(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    inicio: Annotated[Optional[str], Query(description="Mês inicial YYYY-MM (opcional)")] = None,
+    fim: Annotated[Optional[str], Query(description="Mês final YYYY-MM (opcional)")] = None,
+) -> DreSerieOut:
+    """Série mensal do DRE migrado da Trinks (competência): receita, despesa (com
+    quebra por subgrupo), resultado e margem. Histórico só do período importado —
+    ver `dre_monthly_lines`. Complementar a `/caixa` (recebimento); não reconcilia 1:1.
+    """
+    await _require_manager(db, current_user)
+    date_from = _month_first(inicio)
+    date_to = _month_first(fim)
+
+    q = (
+        select(
+            DreMonthlyLine.competence_month,
+            DreMonthlyLine.section,
+            DreMonthlyLine.subgroup,
+            func.sum(DreMonthlyLine.amount).label("total"),
+        )
+        .group_by(
+            DreMonthlyLine.competence_month,
+            DreMonthlyLine.section,
+            DreMonthlyLine.subgroup,
+        )
+        .order_by(DreMonthlyLine.competence_month)
+    )
+    if date_from is not None:
+        q = q.where(DreMonthlyLine.competence_month >= date_from)
+    if date_to is not None:
+        q = q.where(DreMonthlyLine.competence_month <= date_to)
+
+    rows = (await db.execute(q)).all()
+
+    by_month: dict[date, dict] = {}
+    for r in rows:
+        m = by_month.setdefault(
+            r.competence_month,
+            {"receita": Decimal("0"), "despesa": Decimal("0"), "subgroups": {}},
+        )
+        if r.section == "receita":
+            m["receita"] += r.total
+        else:
+            m["despesa"] += r.total
+            key = r.subgroup or "outros"
+            m["subgroups"][key] = m["subgroups"].get(key, Decimal("0")) + r.total
+
+    months: list[DreMesOut] = []
+    receita_total = despesa_total = Decimal("0")
+    for month_date in sorted(by_month):
+        m = by_month[month_date]
+        receita, despesa = m["receita"], m["despesa"]
+        resultado = receita - despesa
+        receita_total += receita
+        despesa_total += despesa
+        margem = (resultado / receita * 100) if receita else Decimal("0")
+        months.append(
+            DreMesOut(
+                month=month_date.strftime("%Y-%m"),
+                receita=float(receita),
+                despesa=float(despesa),
+                resultado=float(resultado),
+                margem_pct=round(float(margem), 2),
+                despesa_por_subgrupo={k: float(v) for k, v in sorted(m["subgroups"].items())},
+            )
+        )
+
+    return DreSerieOut(
+        inicio=inicio or None,
+        fim=fim or None,
+        months=months,
+        receita_total=float(receita_total),
+        despesa_total=float(despesa_total),
+        resultado_total=float(receita_total - despesa_total),
     )
 
 

@@ -293,6 +293,30 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > **3.714 transações** (05/01–03/07/2026; **R$ 414.137,15** pagos / **−R$ 6.823,55** de taxa de operadora),
 > validado por `psql` independente, conferindo com a Trinks. CSV cru removido da VM (LGPD). **Falta:**
 > consumo no frontend (relatórios de mix de formas / custo de cartão / recebíveis).
+>
+> **DRE mensal / histórico financeiro por competência (D-65, 2026-07-06 — ⏳ só STAGING, head `0036`):** o
+> export "DRE" (Demonstrativo de Resultado) da Trinks é a peça que faltava — a tabela `Expense` está vazia,
+> então não havia histórico de custos/resultado. É uma **matriz pivotada** (linhas = itens, colunas = meses):
+> receita por tipo + despesa por categoria/subgrupo (Fixas/Variáveis/Pessoal/Impostos/Outros) + resultado,
+> desde mai/2020. É **competência** (accrual) — **não reconcilia 1:1** com `payment_transactions`/
+> `cash_daily_closings` (recebimento). Decisão (molde D-59/D-63): **tabela analítica dedicada**
+> `dre_monthly_lines` (migration `0035`→`0036`, RLS + GRANT ao `barber_app`), guardando **só as linhas-folha**
+> (subtotais/totais recomputados → sem dupla contagem). CHECK só em `section` (receita|despesa); **sem CHECK
+> de sinal** (contra-receitas negativas, ex.: "Consumo de Pré-pago") e **sem UNIQUE** (idempotência por
+> **substituição dos meses** cobertos). `app/services/trinks_dre.py` (parser despivota meses + detecta
+> subgrupos **estruturalmente** + **self-check** `checksum_ok` contra os totais do próprio arquivo) + rota
+> `POST /admin/import/trinks/dre` + CLI `scripts/import_trinks_dre.py` (roda na VM, aceita vários arquivos) +
+> leitura `GET /financeiro/dre?inicio=&fim=` (série mensal: receita, despesa por subgrupo, resultado, margem)
+> + `tests/test_trinks_dre.py` (9, fixture **sintética** — DRE é P&L sensível). **Validado:** parser nos **6
+> arquivos reais** → `checksum_ok` em **todos os 75 meses** (mai/2020–jul/2026, 2.752 linhas-folha, 5
+> subgrupos); suíte **481 pass / 2 ambientais / 0 regressões**. **Falta:** deploy prod (0036 + import na org 1)
+> + consumo no dashboard (evolução receita×despesa, custo fixo×variável, margem).
+>
+> **Débitos de clientes — DESCARTADOS (D-65, 2026-07-06):** o dono confirmou que o export "Débitos" da Trinks
+> é fonte **inválida**; sai do escopo (a tabela `client_debts`/migration `0023` segue existindo p/ orgs
+> futuras — só a carga T&T é descartada). `client_debts` é tabela-folha (nada a referencia; `client_id` é FK
+> opcional) → remover não cascateia. Sem rota de DELETE no app → `scripts/delete_org_debts.py` (molde
+> `reset_org.py`: `barber_app`+RLS, dry-run, `--commit` exige `--confirm-name`). **A remover na org 1 em prod.**
 
 **Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — ✅ DEPLOYADO em prod 2026-07-02,
 código + migrations `0024`/`0025`, head `0025`):**

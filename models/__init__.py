@@ -49,6 +49,7 @@ from .payment import Expense, ExpenseCategory, Payment
 from .debt import ClientDebt
 from .cash_closing import CashDailyClosing
 from .payment_transaction import PaymentTransaction
+from .dre import DreMonthlyLine
 from .billing import (
     BillingCredit,
     BillingCustomer,
@@ -151,6 +152,7 @@ __all__ = [
     "ClientDebt",
     "CashDailyClosing",
     "PaymentTransaction",
+    "DreMonthlyLine",
     "AppointmentRescheduleRequest",
     # integrações
     "IntegrationAccount",

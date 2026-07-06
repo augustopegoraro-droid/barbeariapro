@@ -29,6 +29,7 @@ from app.services.trinks_appointments import (
 )
 from app.services.trinks_cash_closing import import_cash_closings, parse_cash_closings
 from app.services.trinks_debts import import_debts, parse_debts
+from app.services.trinks_dre import import_dre, parse_dre
 from app.services.trinks_import import import_clients, parse_clients
 from app.services.trinks_payments import import_payments, parse_payments
 from app.services.trinks_ranking import (
@@ -211,6 +212,34 @@ async def import_trinks_payments(
     raw = await _read_body(request)
     rows, parse_report = parse_payments(raw)
     report = await import_payments(
+        db, current_user.organization_id, rows, dry_run=not commit
+    )
+    return {
+        "commit": commit,
+        "parse": parse_report.as_dict(),
+        "import": report.as_dict(),
+    }
+
+
+@router.post("/dre")
+async def import_trinks_dre(
+    request: Request,
+    db: TenantDB,
+    current_user: CurrentUser,
+    commit: Annotated[bool, Query(description="false=dry-run (padrão); true=grava")] = False,
+) -> dict:
+    """Importa o DRE (Demonstrativo de Resultado) mensal da Trinks.
+
+    Histórico por competência em `dre_monthly_lines` (receita por tipo, despesa por
+    categoria/subgrupo, resultado/margem). Guarda só as linhas-folha; subtotais e
+    totais do arquivo são recomputados. O `parse.checksum_ok` confirma que a soma
+    recomputada bate com os totais declarados no próprio arquivo. Idempotente por
+    substituição dos meses cobertos — re-rodar converge ao mesmo estado.
+    """
+    await _guard(db, current_user)
+    raw = await _read_body(request)
+    rows, parse_report = parse_dre(raw)
+    report = await import_dre(
         db, current_user.organization_id, rows, dry_run=not commit
     )
     return {
