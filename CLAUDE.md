@@ -313,7 +313,14 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > merge `6ab1a3e`; molde D-59/D-63): backup `~/predeploy_d65_20260706.sql` → `0036` aplicada (head `0036`) →
 > import dos 6 arquivos na org 1 (**2.752 linhas-folha / 75 meses**, todos `checksum_ok`, `removed_existing=0`),
 > validado por `psql` independente (isolamento RLS ok) → rebuild backend (`/health` ok, rotas no ar). CSV cru
-> removido da VM (LGPD). **Falta:** consumo no dashboard (evolução receita×despesa, custo fixo×variável, margem).
+> removido da VM (LGPD). **✅ Consumo no dashboard — DEPLOYADO em prod 2026-07-06** (frontend PR #5, merge
+> `2665437`): 3ª visão do Financeiro (`Dia · Mês · DRE`) em `/admin/financeiro` consumindo `GET /financeiro/dre`
+> — 4 KPIs (receita/despesa/resultado/margem), gráfico Receita×Despesa por mês (barras verde/vermelha, eixo de
+> anos, tooltip), composição da despesa por subgrupo, detalhamento mensal e nota de competência; seletor 12/24
+> meses/tudo (padrão 24m). `components/financeiro/dre-view.tsx` (novo) + React Query (`useFinanceiroDre`) +
+> tokens `--chart-*` (gráfico/HBars à mão, sem lib; validado nos temas claro e escuro). Deploy só-frontend (sem
+> migration): `git pull` na VM (ff `e985d85`→`2665437`) + rebuild `--build frontend`; smoke `/login` 200 +
+> HTTPS `taylor.taylorethedy.com` 200 + bundle `.next` confere.
 >
 > **Débitos de clientes — DESCARTADOS (D-65, 2026-07-06):** o dono confirmou que o export "Débitos" da Trinks
 > é fonte **inválida**; sai do escopo (a tabela `client_debts`/migration `0023` segue existindo p/ orgs

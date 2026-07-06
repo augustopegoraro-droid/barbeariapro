@@ -1414,8 +1414,17 @@ staging com a role dona (`ADMIN_DATABASE_URL`; `barber_app` não cria em `public
    `/admin/import/trinks/dre` no OpenAPI (código novo no ar).
 7. **Limpeza LGPD:** CSVs de DRE removidos da VM (P&L sensível); backup preservado.
 
-**Pendente:** **consumo no dashboard** (gráfico de evolução receita×despesa, custo fixo×variável, margem) —
-follow-up.
+**✅ Consumo no dashboard — DEPLOYADO em prod 2026-07-06** (frontend PR #5, merge `2665437`): terceira visão
+do Financeiro (`Dia · Mês · DRE`) em `/admin/financeiro` consumindo `GET /financeiro/dre` — 4 KPIs
+(receita/despesa/resultado/margem), gráfico Receita×Despesa por mês (barras verde/vermelha, eixo de anos,
+tooltip no hover), composição da despesa por subgrupo (Pessoal/Fixos/Variáveis/Impostos/Outros), detalhamento
+mensal e nota de competência (DRE é accrual — **não reconcilia 1:1 com o caixa**). Seletor de período 12/24
+meses/tudo (padrão 24m). Design system: `AsyncState` (5 estados) + React Query (`useFinanceiroDre`) + tokens
+`--chart-*` (gráfico e barras à mão — o projeto não usa lib de chart); validado nos temas claro e escuro
+(séries sintéticas de 75 e 12 meses). `components/financeiro/dre-view.tsx` (novo) + 5 arquivos (`types`,
+`hooks/use-financeiro`, `constants`, `index`, `financeiro/page`); `tsc`+`eslint` limpos. Deploy só-frontend
+(sem migration): `git pull` na VM (fast-forward `e985d85`→`2665437`) + rebuild `--build frontend`; smoke
+`/login` 200, HTTPS `taylor.taylorethedy.com` 200, e o bundle `.next` contém o código do DRE.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
