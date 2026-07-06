@@ -26,6 +26,10 @@ class Settings(BaseSettings):
 
     # CORS: origens permitidas, separadas por vírgula
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
+    # CORS: regex de origem (opcional) — casa origens dinâmicas como os
+    # subdomínios de tenant do SaaS multi-tenant (ex.: https://<org>.taylorethedy.com).
+    # Vazio = desligado (só a lista acima vale). É OR com cors_origins.
+    cors_origin_regex: str = ""
 
     # Endpoints de debug (ex.: /bot/debounce/debug-set-session) — manter False em produção
     enable_debug_endpoints: bool = False
