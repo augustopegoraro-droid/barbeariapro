@@ -123,7 +123,7 @@ sem escrita.
 
 ## Parte 2 — Análise da importação Trinks já realizada
 
-### 2.1 O que foi importado (7 fluxos + DRE em staging; débitos descartados)
+### 2.1 O que foi importado (8 fluxos em prod; débitos descartados)
 
 | # | Export Trinks | Tabela destino | Volume em prod | Dedup / Idempotência | Qualidade |
 |---|---|---|---|---|---|
@@ -131,10 +131,10 @@ sem escrita.
 | 2 | Ranking de clientes → enrich | `clients` (preenche lacunas) | — | nunca sobrescreve | ✅ |
 | 3 | Ranking → fidelidade (D-62) | `client_loyalty` + `loyalty_point_ledger` | **2.197** clientes / 965k pts | upsert snapshot + pontos 1×/cliente | ✅ ótima; ⚠️ populou `status`, não `nivel` |
 | 4 | Agendamentos | `appointments`+`items` | **47** (julho futuro) | **sem dedup**; **todos `agendado`** | ⚠️ **crítico** (não é histórico, não é `concluido`) |
-| 5 | ~~Débitos~~ **DESCARTADO** (D-65) | `client_debts` (migr. 0023) | **fonte inválida** → não importar; remover na org 1 (`delete_org_debts.py`) | — | dono confirmou inválido (2026-07-06) |
+| 5 | ~~Débitos~~ **DESCARTADO** (D-65) | `client_debts` (migr. 0023) | **fonte inválida** → não importar; **0 linhas na org 1 em prod** (carga nunca rodou — nada a remover) | — | dono confirmou inválido (2026-07-06) |
 | 6 | Movimentação Financeira (caixa) | `cash_daily_closings` (migr. 0026) | **149 dias** (05/01–02/07) | upsert por (org,dia) | ✅ boa; sem FK p/ cliente/barbeiro |
 | 7 | Pagamentos/Estornos (D-63) | `payment_transactions` (migr. 0035) | **3.714** (R$ 414k / −R$ 6.823 taxa) | substituição de período | ✅ boa; **sem FK p/ cliente/barbeiro/serviço** |
-| 8 | **DRE mensal (D-65)** | `dre_monthly_lines` (migr. 0036) | **só staging** — 75 meses (mai/20–jul/26), 2.752 linhas | substituição de meses; **self-check** `checksum_ok` | ✅ ótima; **competência** (≠ recebimento); folha real |
+| 8 | **DRE mensal (D-65)** | `dre_monthly_lines` (migr. 0036) | **2.752** linhas / 75 meses (mai/20–jul/26) | substituição de meses; **self-check** `checksum_ok` | ✅ ótima; **competência** (≠ recebimento); folha real |
 
 ### 2.2 Lacunas e inconsistências (o que impede o aproveitamento)
 
@@ -301,10 +301,10 @@ Legenda: 🟢 já dá com o que temos · 🟡 precisa de 1 import · 🔴 import
 | Recebíveis (a receber por data prevista) | `payment_transactions.expected_receipt_date` | 🟢 |
 | Custo de cartão (R$ e %) | `payment_transactions` | 🟢 |
 | Fechamento de caixa diário (série) | `cash_daily_closings` | 🟢 |
-| **Resultado e margem por mês (DRE)** | `dre_monthly_lines` | 🟢 (staging; falta prod) |
-| **Custo fixo × variável** | `dre_monthly_lines.subgroup` | 🟢 (staging) |
-| **Despesa por categoria + folha real** | `dre_monthly_lines` (subgrupo `pessoal`) | 🟢 (staging; alinha D-57) |
-| Evolução receita × despesa (~6 anos) | `dre_monthly_lines` | 🟢 (staging) |
+| **Resultado e margem por mês (DRE)** | `dre_monthly_lines` | 🟢 (prod; falta tela) |
+| **Custo fixo × variável** | `dre_monthly_lines.subgroup` | 🟢 (prod) |
+| **Despesa por categoria + folha real** | `dre_monthly_lines` (subgrupo `pessoal`) | 🟢 (prod; alinha D-57) |
+| Evolução receita × despesa (~6 anos) | `dre_monthly_lines` | 🟢 (prod) |
 | ~~Contas a receber (débitos em aberto)~~ | ~~`client_debts`~~ | 🗑️ **descartado** (fonte inválida, D-65) |
 
 ### 5.2 Retenção / Churn / Frequência / LTV

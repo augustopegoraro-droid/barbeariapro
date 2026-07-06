@@ -1392,12 +1392,30 @@ referencia; `client_id` é FK opcional de saída), removê-los não cascateia. N
 `scripts/delete_org_debts.py` (molde do `reset_org.py`: `barber_app`+RLS, dry-run, `--commit` exige
 `--confirm-name`). A remover na org 1 em prod (contas a receber da migration 0023 seguem existindo p/ orgs
 futuras, só a carga T&T é descartada).
-**Validação (só STAGING, head 0036):** parser rodado nos **6 arquivos reais** → `checksum_ok=True` e 0
+**Validação (staging, head 0036):** parser rodado nos **6 arquivos reais** → `checksum_ok=True` e 0
 mismatches em **todos os 75 meses** (mai/2020 → jul/2026, contíguos, sem overlap), 2.752 linhas-folha, 5
 subgrupos detectados. Suíte **481 pass / 2 skip / 2 ambientais / 0 regressões**. Migration aplicada na
 staging com a role dona (`ADMIN_DATABASE_URL`; `barber_app` não cria em `public`).
-**Pendente:** deploy prod (aplicar 0036 + importar os 6 arquivos na org 1 + rodar o delete de débitos) e
-**consumo no dashboard** (gráfico de evolução receita×despesa, custo fixo×variável, margem) — follow-up.
+
+**✅ DEPLOYADO em prod 2026-07-06** (PR #23, merge `6ab1a3e`; molde D-59/D-63):
+1. **Branch + PR + merge** para `main` (`feat/trinks-dre-import` → `6ab1a3e`).
+2. **Backup** `pg_dump` → `~/predeploy_d65_20260706.sql` (1.8 MB) na VM.
+3. **Débitos:** confirmado **0 linhas** em `client_debts` da org 1 — a carga nunca foi para produção (era só
+   tooling), então o `delete_org_debts.py` seria no-op; **nada a apagar**.
+4. **`git pull`** (ff-only `ce80710`→`6ab1a3e`) + **migration 0036** rodada num container efêmero montando o
+   repo do host, como owner `postgres` (URL inline lida do container postgres; `ADMIN_DATABASE_URL` ausente na
+   VM). Head → `0036`; tabela criada com CHECK `dre_section_valid`, índice, FK CASCADE, policy RLS
+   `tenant_isolation` e grants `barber_app=arwd`.
+5. **Import** dos 6 arquivos na org 1 via CLI (container efêmero, CSVs montados read-only de área temporária no
+   home): **dry-run** (todos `checksum_ok`) → **commit** = **2.752 linhas-folha / 75 meses**,
+   `removed_existing=0` (1ª carga). Validado por `psql` independente: contagens por seção/subgrupo batem, e
+   **isolamento RLS confirmado** (0 linhas em outras orgs).
+6. **Rebuild backend** (`up -d --build backend`): `healthy`, `/health` ok, rotas `/financeiro/dre` e
+   `/admin/import/trinks/dre` no OpenAPI (código novo no ar).
+7. **Limpeza LGPD:** CSVs de DRE removidos da VM (P&L sensível); backup preservado.
+
+**Pendente:** **consumo no dashboard** (gráfico de evolução receita×despesa, custo fixo×variável, margem) —
+follow-up.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
