@@ -167,6 +167,15 @@ Rotas: importar `POST /admin/import/trinks/debts?commit=`; gerir
 `GET /admin/debts?status=aberto`, `GET /admin/debts/summary`,
 `POST /admin/debts/{id}/pay`, `POST /admin/debts/{id}/reopen` (gestor).
 
+> ⚠️ **Carga de débitos da org 1 (T&T) DESCARTADA (D-65, 2026-07-06):** o dono confirmou que o
+> export "Débitos" da Trinks é fonte **inválida**. A tabela/rota seguem existindo p/ orgs futuras;
+> só a carga T&T sai. Remover com `scripts/delete_org_debts.py` (tabela-folha → não cascateia):
+> ```bash
+> python scripts/delete_org_debts.py --org-id 1                                   # dry-run (conta por source/status; imprime o nome exato do org)
+> python scripts/delete_org_debts.py --org-id 1 --commit --confirm-name "<nome exato do org>"
+> ```
+> Faça BACKUP antes (`pg_dump`, ver topo). Default `--source trinks`; use `--source all` p/ qualquer origem.
+
 ## Fechamento de caixa diário → `scripts/import_trinks_cash_closing.py` + `cash_daily_closings` (migration 0026)
 
 O export "Movimentação Financeira" da Trinks traz **duas tabelas no mesmo arquivo**:
@@ -182,6 +191,28 @@ python scripts/import_trinks_cash_closing.py --org-id 1 --file <movimentacaofina
 python scripts/import_trinks_cash_closing.py --org-id 1 --file <movimentacaofinanceira.csv> --commit
 ```
 Rota: `POST /admin/import/trinks/cash-closing?commit=`.
+
+## DRE mensal → `scripts/import_trinks_dre.py` + `dre_monthly_lines` (migration 0036)
+
+O export **"DRE"** (Demonstrativo de Resultado) da Trinks é o histórico financeiro por
+**competência**: receita por tipo + despesa por categoria/subgrupo (Fixas/Variáveis/Pessoal/
+Impostos/Outros) + resultado, mês a mês. Preenche o vazio da tabela `Expense`. É uma **matriz
+pivotada** (linhas = itens, colunas = meses) — costuma vir **dividida por ano** (driblar o timeout
+do export); passe todos os arquivos de uma vez (meses disjuntos). Guarda **só as linhas-folha**
+(subtotais/totais recomputados). **Idempotente por substituição dos meses** cobertos (rodar de novo
+substitui o mês inteiro). É **competência**, complementar ao caixa/pagamentos (recebimento) — **não
+reconcilia 1:1**.
+
+O parse traz um **`checksum_ok`**: confirma que a soma recomputada das folhas bate com os totais
+declarados no próprio arquivo. Se vier `False`, revise antes de aplicar.
+
+```bash
+python scripts/import_trinks_dre.py --org-id 1 --file DRE_10:25_07:26.csv                 # dry-run (1 arquivo)
+python scripts/import_trinks_dre.py --org-id 1 --file DRE_*.csv --commit                  # aplica (todos os anos)
+```
+Rota self-service: `POST /admin/import/trinks/dre?commit=` (gestor; corpo = CSV bruto). Leitura:
+`GET /financeiro/dre?inicio=YYYY-MM&fim=YYYY-MM` (série mensal: receita, despesa por subgrupo,
+resultado, margem). ⚠️ O DRE é P&L sensível — arquivo cru **nunca versionar**.
 
 ## Teste
 `tests/test_trinks_import.py` valida o parser (mapeamento, telefone, dedup, data,
