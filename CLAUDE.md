@@ -401,7 +401,7 @@ billing Stripe via `BillingProvider` desacoplado + mock, assinaturas/dunning,
 impersonação auditada, configurações) — migrations `0028`–`0034` aplicadas em STAGING e PROD (head `0034`). Fonte de verdade da missão:
 **`docs/superadmin/`**. Envs novos de billing no `Settings`; dep `stripe`.
 
-**Segurança / Governança — RBAC por permissões (D-67, Fase 2, 2026-07-07 — SÓ STAGING):** iniciativa
+**Segurança / Governança — RBAC por permissões (D-67, Fase 2 — ✅ DEPLOYADO em prod 2026-07-07):** iniciativa
 `promptseguranca.md` (9 fases c/ checkpoints). Fase 0 → `AUDITORIA_SEGURANCA.md` (29 achados); Fase 1 →
 `ARQUITETURA_ALVO.md`. Fase 2 entregou o **núcleo de autorização baseado em permissões nomeadas**: catálogo em
 código (`app/core/permissions.py`, 58 permissões × 9 papéis de sistema), migration **0037** (`permissions`/`roles`/
