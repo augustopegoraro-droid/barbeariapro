@@ -401,6 +401,23 @@ billing Stripe via `BillingProvider` desacoplado + mock, assinaturas/dunning,
 impersonação auditada, configurações) — migrations `0028`–`0034` aplicadas em STAGING e PROD (head `0034`). Fonte de verdade da missão:
 **`docs/superadmin/`**. Envs novos de billing no `Settings`; dep `stripe`.
 
+**Segurança / Governança — RBAC por permissões (D-67, Fase 2, 2026-07-07 — SÓ STAGING):** iniciativa
+`promptseguranca.md` (9 fases c/ checkpoints). Fase 0 → `AUDITORIA_SEGURANCA.md` (29 achados); Fase 1 →
+`ARQUITETURA_ALVO.md`. Fase 2 entregou o **núcleo de autorização baseado em permissões nomeadas**: catálogo em
+código (`app/core/permissions.py`, 58 permissões × 9 papéis de sistema), migration **0037** (`permissions`/`roles`/
+`role_permissions`/`user_roles`/`permission_overrides`, RLS), resolver (`app/services/authz.py`), guard central
+(`app/authz.py::require`) + `GET /auth/me/permissions`. Corrigiu **V4/V5/V6/V7/V19** da auditoria (recepção deixa de
+ver financeiro no dashboard; QR do WhatsApp e bot-pause exigem permissão; SSE revalida usuário+RBAC; bot token
+tempo-constante). Retrocompatível: os 4 papéis atuais mapeiam 1:1. **F2.5 ✅:** ~90 call-sites legados migrados para
+`require_permission` em 15 routers (mapeamento não-regressivo por conjunto-de-papéis idêntico; só `billing.py`
+ficou no guard legado); teste de cobertura garante que toda rota de tenant tem auth. Suíte **526 pass / 2
+ambientais / 0 regressões**. **F2.6 (frontend) ✅:** `hooks/use-permissions.ts` (`usePermissions().has()` via
+`/auth/me/permissions`) → sidebar filtrada por permissão + identidade real (rodapé/avatar, antes hardcoded) +
+botão "Conectar WhatsApp" gateado (V6). Typecheck limpo. **✅ DEPLOYADO em prod 2026-07-07** (backend `bf2acb2` + frontend `8535796`; migration `0037` head
+`0037`; catálogo 59/9/251; validado: owner=59 perms, barbeiro=4; rotas 401/200 + HTTPS OK). Impacto nulo (prod só
+tem owner+barbeiro; 0 reception/manager). Migration/sync via repo do host montado (`scripts/` não vai na imagem;
+PG via `host.docker.internal`). Backup `~/predeploy_d67_20260707_205028.sql`.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

@@ -1472,6 +1472,74 @@ transações** (conferindo com o D-63) e o DRE com drill-down por subgrupo + Top
 competência (Receita R$ 1.942.326,22 / Despesa R$ 1.700.037,14 / Margem 12,5% no recorte de 24m). Preflight
 em prod confirmado: tenant permitido, `evil.com` barrado.
 
+### D-67 — Núcleo de autorização RBAC por permissões (Fase 2 do plano de Segurança) — 2026-07-07 (só staging)
+
+Origem: prompt `promptseguranca.md` (Segurança/Governança Enterprise, 9 fases com checkpoints).
+**Fase 0** produziu `AUDITORIA_SEGURANCA.md` (29 achados, 1 Crítica/5 Altas; confirmados contra a VM de prod:
+webhook `/bot/wa-webhook` sem auth = `WA_WEBHOOK_SECRET` ausente; portas 8000/3000 **não** expostas no firewall
+GCP; `barber_app` NOBYPASSRLS e sem GRANT em `platform_admins`; `AUTH_SECRET` de prod forte). **Fase 1** produziu
+`ARQUITETURA_ALVO.md` (RBAC por permissões + ABAC, guard central, `/me/permissions`, sessão/refresh, auditoria,
+multi-tenant reforçado, LGPD, UX da área "Segurança").
+
+**Fase 2 (esta entrega — só staging):** núcleo de autorização baseado em **permissões nomeadas** (`recurso.sub.ação`),
+substituindo a causa-raiz dos bugs de autorização (RBAC por papel checado manualmente, "abre por omissão").
+- **Fonte única em código** `app/core/permissions.py`: 58 permissões + matriz dos **9 papéis de sistema**
+  (owner/partner/manager/reception/barber/intern/finance/marketing/support). Papéis de sistema resolvem
+  permissões pelo código (fail-safe, sem depender de seed).
+- **Schema** (migration **0037**, head `0037`): `permissions` (global), `roles` (sistema org NULL + personalizados
+  por org), `role_permissions`, `user_roles`, `permission_overrides` — RLS no molde da 0036 (`roles`/`role_permissions`
+  = "global OU tenant" com WITH CHECK; `user_roles`/`overrides` = tenant-only). `FORCE RLS` deferido p/ hardening
+  uniforme (Fase 3). `app/services/authz_seed.py::sync_system_catalog` (idempotente) espelha o catálogo no banco
+  (via `scripts/seed.py` e `scripts/sync_authz_catalog.py`).
+- **Resolver** `app/services/authz.py::resolve_permissions` = permissões do papel de sistema (de `user_units`, via
+  código) ∪ papéis extras/personalizados (`user_roles`) ∪ overrides (deny vence). **Retrocompatível:** os 4 papéis
+  atuais mapeiam 1:1; nenhum acesso muda exceto as correções abaixo.
+- **Guard central** `app/authz.py::require(permission)` (dependência de rota) + `AuthContext` p/ filtragem por campo.
+  `GET /auth/me/permissions` alimenta o frontend (só UX).
+- **Correções de auditoria aplicadas** (defaults de permissão + guards): **V5** (dashboard redige receita/comissão
+  sem `reports.dashboard.financial.view` → recepção deixa de ver financeiro no dashboard), **V6**
+  (`integracoes` status/QR exigem `integrations.view`/`integrations.whatsapp.manage`), **V7** (`clientes/bot-pause`
+  exige `clients.bot_pause`), **V4** (SSE `/crm/stream` revalida usuário + exige `conversations.stream`), **V19**
+  (`_require_bot_token` tempo-constante). **V24 (billing) adiado de propósito** (restringir `/billing/subscription`
+  quebraria o feature-gating por entitlements que o frontend usa em todos os papéis).
+- **Testes:** `tests/test_authz_unit.py` (8, matriz/drift) + `tests/test_authz_integration.py` (11, /me/permissions
+  por papel + V4/V5/V6/V7 nos endpoints reais). Seed ganhou usuários **gerente/recepção** (`seed_admin_users`);
+  conftest ganhou fixtures `manager_headers`/`reception_headers`. **Suíte: 514 pass / 2 ambientais / 0 regressões.**
+- **F2.5 — migração dos endpoints legados (✅ concluída):** ~90 call-sites de `require_full_access`/
+  `require_manager_access` migrados para `require_permission(db, user, code)` em 15 routers (agenda, clientes,
+  crm, conversations, loyalty, memberships, financeiro, equipe, servicos, empresa, gestor, debts, imports,
+  reschedule, dashboard). Mapeamento **provadamente não-regressivo**: cada guard → permissão cujo conjunto de
+  papéis (entre os 4 atuais) é **idêntico** ao antigo (ex.: full_access → `schedule.all.manage`/`clients.manage`/
+  `crm.leads.manage`/... = {owner,manager,reception}; manager_access → `finance.revenue.view`/`team.manage`/... =
+  {owner,manager}). Ajuste da matriz p/ o mapeamento fechar: `team.view` e `schedule.reschedule.approve` saíram do
+  default da recepção (eram manager-only) + permissão nova `data.import`. **`billing.py` ficou no guard legado de
+  propósito** (checkout/portal exigiriam `billing.manage`, owner-only na matriz — converter agora tightening o
+  manager; fica p/ decisão de produto). **Teste de cobertura** (`tests/test_authz_coverage.py`) afirma que toda
+  rota não-pública tem ponto de auth na árvore de dependências (fecha a classe "esqueci o guard"). +
+  `tests/test_authz_sweep.py` (matriz de papéis nos endpoints migrados). **Suíte: 526 pass / 2 ambientais / 0
+  regressões.**
+- **F2.6 — frontend consome `/auth/me/permissions` (✅, submódulo `barbearia-frontend`):** hook
+  `hooks/use-permissions.ts` (`usePermissions().has(code)`, via React Query, cache 5 min; enquanto carrega `has`
+  retorna false → item restrito não pisca). **`AdminSidebar`** filtra itens/grupos por permissão (cada item ganhou
+  `perm`; grupo sem itens visíveis some) + **rodapé com identidade real** (email + papel pt-BR, antes hardcoded
+  "Administrador/admin@sistema.com"). **`AdminHeader`** avatar com inicial real + email no `title` (antes "A" fixo).
+  **Botão "Conectar WhatsApp"** (`/admin/integracoes`) escondido sem `integrations.whatsapp.manage` (V6 na UI;
+  recepção vê status, não o botão). Typecheck (`tsc --noEmit`) limpo. **Não verificado no browser ainda**
+  (recomendado antes do deploy). Débito: gating dos cards financeiros do Dashboard p/ recepção (hoje o backend
+  zera os valores — V5 — mas a UI ainda mostra os cards zerados; mesmo padrão `usePermissions`).
+- **✅ DEPLOYADO em prod 2026-07-07** (backend `bf2acb2` + frontend `8535796`, direto na main):
+  backup `~/predeploy_d67_20260707_205028.sql` → `git pull` → **migration 0037** aplicada (head `0037`, 5 tabelas +
+  RLS) → **catálogo sincronizado** (59 perms / 9 papéis / 251 grants) → rebuild backend + frontend.
+  **Validado em prod:** `resolve_permissions` como `barber_app`/RLS sobre dados reais → **owner (Taylor) = 59
+  permissões** (mantém tudo), **barbeiro = 4** (correto, sem finance); rotas `/auth/me/permissions`+`/financeiro`
+  = 401 (vivas+protegidas), `/auth/tenant` = 200, `/health` = 200, HTTPS `api.`+`taylor.taylorethedy.com` = 200.
+  **Impacto comportamental nulo:** prod org 1 só tem 2 owner + 3 barbeiro (0 reception/manager) → V5/V6 (recepção)
+  não afetam ninguém; barbeiros mantêm o workflow (`/barbeiro/*`+`barbeiro.py` intocados). **Notas operacionais:**
+  o backend **não** está na `barbearia_network` — alcança o PG via `host.docker.internal:5432` (a migration/sync
+  usaram esse host, não o nome do container); a imagem do backend **não copia `scripts/`** → migration E sync
+  rodam montando o repo do host (`-v /opt/barbeariapro:/repo:ro -w /repo`), molde D-60. Ordem crítica respeitada:
+  migration ANTES do rebuild (senão o resolver 500a em tabela inexistente).
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
