@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from starlette import status as http_status
 
+from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import Barber, BusinessHours, Organization, Subscription, Unit
@@ -127,8 +128,7 @@ async def _primary_unit(db: AsyncSession) -> Optional[Unit]:
 
 
 async def _require_manager(db: AsyncSession, current_user) -> None:
-    role = await resolve_current_role(db, current_user)
-    require_manager_access(role)
+    await require_permission(db, current_user, "settings.company.manage")
 
 
 def _enum_value(value) -> str:

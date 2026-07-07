@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.entitlements import check_limit
+from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import (
@@ -74,7 +75,7 @@ async def get_equipe(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> EquipeOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "team.view")
 
     # Barbeiros ativos da organização
     barbers = (
@@ -255,7 +256,7 @@ class BarberSimpleOut(BaseModel):
 
 
 async def _require_manager(db: AsyncSession, user: User) -> None:
-    require_manager_access(await resolve_current_role(db, user))
+    await require_permission(db, user, "team.manage")
 
 
 async def _load_barber(db: AsyncSession, barber_id: int) -> Barber:

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.dates import today_local
+from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_bot_db, get_current_user, get_tenant_db, resolve_current_role
 from app.services import gestor_notify as _notify
@@ -40,7 +41,7 @@ BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
 
 
 async def _require_manager(db: AsyncSession, user: User) -> None:
-    require_manager_access(await resolve_current_role(db, user))
+    await require_permission(db, user, "reports.gestor.view")
 
 
 async def _primary_unit_id(db: AsyncSession) -> Optional[int]:

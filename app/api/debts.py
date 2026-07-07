@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import ClientDebt, User
@@ -25,7 +26,7 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 async def _guard(db: AsyncSession, user: User) -> None:
-    require_manager_access(await resolve_current_role(db, user))
+    await require_permission(db, user, "finance.payments.view")
 
 
 class DebtOut(BaseModel):

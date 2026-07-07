@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz import require_permission
 from app.core.rbac import require_full_access, require_manager_access
 from app.deps import (
     get_bot_db,
@@ -204,7 +205,7 @@ async def get_client_loyalty(client_id: int, db: BotDB, org_id: BotOrgId) -> Loy
 
 @router.get("/clients/{client_id}/ledger", response_model=list[LedgerEntryOut])
 async def get_ledger(client_id: int, current_user: CurrentUser, db: TenantDB) -> list[LedgerEntryOut]:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "loyalty.view")
     rows = (
         await db.execute(
             select(LoyaltyPointEntry)
@@ -227,7 +228,7 @@ async def get_ledger(client_id: int, current_user: CurrentUser, db: TenantDB) ->
 async def adjust_points(
     client_id: int, body: AdjustIn, current_user: CurrentUser, db: TenantDB
 ) -> BalanceOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "loyalty.manage")
     org_id = current_user.organization_id
     try:
         await loyalty_svc.adjust_points(
@@ -248,7 +249,7 @@ async def adjust_points(
 
 @router.post("/clients/{client_id}/redeem", response_model=VoucherOut)
 async def redeem(client_id: int, body: RedeemIn, current_user: CurrentUser, db: TenantDB) -> VoucherOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "loyalty.view")
     try:
         voucher = await loyalty_svc.redeem_points(
             current_user.organization_id, client_id, body.points, db, by_user_id=current_user.id
@@ -263,7 +264,7 @@ async def redeem(client_id: int, body: RedeemIn, current_user: CurrentUser, db: 
 
 @router.get("/clients/{client_id}/vouchers", response_model=list[VoucherOut])
 async def get_vouchers(client_id: int, current_user: CurrentUser, db: TenantDB) -> list[VoucherOut]:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "loyalty.view")
     rows = (
         await db.execute(
             select(LoyaltyVoucher)
@@ -288,14 +289,14 @@ async def get_vouchers(client_id: int, current_user: CurrentUser, db: TenantDB) 
 
 @router.get("/tiers", response_model=list[TierOut])
 async def get_tiers(current_user: CurrentUser, db: TenantDB) -> list[TierOut]:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "loyalty.view")
     tiers = await loyalty_svc.get_or_seed_tiers(current_user.organization_id, db)
     return [_tier_out(t) for t in tiers]
 
 
 @router.get("/rules", response_model=RuleOut)
 async def get_rules(current_user: CurrentUser, db: TenantDB) -> RuleOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "loyalty.view")
     rule = await loyalty_svc.get_or_seed_rule(current_user.organization_id, db)
     return RuleOut(
         points_per_brl=float(rule.points_per_brl), points_per_visit=rule.points_per_visit,
@@ -306,7 +307,7 @@ async def get_rules(current_user: CurrentUser, db: TenantDB) -> RuleOut:
 
 @router.put("/rules", response_model=RuleOut)
 async def put_rules(body: RuleIn, current_user: CurrentUser, db: TenantDB) -> RuleOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "loyalty.manage")
     rule = await loyalty_svc.get_or_seed_rule(current_user.organization_id, db)
     rule.points_per_brl = Decimal(str(body.points_per_brl))
     rule.points_per_visit = body.points_per_visit

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status as http_status
 
+from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import Barber, BarberService, Service
@@ -74,8 +75,7 @@ async def listar_servicos(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await resolve_current_role(db, current_user)
-    require_manager_access(role)
+    await require_permission(db, current_user, "services.manage")
 
     stmt = select(Service).order_by(Service.name)
     if not include_inactive:
@@ -92,8 +92,7 @@ async def criar_servico(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await resolve_current_role(db, current_user)
-    require_manager_access(role)
+    await require_permission(db, current_user, "services.manage")
 
     svc = Service(
         organization_id=current_user.organization_id,
@@ -130,8 +129,7 @@ async def atualizar_servico(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await resolve_current_role(db, current_user)
-    require_manager_access(role)
+    await require_permission(db, current_user, "services.manage")
 
     result = await db.execute(select(Service).where(Service.id == id))
     svc = result.scalar_one_or_none()
@@ -165,8 +163,7 @@ async def arquivar_servico(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await resolve_current_role(db, current_user)
-    require_manager_access(role)
+    await require_permission(db, current_user, "services.manage")
 
     result = await db.execute(select(Service).where(Service.id == id))
     svc = result.scalar_one_or_none()
@@ -190,8 +187,7 @@ async def reativar_servico(
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
-    role = await resolve_current_role(db, current_user)
-    require_manager_access(role)
+    await require_permission(db, current_user, "services.manage")
 
     result = await db.execute(select(Service).where(Service.id == id))
     svc = result.scalar_one_or_none()

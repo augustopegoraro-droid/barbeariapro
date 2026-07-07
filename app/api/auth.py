@@ -9,11 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz import AuthContext, get_auth_context
 from app.core.security import create_access_token, verify_password
 from app.db.session import get_db, set_current_org
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.schemas.auth import (
     LoginRequest,
+    MePermissionsResponse,
     MeResponse,
     TenantResponse,
     TokenResponse,
@@ -112,4 +114,20 @@ async def me(
         is_active=current_user.is_active,
         role=me_role,
         organizations_visible=int(visible),
+    )
+
+
+@router.get("/me/permissions", response_model=MePermissionsResponse)
+async def my_permissions(
+    ctx: Annotated[AuthContext, Depends(get_auth_context)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> MePermissionsResponse:
+    """Permissões efetivas do usuário logado (para renderização condicional no
+    frontend). Apenas UX — toda autorização é reforçada no backend."""
+    role = await resolve_current_role(db, ctx.user)
+    return MePermissionsResponse(
+        user_id=ctx.user.id,
+        organization_id=ctx.user.organization_id,
+        role=role,
+        permissions=sorted(ctx.permissions),
     )

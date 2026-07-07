@@ -21,9 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.authz import require_permission
 from app.core.rbac import require_full_access
 from app.core.security import decode_access_token
+from app.db.session import AsyncSessionLocal, set_current_org
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services.authz import resolve_permissions
 from app.services import conversation as _conv_svc
 from app.services import sse_broker
 from app.services import whatsapp
@@ -157,7 +160,7 @@ async def list_conversations(
 
     Usa cursor-based pagination: passe `next_cursor` da resposta anterior.
     """
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "conversations.view")
 
     total_open = (
         await db.execute(
@@ -250,7 +253,7 @@ async def search_conversations(
     Retorna mensagens mais recentes que batem o termo, com conversation_id
     e phone para o frontend abrir o drawer correto.
     """
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "conversations.view")
 
     rows = (
         await db.execute(
@@ -281,7 +284,7 @@ async def get_conversation(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> ConversationOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "conversations.view")
 
     row = (
         await db.execute(
@@ -337,7 +340,7 @@ async def get_conversation_messages(
     Com `before=<id>`: retorna até `limit` mensagens anteriores a esse ID
     (scroll infinito para cima). Resultado em ordem cronológica ascendente.
     """
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "conversations.view")
 
     exists = (
         await db.execute(
@@ -373,7 +376,7 @@ async def mark_conversation_read(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> dict:
     """Zera unread_count ao abrir o drawer (marcar como lida)."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "conversations.view")
     conv = (
         await db.execute(
             select(Conversation).where(Conversation.id == conversation_id)
@@ -408,7 +411,7 @@ async def send_conversation_message(
     testar a UI sem WhatsApp real.
     Em produção, falha com 502 se a Evolution API não aceitar.
     """
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "conversations.view")
 
     conv = (
         await db.execute(select(Conversation).where(Conversation.id == conversation_id))
@@ -466,9 +469,33 @@ async def sse_stream(
     try:
         payload = decode_access_token(token)
         org_id = int(payload["org"])
+        user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         raise HTTPException(status_code=http_status.HTTP_401_UNAUTHORIZED,
                             detail="Token inválido")
+
+    # V4: revalida o usuário (ativo, do tenant) e exige `conversations.stream`.
+    # Antes, qualquer JWT válido da org — inclusive barbeiro ou usuário já
+    # desativado — recebia toda a Inbox em tempo real (o SSE não passava por
+    # get_current_user nem RBAC). O token na URL (V10) vira ticket de uso único
+    # na Fase 3.
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            await set_current_org(session, org_id)
+            user = (
+                await session.execute(select(User).where(User.id == user_id))
+            ).scalar_one_or_none()
+            if user is None or not user.is_active:
+                raise HTTPException(
+                    status_code=http_status.HTTP_401_UNAUTHORIZED,
+                    detail="Usuário inválido",
+                )
+            perms = await resolve_permissions(session, user)
+    if "conversations.stream" not in perms:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Permissão necessária: conversations.stream",
+        )
 
     async def generator() -> AsyncIterator[str]:
         q = sse_broker.subscribe(org_id)

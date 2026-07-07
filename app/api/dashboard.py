@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz import AuthContext, get_auth_context, require_permission
 from app.core.config import settings
 from app.core.dates import local_date, local_tz, today_local
 from app.core.rbac import require_full_access
@@ -107,9 +108,10 @@ class DashboardOut(BaseModel):
 async def get_dashboard(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    ctx: Annotated[AuthContext, Depends(get_auth_context)],
     period: Period = Query("30d"),
 ) -> DashboardOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    ctx.require("reports.dashboard.view")
 
     date_from, date_to = _period_range(period)
 
@@ -318,6 +320,17 @@ async def get_dashboard(
 
     at_risk = sum(r.cnt for r in status_loyalty_rows if r.status == LoyaltyStatus.em_risco)
 
+    # V5: a recepção vê o dashboard operacional, mas os campos financeiros
+    # (faturamento, ticket, receita/comissão por barbeiro, receita por serviço)
+    # são redigidos sem `reports.dashboard.financial.view` — fecha a inconsistência
+    # em que o Financeiro bloqueava a recepção mas o Dashboard não.
+    if not ctx.has("reports.dashboard.financial.view"):
+        total_revenue = 0.0
+        avg_ticket = 0.0
+        daily = [d.model_copy(update={"revenue": 0.0}) for d in daily]
+        barbers = [b.model_copy(update={"revenue": 0.0, "commission": 0.0}) for b in barbers]
+        top_services = [s.model_copy(update={"revenue": 0.0}) for s in top_services]
+
     return DashboardOut(
         period=period,
         date_from=date_from.isoformat(),
@@ -421,7 +434,7 @@ async def get_operacional(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     period: Period = Query("30d"),
 ) -> OperacionalOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "reports.operational.view")
     date_from, date_to = _period_range(period)
 
     # ── 1. Volume de leads por dia (criação) ──────────────────────────────────

@@ -133,7 +133,9 @@ def _require_bot_token(
     x_bot_token: Annotated[Optional[str], Header(alias="X-Bot-Token")] = None,
 ) -> None:
     from app.core.config import settings
-    if not settings.bot_api_key or x_bot_token != settings.bot_api_key:
+    from app.core.security import secrets_match
+    # V19: comparação tempo-constante (antes usava `!=`, vazando timing do token).
+    if not secrets_match(x_bot_token, settings.bot_api_key):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Bot token inválido")
 

@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dates import local_date
+from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.services.management import barber_revenue_rows
@@ -78,7 +79,7 @@ async def get_financeiro(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     date: date = Query(..., description="Data no formato YYYY-MM-DD"),
 ) -> FinanceiroOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "finance.revenue.view")
 
     # --- Receita por barbeiro (via appointment_items.price_charged) ----------
     barber_rows = (
@@ -201,7 +202,8 @@ _MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
 async def _require_manager(db: AsyncSession, user: User) -> None:
-    require_manager_access(await resolve_current_role(db, user))
+    # F2.5: mesma semântica que require_manager_access (owner/manager); finance também.
+    await require_permission(db, user, "finance.revenue.view")
 
 
 def _month_range(month: str) -> tuple[date, date]:

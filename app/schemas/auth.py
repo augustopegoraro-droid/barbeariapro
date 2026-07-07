@@ -42,3 +42,13 @@ class MeResponse(BaseModel):
     role: str
     # Prova de isolamento: sob RLS deve sempre ser 1 (apenas a própria org).
     organizations_visible: int
+
+
+class MePermissionsResponse(BaseModel):
+    """Permissões efetivas do usuário — consumidas pelo frontend só para UX
+    (esconder menus/botões). NÃO é barreira: o backend reforça tudo."""
+
+    user_id: int
+    organization_id: int
+    role: str
+    permissions: list[str]

@@ -36,6 +36,7 @@ if os.path.exists(_env_path):
                 os.environ.setdefault(_k.strip(), _v.strip())
 
 from app.core.security import hash_password
+from app.services.authz_seed import sync_system_catalog
 from app.services.onboarding import SERVICES_CATALOG
 from models import (
     Barber,
@@ -115,6 +116,44 @@ PROFESSIONALS: list[tuple[str, str, str, UnitRole, str, list[str]]] = [
          "Selagem Masculina", "Hidratação", "Depilação de Nariz e Orelha"],
     ),
 ]
+
+
+# Usuários administrativos SEM registro de barbeiro (gerente/recepção) — dão
+# cobertura de teste à matriz de papéis (owner/manager/reception/barber).
+ADMIN_USERS: list[tuple[str, UnitRole]] = [
+    ("gerente@barbeariapro.com", UnitRole.manager),
+    ("recepcao@barbeariapro.com", UnitRole.reception),
+]
+
+
+def seed_admin_users(session: Session, org: Organization, unit: Unit) -> None:
+    """Cria/atualiza um gerente e um recepcionista (sem barber_id)."""
+    for email, role in ADMIN_USERS:
+        user = session.execute(
+            select(User)
+            .where(User.organization_id == org.id)
+            .where(User.email == email)
+        ).scalar_one_or_none()
+        if user is None:
+            user = User(
+                organization_id=org.id,
+                email=email,
+                password_hash=hash_password(PASSWORD),
+            )
+            session.add(user)
+            session.flush()
+            print(f"[user] criado: {email} id={user.id}")
+        uu = session.execute(
+            select(UserUnit)
+            .where(UserUnit.user_id == user.id)
+            .where(UserUnit.unit_id == unit.id)
+        ).scalar_one_or_none()
+        if uu is None:
+            session.add(UserUnit(user_id=user.id, unit_id=unit.id, role=role))
+            print(f"[user_unit] criado: {email} role={role.value}")
+        elif uu.role != role:
+            uu.role = role
+            print(f"[user_unit] atualizado: {email} role={role.value}")
 
 
 def reaplicar_grants(session: Session) -> None:
@@ -346,6 +385,8 @@ def main() -> None:
     engine = create_engine(ADMIN_URL)
     with Session(engine) as session, session.begin():
         reaplicar_grants(session)
+        cat = sync_system_catalog(session)
+        print(f"[authz] catálogo sincronizado: {cat}")
         plan = get_or_create_plan(session)
         org, unit = get_or_create_org(session, plan)
         org_id = org.id
@@ -354,6 +395,7 @@ def main() -> None:
         archive_old_services(session, org_id)
         service_map = seed_services(session, org_id)
         seed_professionals(session, org, unit, service_map)
+        seed_admin_users(session, org, unit)
 
     print("\n=== SEED CONCLUÍDO ===")
     print(f"  BOT_ORGANIZATION_ID={org_id}")

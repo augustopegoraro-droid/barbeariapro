@@ -25,6 +25,7 @@ from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz import AuthContext, require
 from app.core.config import settings
 from app.core.crypto import TokenCryptoError, encrypt_token
 from app.db.session import AsyncSessionLocal, set_current_org
@@ -230,6 +231,7 @@ async def authorize_url_json(
 async def calendar_status(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    _authz: Annotated[AuthContext, Depends(require("integrations.view"))] = None,
 ) -> CalendarStatusOut:
     connected = (
         await db.execute(
@@ -263,7 +265,9 @@ def _evolution_base() -> str:
 async def whatsapp_status(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    _authz: Annotated[AuthContext, Depends(require("integrations.view"))] = None,
 ) -> WhatsAppStatusOut:
+    # V6: exige integrations.view (antes SEM guard — qualquer papel lia o telefone conectado).
     if not settings.evolution_api_url:
         return WhatsAppStatusOut(connected=False)
     url = f"{_evolution_base()}/instance/connectionState/{settings.evolution_instance_name}"
@@ -289,7 +293,10 @@ async def whatsapp_status(
 async def whatsapp_qr(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    _authz: Annotated[AuthContext, Depends(require("integrations.whatsapp.manage"))] = None,
 ) -> WhatsAppQrOut:
+    # V6: gerar QR de conexão é ação de admin (owner/manager). Antes SEM guard →
+    # superfície de sequestro da instância por qualquer papel autenticado.
     if not settings.evolution_api_url:
         raise HTTPException(status_code=503, detail="Evolution API não configurada")
     url = f"{_evolution_base()}/instance/connect/{settings.evolution_instance_name}"

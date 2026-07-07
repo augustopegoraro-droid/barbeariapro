@@ -19,6 +19,21 @@ SEED_ORG_ID = int(os.environ.get("SEED_ORG_ID", "1"))
 SEED_OWNER_EMAIL = os.environ.get("SEED_OWNER_EMAIL", "taylor@barbeariapro.com")
 SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "senha123")
 SEED_BARBER_EMAIL = os.environ.get("SEED_BARBER_EMAIL", "pablo@barbeariapro.com")
+SEED_MANAGER_EMAIL = os.environ.get("SEED_MANAGER_EMAIL", "gerente@barbeariapro.com")
+SEED_RECEPTION_EMAIL = os.environ.get("SEED_RECEPTION_EMAIL", "recepcao@barbeariapro.com")
+
+
+async def _login_headers(client, email: str):
+    """Faz login e devolve o header Authorization; skip se o usuário não existir."""
+    resp = await client.post(
+        "/auth/login",
+        json={"email": email, "password": SEED_PASSWORD, "organization_id": SEED_ORG_ID},
+    )
+    if resp.status_code != 200:
+        import pytest as _pytest
+
+        _pytest.skip(f"Usuário semeado indisponível ({email}, login {resp.status_code}).")
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
 
 @pytest_asyncio.fixture
@@ -68,3 +83,15 @@ async def barber_headers(client):
     if resp.status_code != 200:
         pytest.skip(f"Barbeiro semeado indisponível (login {resp.status_code}).")
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest_asyncio.fixture
+async def manager_headers(client):
+    """Login como gerente semeado (role=manager)."""
+    return await _login_headers(client, SEED_MANAGER_EMAIL)
+
+
+@pytest_asyncio.fixture
+async def reception_headers(client):
+    """Login como recepcionista semeada (role=reception)."""
+    return await _login_headers(client, SEED_RECEPTION_EMAIL)

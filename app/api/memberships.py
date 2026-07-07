@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.authz import require_permission
 from app.core.rbac import MANAGER_ACCESS, require_full_access, require_manager_access
 from app.deps import (
     get_bot_db,
@@ -317,7 +318,7 @@ async def listar_planos(
     # plano — vender já é FULL_ACCESS. Criar/editar/arquivar seguem em manager.
     # Planos arquivados (include_inactive) só para owner/manager.
     role = await resolve_current_role(db, current_user)
-    require_full_access(role)
+    await require_permission(db, current_user, "memberships.view")
     if include_inactive and role not in MANAGER_ACCESS:
         include_inactive = False
 
@@ -374,7 +375,7 @@ async def criar_plano(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> PlanOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.manage")
 
     if body.included_uses is None and body.unlimited_use_value is None:
         raise HTTPException(
@@ -418,7 +419,7 @@ async def atualizar_plano(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     plan_id: int = Path(..., gt=0),
 ) -> PlanOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.manage")
 
     plan = (
         await db.execute(
@@ -484,7 +485,7 @@ async def arquivar_plano(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     plan_id: int = Path(..., gt=0),
 ) -> None:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.manage")
 
     plan = (
         await db.execute(
@@ -508,7 +509,7 @@ async def vender_assinatura(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> MembershipOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
 
     # Traduz a spec da venda nos overrides de create_membership (catálogo +
     # personalizado convergem na mesma função).
@@ -547,7 +548,7 @@ async def assinaturas_do_cliente(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     client_id: int = Path(..., gt=0),
 ) -> dict:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
 
     client = (
         await db.execute(select(Client).where(Client.id == client_id))
@@ -593,7 +594,7 @@ async def detalhe_assinatura(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     membership_id: int = Path(..., gt=0),
 ) -> MembershipOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
     m = await _load_membership(db, membership_id)
     return await _membership_out_full(db, m)
 
@@ -604,7 +605,7 @@ async def cancelar_assinatura(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     membership_id: int = Path(..., gt=0),
 ) -> MembershipOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
     m = await _load_membership(db, membership_id)
     if m.status == MembershipStatus.cancelada:
         raise HTTPException(http_status.HTTP_409_CONFLICT, "Assinatura já cancelada.")
@@ -628,7 +629,7 @@ async def reativar_assinatura(
     Só funciona se a vigência ainda não terminou e o cliente não tiver outra
     assinatura ativa. Caso contrário, o caminho correto é renovar/vender.
     """
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
     m = await _load_membership(db, membership_id)
     await svc.reactivate_membership(db, m, reactivated_by_user_id=current_user.id)
     out = await _membership_out_full(db, m)
@@ -645,7 +646,7 @@ async def editar_assinatura(
 ) -> MembershipOut:
     """Corrige uma venda equivocada (cliente/plano/preço/vigência/combo) enquanto
     a assinatura ainda não teve nenhum uso. Após o 1º uso, é preciso estornar."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
     m = await _load_membership(db, membership_id)
 
     kwargs: dict = {}
@@ -686,7 +687,7 @@ async def excluir_assinatura(
 ) -> None:
     """Remove uma venda totalmente equivocada **sem nenhum uso**. Com histórico de
     uso, use cancelar (preserva o registro)."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
     m = await _load_membership(db, membership_id)
     await svc.delete_membership(db, m)
     await db.commit()
@@ -706,7 +707,7 @@ async def renovar_assinatura(
 
     Preparado para renovação automática: um cron pode chamar a mesma função.
     """
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
     old = await _load_membership(db, membership_id)
     new = await svc.renew_membership(db, old, sold_by_user_id=current_user.id)
     await db.refresh(new, ["usages"])
@@ -726,7 +727,7 @@ async def consumir_pacote(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     membership_id: int = Path(..., gt=0),
 ) -> ConsumeOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
 
     appt = await svc.consume_membership(
         db,
@@ -761,7 +762,7 @@ async def aplicar_pacote_em_agendamento(
 ) -> ConsumeOut:
     """Marca um agendamento já existente como pago por assinatura (baixa 1 uso e
     reprecifica os itens). A conclusão posterior reconhece a receita sem Payment."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "memberships.view")
 
     appt = (
         await db.execute(

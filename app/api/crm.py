@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.phone import normalize_phone as _validate_phone
+from app.authz import require_permission
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from models import Client, Conversation, Lead, LeadEvent, Message, MessageLog, User
@@ -219,7 +220,7 @@ async def get_board(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> BoardOut:
     """Kanban completo: todas as colunas (mesmo vazias) com seus leads."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "crm.leads.manage")
 
     rows = (
         await db.execute(
@@ -246,7 +247,7 @@ async def create_lead(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> LeadOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "crm.leads.manage")
     org_id = current_user.organization_id
 
     stage = LeadStage(body.stage) if body.stage else LeadStage.novo_contato
@@ -285,7 +286,7 @@ async def get_lead(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> LeadDetailOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "crm.leads.manage")
     lead = (
         await db.execute(
             select(Lead).where(Lead.id == lead_id).options(selectinload(Lead.events))
@@ -317,7 +318,7 @@ async def edit_lead(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> LeadOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "crm.leads.manage")
     lead = await _get_lead(db, lead_id)
 
     if body.name is not None:
@@ -346,7 +347,7 @@ async def move_lead(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> LeadOut:
     """Move o card para outro estágio/posição e registra o histórico."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "crm.leads.manage")
     org_id = current_user.organization_id
     lead = await _get_lead(db, lead_id)
 
@@ -387,7 +388,7 @@ async def delete_lead(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> None:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "crm.leads.manage")
     lead = await _get_lead(db, lead_id)
     await db.delete(lead)
     await db.commit()
@@ -404,7 +405,7 @@ async def get_lead_messages(
     limit: int = Query(100, ge=1, le=500),
 ) -> List[ConversationMessageOut]:
     """Histórico de conversa WhatsApp vinculado ao lead (via client_id)."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "crm.leads.manage")
     lead = await _get_lead(db, lead_id)
 
     if not lead.client_id:

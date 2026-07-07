@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.authz import AuthContext, require, require_permission
 from app.core.phone import normalize_phone as _validate_phone
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
@@ -130,7 +131,7 @@ async def get_clientes(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> ClientesOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "clients.manage")
 
     count_rows = (
         await db.execute(
@@ -205,7 +206,7 @@ async def create_cliente(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> ClientOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "clients.manage")
 
     acq = ContactChannel(body.acquisition_channel) if body.acquisition_channel else None
 
@@ -246,7 +247,7 @@ async def edit_cliente(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> ClientOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "clients.manage")
 
     client = (
         await db.execute(
@@ -282,7 +283,7 @@ async def delete_cliente(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> None:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "clients.manage")
 
     client = (
         await db.execute(
@@ -302,7 +303,7 @@ async def bloquear_cliente(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> ClientOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "clients.manage")
 
     client = (
         await db.execute(
@@ -326,7 +327,9 @@ async def toggle_bot_pause(
     paused: bool,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    _authz: Annotated[AuthContext, Depends(require("clients.bot_pause"))] = None,
 ) -> ClientOut:
+    # V7: exige clients.bot_pause (antes qualquer autenticado — incl. barbeiro — podia).
     client = (
         await db.execute(
             select(Client)

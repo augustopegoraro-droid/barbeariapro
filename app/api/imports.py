@@ -21,6 +21,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.services.trinks_appointments import (
@@ -49,7 +50,7 @@ _MAX_BYTES = 15 * 1024 * 1024
 
 
 async def _guard(db: AsyncSession, user: User) -> None:
-    require_manager_access(await resolve_current_role(db, user))
+    await require_permission(db, user, "data.import")
 
 
 async def _read_body(request: Request) -> bytes:

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status as ht
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import (
     get_current_user,
@@ -136,7 +137,7 @@ async def listar_remarcacoes(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
     status: Annotated[Optional[str], Query()] = "pendente",
 ) -> list[RescheduleOut]:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "schedule.reschedule.approve")
     # Normaliza o filtro: vazio/sentinela → todos; valor do catálogo → filtra;
     # qualquer outra coisa → 422 (nunca [] silencioso). `status=None` na service
     # devolve todos os status.
@@ -162,7 +163,7 @@ async def contar_pendentes(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> PendingCountOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "schedule.reschedule.approve")
     return PendingCountOut(count=await svc.count_pending(db))
 
 
@@ -173,7 +174,7 @@ async def decidir_remarcacao(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> RescheduleOut:
-    require_manager_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "schedule.reschedule.approve")
     req = await svc.review_request(
         db,
         request_id=request_id,

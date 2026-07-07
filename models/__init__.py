@@ -41,6 +41,13 @@ from .platform_admin import (
 )
 from .unit import BusinessHours, Unit
 from .user import User, UserUnit
+from .authz import (
+    Permission,
+    PermissionOverride,
+    Role,
+    RolePermission,
+    UserRole,
+)
 from .barber import Barber, BarberService, BarberUnit, TimeOff
 from .client import Client, ClientConsent
 from .service import Service
@@ -132,6 +139,12 @@ __all__ = [
     "BusinessHours",
     "User",
     "UserUnit",
+    # autorização (RBAC por permissões)
+    "Permission",
+    "Role",
+    "RolePermission",
+    "UserRole",
+    "PermissionOverride",
     "Barber",
     "BarberService",
     "BarberUnit",

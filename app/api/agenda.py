@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.dates import local_date
+from app.authz import require_permission
 from app.core.rbac import FULL_ACCESS, require_full_access
 from app.deps import (
     get_current_user,
@@ -177,7 +178,7 @@ async def list_barbers_for_agenda(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> list[BarberSimpleOut]:
     """Lista barbeiros ativos para seleção no modal de novo agendamento."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "schedule.all.manage")
 
     barbers = (
         await db.execute(
@@ -199,7 +200,7 @@ async def list_services_for_agenda(
     barber_id: Optional[int] = Query(None, description="Filtrar por profissional"),
 ) -> list[ServiceSimpleOut]:
     """Lista serviços ativos. Com barber_id, retorna apenas os serviços do profissional."""
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "schedule.all.manage")
 
     stmt = (
         select(Service)
@@ -235,7 +236,7 @@ async def criar_agendamento(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AppointmentOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "schedule.all.manage")
 
     # Validar entidades
     client = (await db.execute(select(Client).where(Client.id == body.client_id))).scalar_one_or_none()
@@ -369,7 +370,7 @@ async def reagendar_agendamento(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> AppointmentOut:
-    require_full_access(await resolve_current_role(db, current_user))
+    await require_permission(db, current_user, "schedule.all.manage")
 
     appt = (
         await db.execute(
