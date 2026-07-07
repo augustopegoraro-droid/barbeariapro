@@ -92,6 +92,14 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
   - **Resolução pré-tenant:** `organizations` tem RLS, então um SELECT sem tenant não vê nada → funções
     `SECURITY DEFINER` `app_org_id_by_subdomain`/`app_org_id_by_wa_instance` (migration `0020`) devolvem só o `id`.
     Wrappers em `app/services/tenant.py`. `management.py` segue sem `org_id` em parâmetro: a RLS é a barreira.
+  - **CORS multi-tenant (D-66, 2026-07-06):** com um subdomínio por tenant, a allowlist fixa `CORS_ORIGINS` não
+    escala — as chamadas do browser (fetch/axios) davam preflight **400** (o **login** escapava por rodar
+    server-side no next-auth). Solução: `cors_origin_regex` (`app/core/config.py` → `allow_origin_regex` em
+    `app/main.py`), em **OR** com a allowlist. Prod: `CORS_ORIGIN_REGEX=https://([a-z0-9-]+\.)?taylorethedy\.com`
+    no `.env` da VM cobre o apex + qualquer subdomínio (`taylor.`/`org.`/`admin.`) **sem redeploy por tenant**.
+  - **Arquitetura de domínios (decisão do dono, 2026-07-06):** `taylorethedy.com` (apex) = **página do cliente
+    final** da org 1 (a fazer); `taylor.taylorethedy.com` será renomeado para **`org.taylorethedy.com`** = portal
+    de login de funcionários/donos/gerentes. A regex de CORS já cobre ambos — o rename não toca o backend.
 - Bot: header `X-Bot-Token` validado contra `settings.bot_api_key`. Webhook Evolution:
   `X-Webhook-Secret` (hoje opcional). Comparações de segredo são **tempo-constante** via
   `app.core.security.secrets_match()`.
@@ -291,8 +299,10 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > **✅ DEPLOYADO em prod 2026-07-04 (molde D-59):** PR #22 (merge `c050b0d`) → `0035` aplicada (head `0035`;
 > backup `~/predeploy_d63_20260704_163707.sql`) → rebuild backend (`/health` ok) → import na org 1 de
 > **3.714 transações** (05/01–03/07/2026; **R$ 414.137,15** pagos / **−R$ 6.823,55** de taxa de operadora),
-> validado por `psql` independente, conferindo com a Trinks. CSV cru removido da VM (LGPD). **Falta:**
-> consumo no frontend (relatórios de mix de formas / custo de cartão / recebíveis).
+> validado por `psql` independente, conferindo com a Trinks. CSV cru removido da VM (LGPD). **✅ Consumo no
+> frontend — DEPLOYADO em prod 2026-07-06 (D-66):** aba **"Pagamentos"** (4ª visão do Financeiro, ao lado de
+> `Dia · Mês · DRE`) via `GET /financeiro/pagamentos` — KPIs (recebido/custo de cartão/líquido/ticket médio),
+> mix por forma de pagamento, custo de cartão por bandeira e recebimento mês a mês (barras + tooltip).
 >
 > **DRE mensal / histórico financeiro por competência (D-65, 2026-07-06 — ✅ DEPLOYADO em prod, head `0036`):** o
 > export "DRE" (Demonstrativo de Resultado) da Trinks é a peça que faltava — a tabela `Expense` está vazia,
@@ -321,6 +331,9 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > tokens `--chart-*` (gráfico/HBars à mão, sem lib; validado nos temas claro e escuro). Deploy só-frontend (sem
 > migration): `git pull` na VM (ff `e985d85`→`2665437`) + rebuild `--build frontend`; smoke `/login` 200 +
 > HTTPS `taylor.taylorethedy.com` 200 + bundle `.next` confere.
+> **Drill-down por conta — DEPLOYADO em prod 2026-07-06 (D-66):** cada subgrupo da "Composição da despesa"
+> virou **accordion** (abre as contas-folha ordenadas por valor) + card **"Top 10 maiores despesas"** do
+> período (backend passou a devolver `despesas_por_item` no `GET /financeiro/dre`, aditivo).
 >
 > **Débitos de clientes — DESCARTADOS (D-65, 2026-07-06):** o dono confirmou que o export "Débitos" da Trinks
 > é fonte **inválida**; sai do escopo (a tabela `client_debts`/migration `0023` segue existindo p/ orgs

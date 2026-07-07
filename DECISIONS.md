@@ -1426,6 +1426,52 @@ meses/tudo (padrão 24m). Design system: `AsyncState` (5 estados) + React Query 
 (sem migration): `git pull` na VM (fast-forward `e985d85`→`2665437`) + rebuild `--build frontend`; smoke
 `/login` 200, HTTPS `taylor.taylorethedy.com` 200, e o bundle `.next` contém o código do DRE.
 
+### D-66 — Consumo no frontend do D-63 (Pagamentos) + DRE detalhado (drill-down) + CORS multi-tenant — 2026-07-06
+**Contexto:** dois relatórios do Financeiro tinham o backend pronto mas sem consumo. O **DRE** (D-65) só
+mostrava o agregado por subgrupo — o dono queria ver as **contas individuais**; e os **Pagamentos/Estornos**
+(D-63, `payment_transactions`, 3.714 transações em prod) não tinham nenhuma tela — o mix de formas, o custo
+de cartão e o recebimento mês a mês só existiam no banco.
+**Backend (2 endpoints, PR #24 — merge `41b591a`, commit `12ed60c`):**
+- `GET /financeiro/dre` ganhou `despesas_por_item` (linhas-folha por subgrupo) **além** do agregado —
+  aditivo, sem quebrar o contrato anterior.
+- `GET /financeiro/pagamentos?inicio=&fim=` **novo**: lê `payment_transactions` e devolve totais (recebido,
+  taxa, líquido, ticket médio, PIX%), mix `por_tipo`, `por_bandeira` (custo e % por bandeira) e série
+  `por_mes` (recebido/taxa/líquido). Números 100% do banco — nada calculado no cliente.
+- Testes `tests/test_financeiro_dre_pagamentos.py` (5) com **fixture sintética** (ano 2099 — P&L é sensível,
+  nunca usar números reais de T&T no repo). Suíte sem regressão.
+**Frontend (PR #6 do submódulo — merge `b57320a`):** Financeiro passa a ter 4 abas (`Dia · Mês · DRE ·
+Pagamentos`).
+- **DRE detalhado:** cada subgrupo da "Composição da despesa" virou um **accordion** (`SubgrupoAccordion`)
+  que abre as contas-folha ordenadas por valor, com barra proporcional; + card **"Top 10 maiores despesas"**
+  do período. Apresentação escolhida pelo dono: "os dois juntos" (drill-down + Top 10).
+- **Pagamentos** (`components/financeiro/pagamentos-view.tsx`, 4ª aba): 4 KPIs (recebido/custo de
+  cartão/líquido/ticket), "Mix por forma de pagamento" (barras tokenizadas), "Custo de cartão por bandeira"
+  (tabela) e "Recebimento por mês" (barras com tooltip). Rodapé: recebimento ≠ competência (não reconcilia
+  1:1 com o DRE). Seletor 12/24 meses/tudo (padrão 24m).
+- Design system: `AsyncState` (5 estados) + React Query (`useFinanceiroDre`/`useFinanceiroPagamentos`) +
+  tokens `--chart-*`; `tsc`+`eslint` limpos; validado nos temas claro e escuro.
+**Fix de CORS multi-tenant (PR #25 — merge `e2b495d`, commit `8143cae`):** a validação em prod esbarrou num
+bug **pré-existente** — `https://taylor.taylorethedy.com` não estava no `CORS_ORIGINS` (allowlist fixa), então
+todo preflight do browser dava **400** e o admin não carregava dados (o **login** funcionava porque o
+next-auth Credentials roda server-side, fora do CORS — por isso o bug passou despercebido até a 1ª validação
+de dados no browser). Correção: campo novo `cors_origin_regex` (`app/core/config.py`) → `allow_origin_regex`
+no middleware (`app/main.py`), em **OR** com a allowlist. Em prod:
+`CORS_ORIGIN_REGEX=https://([a-z0-9-]+\.)?taylorethedy\.com` no `.env` da VM — cobre o apex + qualquer
+subdomínio de tenant (`taylor.`, futuro `org.`, `admin.`) **sem redeploy por tenant**. Testes
+`tests/test_cors_origin.py` (9): apex/tenant/admin/localhost permitidos; `evil.com`, sufixo/prefixo forjado e
+`http://` barrados (400, sem header allow-origin).
+**Arquitetura de domínios (decisão do dono):** `taylorethedy.com` (apex) será a **página do cliente final**
+da org 1 (a fazer); `taylor.taylorethedy.com` será renomeado para **`org.taylorethedy.com`** = portal de login
+de funcionários/donos/gerentes da org 1. A regex de CORS já cobre os dois — o rename **não** exigirá mudança
+de backend.
+**✅ DEPLOYADO em prod 2026-07-06 (sem migration):** backend (PR #24 `41b591a` + PR #25 `e2b495d`; `git pull`
++ rebuild `--build backend`, `/health` ok, `CORS_ORIGIN_REGEX` adicionado ao `.env` da VM), frontend (PR #6
+`b57320a`; `git pull` + rebuild `--build frontend`). **Validado no browser em prod** (org 1, dados reais,
+temas claro e escuro): aba Pagamentos com **R$ 414.137,15 recebido / −R$ 6.823,55 de custo de cartão / 3.714
+transações** (conferindo com o D-63) e o DRE com drill-down por subgrupo + Top 10 sobre os 75 meses de
+competência (Receita R$ 1.942.326,22 / Despesa R$ 1.700.037,14 / Margem 12,5% no recorte de 24m). Preflight
+em prod confirmado: tenant permitido, `evil.com` barrado.
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
