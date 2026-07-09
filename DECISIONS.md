@@ -1615,7 +1615,7 @@ senha real da conta em comando de shell) — recomendado um login manual do dono
 header `Authorization`, nunca cookie; o refresh token não é acessível a JS de terceiros); revisar se algum fluxo
 futuro passar a depender de cookie de sessão da própria API.
 
-### D-69 — Health score por tenant + MRR em risco no painel de plataforma — 2026-07-09 (local, não deployado)
+### D-69 — Health score por tenant + MRR em risco no painel de plataforma — 2026-07-09
 
 **Contexto:** com a abertura do SaaS para várias empresas, o superadmin precisava de visão **proativa** de churn —
 a Central de Operações (D-61) só reage a eventos pontuais (atraso, trial acabando); faltava um indicador composto
@@ -1639,6 +1639,13 @@ motivos + link 360°) e card "Crescimento MRR"; tabela de barbearias com coluna 
 com motivos). Testes: `tests/test_platform_health.py` (unidade da função pura + shape/isolamento dos endpoints);
 suíte 556 pass (2 falhas pré-existentes fora de plataforma: `test_bot_unit` e e2e dependente de redis local).
 Limiar/pesos são heurística inicial — recalibrar quando houver base real de churn observado.
+
+**✅ DEPLOYADO em prod 2026-07-09** (backend `a7ff73a` + superadmin `f8a62b2`, submódulo bumpado em `75a272d`;
+sem migration): backup `~/predeploy_d69_20260709_044630.sql` → stash do `docker-compose.yml` local (digest do
+Evolution pinado, preservado) → `git pull` + `submodule update` (git na VM exige `sudo` — `.git` é do root; foi
+preciso `safe.directory` p/ o submódulo) → rebuild `backend`+`superadmin` → ambos healthy. Smoke externo:
+`/health` 200 · `/platform/health` e `/platform/metrics` 401 sem token · `admin.taylorethedy.com` 307 · logs
+limpos. Não validado com login real de produção (mesma ressalva do D-68).
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
