@@ -434,7 +434,7 @@ real com credencial de produção ainda não testado manualmente — recomendado
 serviço `redis` novo saudável, backend+frontend rebuildados, smoke test OK (headers, `/docs` 404, rotas novas
 protegidas, refresh inválido devolve 401 e não 500). Detalhes em DECISIONS.md D-68.
 
-**Segurança / Governança — Auditoria (D-70, Fase 4 — pronto localmente 2026-07-09, não commitado/deployado):**
+**Segurança / Governança — Auditoria (D-70, Fase 4 — ✅ COMMITADO 2026-07-09, não deployado em prod):**
 `audit_logs` por tenant (migration `0039`, RLS+FORCE, append-only — só `SELECT`/`INSERT` para `barber_app`) com
 `prev_hash`/`hash` encadeados (adulteração/remoção no meio quebra a cadeia seguinte) e retenção configurável por
 org (`organizations.audit_retention_months`, purga via `SECURITY DEFINER` + cron interno `/internal/audit/purge`,

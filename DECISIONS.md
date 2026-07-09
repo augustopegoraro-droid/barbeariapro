@@ -1640,7 +1640,7 @@ com motivos). Testes: `tests/test_platform_health.py` (unidade da função pura 
 suíte 556 pass (2 falhas pré-existentes fora de plataforma: `test_bot_unit` e e2e dependente de redis local).
 Limiar/pesos são heurística inicial — recalibrar quando houver base real de churn observado.
 
-### D-70 — Auditoria (Fase 4 do plano de Segurança) — 2026-07-09 (pronto localmente, não commitado/deployado)
+### D-70 — Auditoria (Fase 4 do plano de Segurança) — 2026-07-09 (✅ COMMITADO, não deployado em prod)
 
 Fase 4 do `promptseguranca.md`, seguindo o núcleo de permissões do D-67 e a sessão/hardening do D-68. Fecha a
 lacuna estrutural (§1.7/§2 do `ARQUITETURA_ALVO.md`): nenhuma tabela de auditoria genérica existia — só trilhas
@@ -1702,9 +1702,10 @@ plataforma, sem RLS).
   exportação da auditoria aparecem corretamente na timeline (ator, ação, recurso, resultado, hora); filtro
   "Negado" filtra de fato; `tsc --noEmit` e `eslint` limpos nos arquivos novos.
 
-**Pendente para deploy em prod** (nada foi commitado/deployado nesta sessão): aplicar migration `0039`
-(head `0039`); nenhuma env nova. Agendar `POST /internal/audit/purge` no n8n (mesmo molde dos demais crons —
-sem cron, a retenção configurada em `audit_retention_months` fica sem efeito prático, só a coluna existe).
+**✅ Commitado 2026-07-09** (backend `0a0427c` + frontend `ecc071e`, direto na main, molde D-67/D-68/D-69).
+**Pendente para deploy em prod:** aplicar migration `0039` (head `0039`); nenhuma env nova. Agendar
+`POST /internal/audit/purge` no n8n (mesmo molde dos demais crons — sem cron, a retenção configurada em
+`audit_retention_months` fica sem efeito prático, só a coluna existe).
 
 **✅ DEPLOYADO em prod 2026-07-09** (backend `a7ff73a` + superadmin `f8a62b2`, submódulo bumpado em `75a272d`;
 sem migration): backup `~/predeploy_d69_20260709_044630.sql` → stash do `docker-compose.yml` local (digest do
