@@ -418,6 +418,18 @@ botão "Conectar WhatsApp" gateado (V6). Typecheck limpo. **✅ DEPLOYADO em pro
 tem owner+barbeiro; 0 reception/manager). Migration/sync via repo do host montado (`scripts/` não vai na imagem;
 PG via `host.docker.internal`). Backup `~/predeploy_d67_20260707_205028.sql`.
 
+**Segurança / Governança — Sessão, dispositivos e hardening de autenticação (D-68, Fase 3 — pronto localmente,
+NÃO commitado/deployado):** access token curto (15min) + refresh token rotativo com detecção de reuso (tabela
+`sessions`, migration **0038** head `0038`, `FORCE ROW LEVEL SECURITY` em todas as tabelas RLS); rate
+limiting+lockout de login (Redis/slowapi); headers de segurança + `/docs` desligado por padrão; anti-enumeração;
+SSE do CRM trocou JWT-na-URL por ticket de uso único. `/admin/security/*` (gestor): reset administrativo de senha
+(sem e-mail no stack) e revogação de sessões de outro usuário. **UI de gestor** (`/admin/usuarios`, antes
+placeholder "em breve"): lista usuários da org + diálogos de sessões/reset de senha, consumindo
+`GET /admin/security/{users,sessions}`. Self-service em `/admin/seguranca/sessoes`. Corrigido nesta sessão: bug
+pré-existente que salvava o `repr()` Python do parsing de user-agent em vez de texto legível. Suíte **546 pass / 2
+ambientais / 0 regressões**; validado no browser (dev local); build+typecheck do frontend limpos. Detalhes em
+DECISIONS.md D-68.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
@@ -441,8 +453,11 @@ e instância WhatsApp (bot); falta só n8n `X-Instance`) · VM única sem HA.
 
 **🟠 Alto:** webhook secret opcional (tornar obrigatório após provisionar nos dois lados) · `except
 Exception` mudos · SQL via f-string em advisory lock · pool DB no default / sem PgBouncer / sem
-Redis / sem fila de workers · React Query não usado · páginas-monolito (`crm/page.tsx` 1389 linhas) ·
-cron n8n em série p/ todas as orgs · ~~repo frontend com remote morto~~ (✅ D-08, 2026-06-29: remote restaurado + submódulo registrado).
+fila de workers · React Query não usado · páginas-monolito (`crm/page.tsx` 1389 linhas) ·
+cron n8n em série p/ todas as orgs · ~~repo frontend com remote morto~~ (✅ D-08, 2026-06-29: remote restaurado + submódulo registrado)
+· ~~JWT sem revogação/refresh~~ (✅ D-68, 2026-07-09, ainda não deployado: refresh rotativo + `sessions` + Redis
+para rate-limit/lockout/tickets — Redis passou a existir no stack, mas só para esse uso efêmero, não como cache
+geral).
 
 **🟡 Médio:** transações inconsistentes · `Payment` desacoplado de `Appointment` · dados hardcoded no
 frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i18n · docs dispersas.

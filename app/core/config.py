@@ -15,7 +15,28 @@ class Settings(BaseSettings):
     # App / JWT
     secret_key: str = Field(..., description="Chave HMAC para assinar o JWT.")
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    # Curto por desenho (D-68, Fase 3): a revogação real vive no refresh token/sessions,
+    # não em esperar o access expirar. Ver app/core/security.py e app/api/auth.py.
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 30
+
+    # Redis (D-68, Fase 3): rate-limit/lockout de login, tickets de SSE de uso único,
+    # denylist curta de jti no logout. Dado 100% efêmero — a fonte de verdade de
+    # sessão/revogação é a tabela `sessions` no Postgres (ver models/session.py).
+    redis_url: str = "redis://redis:6379/0"
+
+    # Lockout de login (V2/V13): contadores por IP e por IP+email no Redis.
+    login_max_attempts: int = 5
+    login_lockout_window_seconds: int = 900
+    login_lockout_duration_seconds: int = 900
+
+    # Rate limiting (V2, slowapi). Desligar só em teste/staging automatizado —
+    # o cliente ASGI de teste compartilha "IP" (127.0.0.1) entre TODOS os
+    # testes da suíte, então o limite real estouraria em segundos.
+    rate_limit_enabled: bool = True
+
+    # /docs, /redoc, /openapi.json — desligados por padrão (V12); ligar só em dev/staging.
+    docs_enabled: bool = False
 
     # Conexão do APP: role NÃO-superuser e NÃO-dona das tabelas (RLS ativo).
     # Driver async psycopg3: postgresql+psycopg://...

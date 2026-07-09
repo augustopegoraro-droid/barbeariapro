@@ -41,6 +41,7 @@ from .platform_admin import (
 )
 from .unit import BusinessHours, Unit
 from .user import User, UserUnit
+from .user_session import UserSession
 from .authz import (
     Permission,
     PermissionOverride,
@@ -139,6 +140,7 @@ __all__ = [
     "BusinessHours",
     "User",
     "UserUnit",
+    "UserSession",
     # autorização (RBAC por permissões)
     "Permission",
     "Role",

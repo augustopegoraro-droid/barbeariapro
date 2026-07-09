@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -37,17 +40,47 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(*, user_id: int, organization_id: int) -> str:
-    """Emite um JWT contendo user_id (sub) e organization_id (org)."""
+# Hash fixo (calculado 1x na importação) para rodar `verify_password` mesmo
+# quando o usuário não existe — uniformiza o custo do bcrypt no /auth/login e
+# fecha a enumeração por timing (V13). Nunca é a senha de ninguém.
+DUMMY_PASSWORD_HASH = hash_password("d68-timing-uniform-dummy-not-a-real-password")
+
+
+def create_access_token(*, user_id: int, organization_id: int, jti: Optional[str] = None) -> str:
+    """Emite um JWT contendo user_id (sub), organization_id (org) e jti (D-68).
+
+    `jti` identifica este access token para o denylist de logout (Redis, curto
+    prazo — o token já expira em `access_token_expire_minutes`). Se não vier
+    (compat com chamadores antigos), gera um novo — o `jti` só é rastreado por
+    quem o gerou (login/refresh), que já o guarda em `sessions.jti_current`.
+    """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=settings.access_token_expire_minutes)
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "org": organization_id,
+        "jti": jti or uuid.uuid4().hex,
+        "typ": "access",
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
+def generate_refresh_token() -> tuple[str, str]:
+    """Gera um refresh token opaco de 256 bits: `(raw, hash)`.
+
+    `raw` é devolvido uma única vez ao cliente; só `hash` (sha256, determinístico
+    — não é senha, já tem entropia suficiente, precisa de lookup rápido por
+    índice único) é persistido em `sessions.refresh_token_hash`.
+    """
+    raw = secrets.token_urlsafe(32)
+    return raw, hash_refresh_token(raw)
+
+
+def hash_refresh_token(raw: str) -> str:
+    """Hash determinístico (sha256) de um refresh token — usado para lookup."""
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def create_impersonation_token(
@@ -55,10 +88,11 @@ def create_impersonation_token(
 ) -> str:
     """JWT de TENANT emitido pela PLATAFORMA para suporte (superadmin M10).
 
-    Mesmo shape do token de tenant (sub/org — aceito por get_token_data sem
+    Mesmo shape do token de tenant (sub/org/jti — aceito por get_token_data sem
     mudanças) + claim `imp_by` (id do superadmin) para rastreabilidade, e
     expiração CURTA (default 30 min). O motivo fica no platform_audit_log,
-    não no token.
+    não no token. `jti` próprio (D-68): permite revogar uma impersonação via
+    denylist mesmo sem uma `sessions` row (impersonação não passa por login).
     """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=max(5, min(minutes, 60)))
@@ -66,6 +100,8 @@ def create_impersonation_token(
         "sub": str(user_id),
         "org": organization_id,
         "imp_by": admin_id,
+        "jti": uuid.uuid4().hex,
+        "typ": "access",
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }

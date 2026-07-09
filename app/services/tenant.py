@@ -8,6 +8,8 @@ saber qual é o tenant:
 - `org_id_by_wa_instance` — bot: a org vem da instância Evolution que recebeu o
   webhook (decisão arquitetural: instância → org, não telefone → org, já que
   `phone_e164` não é único).
+- `org_id_by_refresh_token_hash` — `POST /auth/refresh` (D-68): só recebe o
+  refresh token, ainda não sabe a org.
 
 `organizations` tem RLS por `app.current_org_id`; um SELECT sem tenant não vê
 linha alguma. Por isso a consulta vai por funções `SECURITY DEFINER` criadas na
@@ -46,5 +48,20 @@ async def org_id_by_wa_instance(db: AsyncSession, instance: str) -> Optional[int
     row = await db.execute(
         text("SELECT app_org_id_by_wa_instance(:i)"),
         {"i": instance.strip()},
+    )
+    return row.scalar_one_or_none()
+
+
+async def org_id_by_refresh_token_hash(db: AsyncSession, token_hash: str) -> Optional[int]:
+    """org_id da `sessions` (não revogada) cujo hash atual OU anterior casa.
+
+    `db` deve ser uma sessão pré-tenant (`get_db`). Usado só para resolver a
+    org antes de reabrir a consulta sob RLS normal (mesmo padrão de
+    `org_id_by_subdomain`)."""
+    if not token_hash:
+        return None
+    row = await db.execute(
+        text("SELECT app_org_id_by_refresh_hash(:h)"),
+        {"h": token_hash},
     )
     return row.scalar_one_or_none()

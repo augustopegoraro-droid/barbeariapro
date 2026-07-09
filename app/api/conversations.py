@@ -9,12 +9,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import secrets
 from datetime import datetime, timezone
 from typing import Annotated, Any, AsyncIterator, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status as http_status
 from fastapi.responses import StreamingResponse
-from jose import JWTError
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.authz import require_permission
 from app.core.rbac import require_full_access
-from app.core.security import decode_access_token
+from app.db.redis import get_redis
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.services.authz import resolve_permissions
@@ -460,25 +460,60 @@ async def send_conversation_message(
     )
 
 
+@router.post("/stream/ticket")
+async def issue_stream_ticket(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> dict[str, str]:
+    """Emite um ticket de uso único (30s) para abrir o SSE (fecha V4/V10).
+
+    `EventSource` não suporta headers custom, então o JWT tinha que ir na
+    query string (vazando em logs/histórico). O ticket é opaco, de uso único
+    e vive só no Redis por 30s — mesmo se logado em algum lugar, não serve
+    pra nada depois de consumido ou expirado. Exige a mesma permissão que o
+    stream em si (checada aqui, na emissão, não mais dentro do handler SSE).
+    """
+    await require_permission(db, current_user, "conversations.stream")
+    ticket = secrets.token_urlsafe(24)
+    try:
+        await get_redis().setex(
+            f"sse_ticket:{ticket}", 30, f"{current_user.id}:{current_user.organization_id}"
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Serviço de tempo real indisponível",
+        )
+    return {"ticket": ticket}
+
+
 @router.get("/stream")
 async def sse_stream(
     request: Request,
-    token: str = Query(..., description="JWT token (EventSource não suporta headers)"),
+    ticket: str = Query(..., description="Ticket de uso único emitido por POST /crm/stream/ticket"),
 ) -> StreamingResponse:
     """SSE stream de mensagens em tempo real para a org do usuário autenticado."""
     try:
-        payload = decode_access_token(token)
-        org_id = int(payload["org"])
-        user_id = int(payload["sub"])
-    except (JWTError, KeyError, ValueError):
-        raise HTTPException(status_code=http_status.HTTP_401_UNAUTHORIZED,
-                            detail="Token inválido")
+        raw = await get_redis().getdel(f"sse_ticket:{ticket}")
+    except Exception:
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Serviço de tempo real indisponível",
+        )
+    if raw is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
+            detail="Ticket inválido, expirado ou já usado",
+        )
+    try:
+        user_id_str, org_id_str = raw.split(":")
+        user_id, org_id = int(user_id_str), int(org_id_str)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=http_status.HTTP_401_UNAUTHORIZED, detail="Ticket inválido")
 
-    # V4: revalida o usuário (ativo, do tenant) e exige `conversations.stream`.
-    # Antes, qualquer JWT válido da org — inclusive barbeiro ou usuário já
-    # desativado — recebia toda a Inbox em tempo real (o SSE não passava por
-    # get_current_user nem RBAC). O token na URL (V10) vira ticket de uso único
-    # na Fase 3.
+    # V4: revalida o usuário (ativo, do tenant) e a permissão no momento do
+    # connect — defesa em profundidade além da checagem já feita na emissão
+    # do ticket (a conta pode ter sido desativada nos ~30s entre as duas).
     async with AsyncSessionLocal() as session:
         async with session.begin():
             await set_current_org(session, org_id)

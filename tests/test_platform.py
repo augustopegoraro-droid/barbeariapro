@@ -180,11 +180,14 @@ async def test_cria_org_com_owner_e_seed(client, platform_headers):
             "password": "ownernovo123",
         }
 
-        # suspend → login do tenant é bloqueado (suspensão não é cosmética)
+        # suspend → login do tenant é bloqueado (suspensão não é cosmética).
+        # D-68/V13: a resposta é o MESMO 401 genérico de credenciais inválidas
+        # (antes era um 403 distinto, que vazava o estado "org suspensa" —
+        # oráculo de enumeração fechado; suspensão continua bloqueando de fato).
         rs = await client.post(f"/platform/orgs/{org_id}/suspend", headers=platform_headers)
         assert rs.status_code == 200 and rs.json()["status"] == "suspended"
         rsusp = await client.post("/auth/login", json=login_body)
-        assert rsusp.status_code == 403, rsusp.text
+        assert rsusp.status_code == 401, rsusp.text
 
         # reactivate → login volta a funcionar
         ra = await client.post(f"/platform/orgs/{org_id}/reactivate", headers=platform_headers)

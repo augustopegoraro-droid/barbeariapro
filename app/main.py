@@ -7,9 +7,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import agenda, auth, barbeiro, billing, platform_billing, bot, chatwoot, clientes, conversations, crm, dashboard, debts, empresa, equipe, financeiro, gestor, health, imports, integracoes, kernel_ia, loyalty, memberships, platform, reminders, reschedule, servicos, wa_webhook
+from app.api import agenda, auth, barbeiro, billing, platform_billing, bot, chatwoot, clientes, conversations, crm, dashboard, debts, empresa, equipe, financeiro, gestor, health, imports, integracoes, kernel_ia, loyalty, memberships, platform, reminders, reschedule, security, servicos, wa_webhook
 from app.core.config import settings
+from app.core.rate_limit import limiter
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.session import engine
 
 
@@ -19,7 +24,21 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="BarbeariaPro API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="BarbeariaPro API",
+    version="0.1.0",
+    lifespan=lifespan,
+    # V12: /docs, /redoc e /openapi.json desligados por padrão em produção
+    # (settings.docs_enabled=False); ligar só em dev/staging via env.
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url="/redoc" if settings.docs_enabled else None,
+    openapi_url="/openapi.json" if settings.docs_enabled else None,
+)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,8 +80,9 @@ app.include_router(platform.router)
 app.include_router(billing.router)
 app.include_router(billing.internal_router)
 app.include_router(platform_billing.router)
+app.include_router(security.router)
 
 
 @app.get("/")
 async def root() -> dict[str, str]:
-    return {"name": "BarbeariaPro API", "docs": "/docs"}
+    return {"name": "BarbeariaPro API", "docs": "/docs" if settings.docs_enabled else "disabled"}

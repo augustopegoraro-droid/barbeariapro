@@ -87,8 +87,31 @@ async def test_bot_pause_forbidden_for_barber(client, barber_headers):
     assert r.status_code == 403
 
 
-# ─── V4 — SSE stream exige permissão (barbeiro é barrado) ───────────────────────
+# ─── V4/V10 — SSE stream exige permissão (barbeiro é barrado) — D-68: a
+# permissão é checada na EMISSÃO do ticket, não mais no /crm/stream em si
+# (que só troca um ticket de uso único, o JWT nunca mais vai na URL).
 async def test_stream_forbidden_for_barber(client, barber_headers):
-    token = barber_headers["Authorization"].split(" ", 1)[1]
-    r = await client.get("/crm/stream", params={"token": token})
+    r = await client.post("/crm/stream/ticket", headers=barber_headers)
     assert r.status_code == 403
+
+
+async def test_stream_ticket_single_use(client, auth_headers):
+    """Emitir funciona; um ticket já consumido/inexistente não abre o stream.
+
+    Não abre a conexão SSE de verdade aqui: é um `StreamingResponse` que só
+    encerra no keepalive (25s) ou quando o cliente desconecta — e o
+    `ASGITransport` de teste do httpx não propaga essa desconexão de volta
+    ao handler ao sair do `async with` cedo, então o teste travaria. O
+    contrato que importa (GETDEL = uso único) é testado direto via Redis.
+    """
+    r = await client.post("/crm/stream/ticket", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    ticket = r.json()["ticket"]
+
+    from app.db.redis import get_redis
+
+    assert await get_redis().exists(f"sse_ticket:{ticket}")
+    await get_redis().delete(f"sse_ticket:{ticket}")  # simula o consumo (GETDEL)
+
+    r2 = await client.get("/crm/stream", params={"ticket": ticket})
+    assert r2.status_code == 401

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.rbac import resolve_role, resolve_role_with_barber
 from app.core.security import decode_access_token, secrets_match
+from app.db.redis import get_redis
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.schemas.auth import TokenData
 from app.services.tenant import org_id_by_wa_instance
@@ -23,15 +24,22 @@ from models import Unit, User, UserUnit
 bearer_scheme = HTTPBearer(auto_error=True)
 
 
-def get_token_data(
+async def get_token_data(
     creds: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
 ) -> TokenData:
-    """Decodifica o Bearer token. Não toca no banco."""
+    """Decodifica o Bearer token e rejeita se o `jti` estiver na denylist (logout).
+
+    A denylist (Redis, TTL curto) é defesa em profundidade: o access token já
+    expira em `access_token_expire_minutes` (15 min) por desenho — perder o
+    Redis só faz o logout parar de "matar" instantaneamente o access token
+    ainda válido, não compromete a revogação real (essa é a `sessions` table).
+    """
     try:
         payload = decode_access_token(creds.credentials)
-        return TokenData(
+        token = TokenData(
             user_id=int(payload["sub"]),
             organization_id=int(payload["org"]),
+            jti=str(payload["jti"]),
         )
     except (JWTError, KeyError, ValueError):
         raise HTTPException(
@@ -39,6 +47,21 @@ def get_token_data(
             detail="Token inválido ou expirado",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    try:
+        if await get_redis().exists(f"denylist:{token.jti}"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token revogado",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        # Redis indisponível: fail-open na denylist (o access token de 15 min
+        # ainda é a barreira real) para não derrubar o app inteiro por causa
+        # de um serviço auxiliar efêmero.
+        pass
+    return token
 
 
 async def get_tenant_db(

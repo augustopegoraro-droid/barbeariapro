@@ -1540,6 +1540,69 @@ substituindo a causa-raiz dos bugs de autorização (RBAC por papel checado manu
   rodam montando o repo do host (`-v /opt/barbeariapro:/repo:ro -w /repo`), molde D-60. Ordem crítica respeitada:
   migration ANTES do rebuild (senão o resolver 500a em tabela inexistente).
 
+### D-68 — Sessão, dispositivos e hardening de autenticação (Fase 3 do plano de Segurança) + UI de gestor — 2026-07-09 (pronto localmente, não commitado/deployado)
+
+Fase 3 do `promptseguranca.md`, seguindo o núcleo de permissões do D-67. Fecha V1 (parcial — refresh/revogação),
+V2 (rate limit/lockout), V9 (JWT sem revogação), V10/V4 (token na query string do SSE), V11 (parcial — reset
+administrativo sem e-mail), V12 (headers de segurança/`/docs` exposto), V13 (enumeração de usuário), V16 (FORCE RLS).
+
+**Backend:**
+- Access token curto (**15min**, era 60) + **refresh token rotativo** (tabela `sessions`, Postgres — fonte de
+  verdade; Redis só guarda dado efêmero) com **detecção de reuso**: reapresentar um refresh já rotacionado revoga
+  a sessão inteira (indício de token roubado). Migration **0038** (head `0038`): tabela `sessions` (RLS +
+  `users.must_change_password`) e **`FORCE ROW LEVEL SECURITY`** aplicado dinamicamente a todas as tabelas com RLS
+  (via `pg_class`, não lista manual — cobre `sessions` e as ~30 tabelas de tenant já existentes).
+- Dispositivos: parsing de user-agent (`user_agents`) → SO/navegador + IP; `ip_geo` reservado (sem geolocalização —
+  exigiria base MaxMind própria, fora do MVP).
+- Rate limiting (slowapi + Redis, `app/core/rate_limit.py`) + lockout progressivo de login por IP e IP+e-mail
+  (`app/core/config.py`: `login_max_attempts`/`_window`/`_duration`). Anti-enumeração (V13): bcrypt roda sempre
+  (hash real ou `DUMMY_PASSWORD_HASH`), mesma resposta para usuário inexistente/senha errada/org suspensa.
+  Headers de segurança (`SecurityHeadersMiddleware`: HSTS/CSP/X-Frame-Options/etc.) + `/docs`/`/redoc`/`/openapi.json`
+  desligados por padrão (`docs_enabled=False`).
+- Rotas: `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/change-password` (revoga as OUTRAS sessões),
+  `GET/POST /auth/me/sessions*` (self-service). `app/api/security.py` (novo router `/admin/security/*`, gestor
+  agindo sobre outro usuário): `POST /users/{id}/reset-password` (senha temporária de uso único, força troca,
+  revoga todas as sessões do alvo — sem e-mail no stack, repasse é manual) + `GET /sessions` (revoga
+  `POST /sessions/{id}/revoke`). SSE do CRM parou de levar o JWT na query string (V10/V4): `hooks/use-conversas.ts`
+  troca por um **ticket de uso único (30s)**, com reconexão manual (o retry nativo do `EventSource` reapresentaria
+  a mesma URL já consumida).
+- **UI de gestor (fechada nesta sessão, completando a Fase 3):** `GET /admin/security/users` (lista usuários da
+  org: e-mail/papel/status/`must_change_password`) e `GET /admin/security/sessions` passou a incluir
+  `user_id`/`user_email` (antes só existia o filtro `?user_id=`, sem UI para descobrir de quem era cada sessão).
+  Guardados pelas permissões já existentes no catálogo (`security.users.manage`/`security.sessions.*`, D-67).
+- **Bug corrigido nesta sessão:** `_issue_session` (`app/api/auth.py`) salvava `str(parsed.os)`/`str(parsed.browser)`
+  — o **repr** do namedtuple da lib `user_agents` (ex.: `"Browser(family='curl', version=(8, 7, 1), ...)"`), não um
+  texto legível. Trocado por `parsed.get_os()`/`parsed.get_browser()` (ex.: `"Chrome 120.0.0"`). Sessões
+  criadas antes da correção mantêm o texto antigo (histórico, cosmético, sem novo login não se corrige sozinho).
+- Testes: `tests/test_auth_sessions.py` (24 — refresh/reuso, logout, troca de senha, self-service, lockout,
+  anti-enumeração, reset administrativo, headers, `/docs` desligado, FORCE RLS, **+ 5 novos**: listagem de usuários
+  da org, sessões de terceiros com `user_id`/`user_email`, revogação de sessão de outro usuário, e as duas negações
+  de permissão para quem não é gestor). **Suíte: 546 pass / 2 ambientais (pré-existentes, não relacionadas) / 0
+  regressões.**
+
+**Frontend (submódulo `barbearia-frontend`):**
+- Refresh token nunca chega ao client-side JS: vive só dentro do JWT criptografado do próprio next-auth
+  (`lib/auth.ts`), que já é httpOnly por padrão — renovação automática ~1min antes de expirar, com dedup de
+  chamadas concorrentes (evita 2 refreshes simultâneos colidirem com a rotação do backend e derrubarem a sessão).
+  `proxy.ts` trata refresh falho como deslogado (redireciona ao login) e força `/trocar-senha` quando
+  `mustChangePassword` está ligado (reset administrativo).
+- `/admin/seguranca/sessoes` — self-service (listar/revogar os próprios dispositivos, "sair de todos os outros").
+- **`/admin/usuarios` deixou de ser placeholder** ("em breve") **— tela completa nesta sessão**: lista os usuários
+  da org (`hooks/use-admin-users.ts`) com papel/status/badge de troca pendente; ação "Sessões" abre diálogo com os
+  dispositivos daquele usuário (revogação individual); ação "Resetar senha" pede confirmação e mostra a senha
+  temporária **uma única vez** (com botão copiar). `lib/roles.ts` extraído (rótulo de papel pt-BR, antes só na
+  `AdminSidebar`) para reuso entre a sidebar e a nova tela. `formatSessionDate`/`sessionDeviceLabel` extraídos de
+  `hooks/use-sessions.ts` para reuso entre a tela self-service e a de gestor.
+- Validado no browser (dev local): login, listagem de usuários, diálogo de sessões (estado vazio incluído),
+  confirmação + geração de senha temporária, badge "Troca de senha pendente" atualizando em tempo real via
+  invalidação do React Query. Build de produção (`next build`) e `tsc --noEmit` limpos.
+
+**Status: pronto localmente, NADA commitado nem deployado** (backend e frontend). Falta: commit, aplicar migration
+`0038` em prod (mesmo molde D-60/D-67 — repo do host montado, `host.docker.internal:5432`), rebuild backend+frontend,
+smoke test em prod. **Débito consciente:** sem middleware de CSRF dedicado — mitigado arquiteturalmente (a API só
+aceita Bearer no header `Authorization`, nunca cookie; o refresh token não é acessível a JS de terceiros); revisar
+se algum fluxo futuro passar a depender de cookie de sessão da própria API.
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -1552,7 +1615,7 @@ substituindo a causa-raiz dos bugs de autorização (RBAC por papel checado manu
 | Portas abertas ao mundo na VM | firewall GCP | Médio (reduzido) | D-40: 5678/8080 fechadas; 5432 já fechada. Restam 8000/3000 (uso direto do browser) — mover p/ nginx+HTTPS |
 | Estado do bot em memória (debounce) | `app/api/bot.py` | Médio | Restart perde estado. Aguarda Redis. |
 | SSE single-process | `app/services/sse_broker.py` | Baixo | Não funciona com múltiplos workers |
-| Token JWT visível em query string do SSE | `GET /crm/stream?token=` | Baixo | Aceitável para MVP interno |
+| ~~Token JWT visível em query string do SSE~~ | `GET /crm/stream?token=` | ✅ Resolvido | D-68 (2026-07-09, ainda não deployado): ticket de uso único (30s) substitui o JWT na URL. |
 | `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | Exportar da VM antes de qualquer edição local |
 | Formato de telefone 8 vs 9 dígitos | DB + `normalize_phone` | Médio | conv_id=1 tem 8 dígitos. Ver D-29. |
 | 3 testes ambientais falham | `tests/` | Baixo | n8n bypass_hours, RLS isolation, par `1/6` hardcoded — **não são bugs** |

@@ -25,6 +25,8 @@ PUBLIC_PATHS = {
     "/internal/billing/run-lifecycle",    # X-Bot-Token (secrets_match) no handler
     "/integracoes/google/calendar/callback",  # state JWT assinado
     "/crm/stream",               # autentica por ticket/token no handler (V4)
+    "/auth/refresh",             # credencial é o refresh token (corpo), não Bearer (D-68)
+    "/auth/logout",              # idem — refresh token no corpo autentica a revogação
     "/openapi.json",
     "/docs",
     "/docs/oauth2-redirect",
