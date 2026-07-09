@@ -1615,6 +1615,31 @@ senha real da conta em comando de shell) — recomendado um login manual do dono
 header `Authorization`, nunca cookie; o refresh token não é acessível a JS de terceiros); revisar se algum fluxo
 futuro passar a depender de cookie de sessão da própria API.
 
+### D-69 — Health score por tenant + MRR em risco no painel de plataforma — 2026-07-09 (local, não deployado)
+
+**Contexto:** com a abertura do SaaS para várias empresas, o superadmin precisava de visão **proativa** de churn —
+a Central de Operações (D-61) só reage a eventos pontuais (atraso, trial acabando); faltava um indicador composto
+que ranqueasse a base inteira e dissesse "quem está escapando e por quê".
+
+**Decisão:** score 0–100 por org, calculado **on-the-fly** em `app/services/health.py` (função pura, sem
+migration — toda a matéria-prima já sai de `app_platform_org_overview()` + `app_platform_billing_subscriptions()`):
+- **Engajamento (45 pts)**: recência da última atividade (25) + volume de agendamentos 30d (20).
+- **Adoção (25 pts)**: profissionais (8) + clientes (12) + usuários (5).
+- **Financeiro (30 pts)**: base por status da assinatura, penalidade progressiva de 2 pts/dia de atraso.
+- Faixas: ≥70 `healthy` · ≥40 `watch` · <40 `at_risk` · suspensa → `suspended` (score 0, fora do ranking).
+  Conta com <14 dias de vida tem carência: nunca cai abaixo de `watch` (sem histórico ≠ em risco).
+- Cada dedução gera um **motivo legível** (pt-BR) — o painel mostra "por quê", não só o número.
+
+**API:** `GET /platform/health` (distribuição por faixa + `mrr_at_risk` = MRR ativo de orgs `at_risk` + ranking
+piores-primeiro); `/platform/orgs/overview` ganhou `health_score/band/reasons` + `order=health`;
+`/platform/metrics` ganhou `mrr_growth` (último mês fechado vs anterior, mesma convenção do churn).
+
+**Superadmin:** dashboard com seção "Saúde da base" (contagens por faixa, MRR em risco, fila dos 5 piores com
+motivos + link 360°) e card "Crescimento MRR"; tabela de barbearias com coluna Saúde ordenável (badge + tooltip
+com motivos). Testes: `tests/test_platform_health.py` (unidade da função pura + shape/isolamento dos endpoints);
+suíte 556 pass (2 falhas pré-existentes fora de plataforma: `test_bot_unit` e e2e dependente de redis local).
+Limiar/pesos são heurística inicial — recalibrar quando houver base real de churn observado.
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

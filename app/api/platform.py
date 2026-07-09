@@ -32,6 +32,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.session import AsyncSessionLocal, get_db, set_current_org
+from app.services import health as health_svc
 from app.services import onboarding as onboarding_svc
 from app.services import onboarding_progress as onb_progress
 from app.services import platform as platform_svc
@@ -160,12 +161,19 @@ class OrgOverviewOut(BaseModel):
     clients_count: int
     appt_30d: int
     last_activity: Optional[datetime] = None
+    # Saúde do tenant (app/services/health.py) — 0–100 + faixa + motivos.
+    health_score: int = 0
+    health_band: str = health_svc.BAND_AT_RISK
+    health_reasons: list[str] = []
 
 
 # Ordenações aceitas em /orgs/overview. Datas ausentes ordenam como "mais antigas"
 # (sentinela tz-aware — colunas do banco são timestamptz).
 _DT_MIN = datetime(1, 1, 1, tzinfo=timezone.utc)
-_ORG_ORDERS = ("name", "-name", "created_at", "-created_at", "last_activity", "-last_activity")
+_ORG_ORDERS = (
+    "name", "-name", "created_at", "-created_at",
+    "last_activity", "-last_activity", "health", "-health",
+)
 
 
 def _sort_org_overview(items: list["OrgOverviewOut"], order: str) -> list["OrgOverviewOut"]:
@@ -176,6 +184,9 @@ def _sort_org_overview(items: list["OrgOverviewOut"], order: str) -> list["OrgOv
     elif field == "created_at":
         def key(o: "OrgOverviewOut"):
             return o.created_at or _DT_MIN
+    elif field == "health":
+        def key(o: "OrgOverviewOut"):
+            return o.health_score
     else:  # last_activity
         def key(o: "OrgOverviewOut"):
             return o.last_activity or _DT_MIN
@@ -360,6 +371,9 @@ class MetricsOut(BaseModel):
     arpu: Optional[float] = None
     # Churn mensal do último mês fechado: canceladas / base ativa no início.
     churn_rate: Optional[float] = None
+    # Crescimento do MRR no último mês fechado vs o anterior (fração; 0.05 = +5%).
+    # None com menos de 3 pontos na série ou base zero.
+    mrr_growth: Optional[float] = None
     # LTV estimado = ARPU / churn. None quando churn é 0/indefinido.
     ltv: Optional[float] = None
     # Contagem por status derivado (active/trial/past_due/canceled/suspended/sem_assinatura).
@@ -385,6 +399,29 @@ def _derive_status(row: dict) -> str:
     if row.get("deleted_at") is not None:
         return "suspended"
     return row.get("sub_status") or "sem_assinatura"
+
+
+async def _health_by_org(db: AsyncSession, rows: list[dict]) -> dict[int, dict]:
+    """{org_id: {score, band, reasons}} para as linhas do overview.
+
+    Mescla o dunning (days_overdue/open_amount) da visão de billing antes de
+    pontuar — mesma fonte da tela de assinaturas.
+    """
+    dunning = {
+        b["org_id"]: b for b in await platform_svc.billing_subscriptions(db)
+    }
+    out: dict[int, dict] = {}
+    for r in rows:
+        d = dunning.get(r["id"], {})
+        out[r["id"]] = health_svc.compute_health(
+            {
+                **r,
+                "status": _derive_status(r),
+                "days_overdue": d.get("days_overdue"),
+                "open_amount": d.get("open_amount"),
+            }
+        )
+    return out
 
 
 # ─── endpoints ──────────────────────────────────────────────────────────────
@@ -520,6 +557,7 @@ async def orgs_overview(
     (senão "overview" tentaria virar int e retornaria 422).
     """
     rows = await platform_svc.org_overview(db)
+    health = await _health_by_org(db, rows)
     all_items = [
         OrgOverviewOut(
             id=r["id"],
@@ -539,6 +577,9 @@ async def orgs_overview(
             clients_count=r["clients_count"],
             appt_30d=r["appt_30d"],
             last_activity=r["last_activity"],
+            health_score=health[r["id"]]["score"],
+            health_band=health[r["id"]]["band"],
+            health_reasons=health[r["id"]]["reasons"],
         )
         for r in rows
     ]
@@ -1053,6 +1094,59 @@ async def alerts(_admin: PlatformAdminId, db: PlatformDB) -> AlertsOut:
     return AlertsOut(counts=dict(counts), alerts=out)
 
 
+class HealthItemOut(BaseModel):
+    org_id: int
+    name: str
+    status: str
+    plan_name: Optional[str] = None
+    plan_price_month: Optional[float] = None
+    score: int
+    band: str  # healthy | watch | at_risk | suspended
+    reasons: list[str] = []
+    last_activity: Optional[datetime] = None
+
+
+class HealthOut(BaseModel):
+    """Saúde da base: distribuição por faixa + MRR em risco + ranking.
+
+    `mrr_at_risk` = soma do preço do plano das assinaturas ATIVAS cujas orgs
+    estão na faixa `at_risk` — a receita recorrente que está para escapar.
+    """
+
+    counts: dict[str, int]
+    mrr_at_risk: float
+    items: list[HealthItemOut]  # piores primeiro (suspensas fora)
+
+
+@router.get("/health", response_model=HealthOut)
+async def health(_admin: PlatformAdminId, db: PlatformDB) -> HealthOut:
+    rows = await platform_svc.org_overview(db)
+    health_map = await _health_by_org(db, rows)
+
+    items: list[HealthItemOut] = []
+    mrr_at_risk = 0.0
+    for r in rows:
+        h = health_map[r["id"]]
+        if h["band"] == health_svc.BAND_SUSPENDED:
+            continue  # suspensa é decisão nossa, não risco — fica fora do ranking
+        st = _derive_status(r)
+        price = float(r["plan_price_month"]) if r["plan_price_month"] is not None else None
+        if h["band"] == health_svc.BAND_AT_RISK and st == "active" and price:
+            mrr_at_risk += price
+        items.append(HealthItemOut(
+            org_id=r["id"], name=r["name"], status=st,
+            plan_name=r["plan_name"], plan_price_month=price,
+            score=h["score"], band=h["band"], reasons=h["reasons"],
+            last_activity=r["last_activity"],
+        ))
+
+    items.sort(key=lambda i: i.score)
+    counts = Counter(i.band for i in items)
+    return HealthOut(
+        counts=dict(counts), mrr_at_risk=round(mrr_at_risk, 2), items=items
+    )
+
+
 class AuditLogRowOut(BaseModel):
     id: int
     admin_email: str
@@ -1114,11 +1208,16 @@ async def metrics(
     # Churn do último mês FECHADO (o último ponto é o mês corrente, parcial):
     # cancelados em M ÷ base ativa ao fim de M-1. Precisa de pelo menos 3 pontos.
     churn: Optional[float] = None
+    mrr_growth: Optional[float] = None
     if len(series) >= 3:
         closed = series[-2]
         base = series[-3].active_subs
         if base > 0:
             churn = round(closed.canceled_subs / base, 4)
+        # Mesma convenção do churn: compara meses FECHADOS (o último é parcial).
+        prev_mrr = series[-3].mrr
+        if prev_mrr > 0:
+            mrr_growth = round((closed.mrr - prev_mrr) / prev_mrr, 4)
 
     ltv: Optional[float] = None
     if arpu is not None and churn is not None and churn > 0:
@@ -1129,6 +1228,7 @@ async def metrics(
         arr=round(mrr_now * 12, 2),
         arpu=arpu,
         churn_rate=churn,
+        mrr_growth=mrr_growth,
         ltv=ltv,
         counts=dict(status_counts),
         series=series,
