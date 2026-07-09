@@ -1640,6 +1640,18 @@ com motivos). Testes: `tests/test_platform_health.py` (unidade da função pura 
 suíte 556 pass (2 falhas pré-existentes fora de plataforma: `test_bot_unit` e e2e dependente de redis local).
 Limiar/pesos são heurística inicial — recalibrar quando houver base real de churn observado.
 
+**✅ DEPLOYADO em prod 2026-07-09** (backend `a7ff73a` + superadmin `f8a62b2`, submódulo bumpado em `75a272d`;
+sem migration): backup `~/predeploy_d69_20260709_044630.sql` → stash do `docker-compose.yml` local (digest do
+Evolution pinado, preservado) → `git pull` + `submodule update` (git na VM exige `sudo` — `.git` é do root; foi
+preciso `safe.directory` p/ o submódulo) → rebuild `backend`+`superadmin` → ambos healthy. Smoke externo:
+`/health` 200 · `/platform/health` e `/platform/metrics` 401 sem token · `admin.taylorethedy.com` 307 · logs
+limpos. **Validado com login real do dono em 2026-07-09** — após corrigir um bug de deploy descoberto na hora:
+o rebuild assou `NEXT_PUBLIC_API_URL=localhost:8000` no bundle do browser porque `SUPERADMIN_API_URL` (build-arg
+do serviço `superadmin`) nunca fora setado no `.env` da VM (follow-up antigo baseado na premissa FALSA de que o
+superadmin não chama a API client-side — as queries React Query rodam no browser; só o login/SSR usa
+`API_URL_INTERNAL`). Fix: `SUPERADMIN_API_URL=https://api.taylorethedy.com` no `/opt/barbeariapro/.env` +
+rebuild. **Todo rebuild futuro do superadmin depende dessa var** (é build-arg, não runtime).
+
 ### D-70 — Auditoria (Fase 4 do plano de Segurança) — 2026-07-09 (✅ COMMITADO, não deployado em prod)
 
 Fase 4 do `promptseguranca.md`, seguindo o núcleo de permissões do D-67 e a sessão/hardening do D-68. Fecha a
@@ -1689,6 +1701,17 @@ plataforma, sem RLS).
   relacionadas) / 0 regressões.** Achado do próprio teste de cobertura (`test_authz_coverage.py`): a rota nova
   `/internal/audit/purge` precisou entrar em `PUBLIC_PATHS` (autentica por `X-Bot-Token` no handler, não por
   dependência) — mesmo tratamento já dado a `/internal/billing/run-lifecycle`.
+- **Achado pós-commit, ao investigar um teste instável sob concorrência real (2 processos `pytest` completos
+  rodando ao mesmo tempo por engano contra o mesmo staging — ver D-71):** `record_event` é fire-and-forget
+  (`asyncio.ensure_future`), então duas chamadas seguidas do MESMO caller **não têm ordem de conclusão garantida
+  entre si** — a propriedade que a auditoria garante é a integridade do encadeamento na ordem real de commit (cada
+  linha aponta pro hash da anterior por `id`), não a ordem em que o código as *chamou*. `test_hash_chain_links_...`
+  assumia essa ordem e foi corrigido para verificar a integridade do encadeamento numa janela de linhas (robusto a
+  concorrência de outros testes/requests na mesma org), não um par específico. **Débito de escala observado (não
+  regressão):** como todo evento de uma org serializa por um único `pg_advisory_xact_lock`, uma rajada MUITO grande
+  de escritas concorrentes na MESMA org pode enfileirar e segurar conexões do pool enquanto espera o lock — sob
+  tráfego real de uma barbearia (dezenas, não milhares, de requests concorrentes) isso não é esperado ser um
+  problema; revisitar se algum dia o volume por org crescer muito.
 
 **Frontend (submódulo `barbearia-frontend`):**
 - `/admin/seguranca/auditoria` (`hooks/use-audit.ts` + página própria, molde `/admin/seguranca/sessoes`): timeline
@@ -1707,17 +1730,83 @@ plataforma, sem RLS).
 `POST /internal/audit/purge` no n8n (mesmo molde dos demais crons — sem cron, a retenção configurada em
 `audit_retention_months` fica sem efeito prático, só a coluna existe).
 
-**✅ DEPLOYADO em prod 2026-07-09** (backend `a7ff73a` + superadmin `f8a62b2`, submódulo bumpado em `75a272d`;
-sem migration): backup `~/predeploy_d69_20260709_044630.sql` → stash do `docker-compose.yml` local (digest do
-Evolution pinado, preservado) → `git pull` + `submodule update` (git na VM exige `sudo` — `.git` é do root; foi
-preciso `safe.directory` p/ o submódulo) → rebuild `backend`+`superadmin` → ambos healthy. Smoke externo:
-`/health` 200 · `/platform/health` e `/platform/metrics` 401 sem token · `admin.taylorethedy.com` 307 · logs
-limpos. **Validado com login real do dono em 2026-07-09** — após corrigir um bug de deploy descoberto na hora:
-o rebuild assou `NEXT_PUBLIC_API_URL=localhost:8000` no bundle do browser porque `SUPERADMIN_API_URL` (build-arg
-do serviço `superadmin`) nunca fora setado no `.env` da VM (follow-up antigo baseado na premissa FALSA de que o
-superadmin não chama a API client-side — as queries React Query rodam no browser; só o login/SSR usa
-`API_URL_INTERNAL`). Fix: `SUPERADMIN_API_URL=https://api.taylorethedy.com` no `/opt/barbeariapro/.env` +
-rebuild. **Todo rebuild futuro do superadmin depende dessa var** (é build-arg, não runtime).
+### D-71 — Painel de segurança para gestores (Fase 5 do plano de Segurança) — 2026-07-09 (pronto localmente, não commitado/deployado)
+
+Fase 5 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §3`, item 4): "dashboard de segurança (logins, negados,
+dispositivos, exportações, mudanças de permissão) + alertas de anomalia". Construído inteiramente **sobre o
+`audit_logs` do D-70** — nenhuma tabela nova, nenhuma migration.
+
+**Backend:**
+- `app/services/security_dashboard.py::dashboard_summary(db, org, days)` — agregações puras sob RLS: série diária
+  de logins (`action=auth.login`, `result=allow`) × tentativas negadas (`result=deny`) via `local_date()` (mesmo
+  helper de fuso local do financeiro/agenda, não UTC); 7 cards (logins, usuários ativos — distintos com evento no
+  período —, negados, dispositivos conectados — `sessions` sem `revoked_at` —, exportações, mudanças de permissão
+  — `security.roles%`/`security.users%`/recurso `user_role`/`permission_override`/`role`, hoje tipicamente 0 porque
+  essas rotas ainda não existem (D-70) —, ações críticas — tudo que não é `auth.*` e foi permitido); top 5 ações
+  mais negadas; últimas 5 negações (ator/ação/motivo/hora).
+- **Alerta de anomalia** (`_detect_anomaly`): compara as negações de hoje com a média dos 7 dias anteriores;
+  dispara só se **hoje ≥ max(5, 3× a média)** — limiar mínimo absoluto evita alarme por ruído em bases pequenas
+  (mesma cautela do D-69: heurística inicial, sem base real de incidentes para calibrar ainda).
+- `GET /admin/security/dashboard?days=` (7–90, default 30) — **reaproveita `security.audit.view`** (D-67) em vez
+  de criar permissão nova: o painel é construído em cima do mesmo dado/mesma audiência da tela de Auditoria, e uma
+  permissão nova exigiria re-sync do catálogo (`scripts/sync_authz_catalog.py`) em cada ambiente sem ganho real de
+  granularidade.
+- Testes: `tests/test_security_dashboard.py` (6 — permissão, shape da resposta, reflexo de um deny recente nos
+  cards/top/recent, heurística de anomalia unitária em 3 cenários).
+
+**Frontend (submódulo `barbearia-frontend`):**
+- `/admin/seguranca` (`hooks/use-security-dashboard.ts` + página própria): 7 `StatCard`s, gráfico de barras
+  logins×negados por dia (CSS puro com tooltip, mesmo molde de `DreBars` do Financeiro — sem lib de gráfico, ver
+  `AGENTS.md`), banner de anomalia (quando presente), listas "Ações mais negadas"/"Últimas negações". Item
+  **"Segurança"** novo na sidebar (grupo CONFIGURAÇÕES, antes de "Sessões"/"Auditoria"), gated por
+  `security.audit.view`. `tsc --noEmit` e `eslint` limpos.
+- **Validação visual pendente:** a rota backend foi confirmada via `curl` autenticado (JSON correto, 7 dias de
+  série, cards coerentes com dados reais da org 1). A checagem no browser (extensão Chrome) falhou com um erro
+  persistente da própria ferramenta ("Frame with ID 0 is showing error page") que não cedeu após várias tentativas
+  em abas novas — não foi possível confirmar visualmente nesta sessão; recomendado revisar manualmente.
+
+**Achado colateral desta fase — flakiness em `tests/test_audit.py` sob concorrência real:** ao investigar, dois
+processos `pytest tests/` completos ficaram rodando ao mesmo tempo por engano (chamadas em background sobrepostas)
+contra o mesmo Postgres de staging, e ambos travaram por ~9 minutos disputando o `pg_advisory_xact_lock` por-org do
+D-70 (muitas escritas concorrentes de auditoria de dois processos inteiros na mesma org). Precisaram ser mortos
+(`kill -9`) — o que também deixou **outra** organização de teste órfã (`teste-plataforma-xyz`, id 256, mesma causa
+do id 224 no D-70: `test_platform.py::test_cria_org_com_owner_e_seed` não roda seu `finally: _purge_org` quando o
+processo é morto à força). Consertado: os testes de hash-chain/RLS de `test_audit.py` (ver nota no D-70) e o achado
+em si não é um bug de produto — é um lembrete de que rodar múltiplas suítes completas em paralelo contra a mesma
+org é a própria situação de concorrência pesada que o `pg_advisory_xact_lock` deveria só serializar, não travar.
+**Pendente:** ~~apagar a org 256 (aguardando autorização explícita, mesmo molde do id 224)~~ — **purgada em
+2026-07-09 pela sessão do D-72**: era lixo de teste reconhecido (esta própria nota) e estava travando a suíte
+do D-72 (`test_cria_org_com_owner_e_seed` → 409 subdomínio em uso). Purga na ordem de FKs do `_purge_org` +
+`pg_terminate_backend` de transações penduradas no staging. Nenhum dado real envolvido.
+
+**Pronto localmente, aguardando decisão de commit/deploy.** Suíte completa (limpa, um único processo):
+**576 pass / 2 ambientais (pré-existentes) / 1 falha de poluição de teste (org 256 órfã, não é regressão) / 2
+skip.**
+
+### D-72 — Central de Operações com regras configuráveis (M11) — 2026-07-09 (local, não deployado)
+
+**Contexto:** os limiares dos alertas do superadmin eram hardcoded no `GET /platform/alerts` (SA-D10). Com o
+SaaS abrindo para várias empresas, o dono precisa calibrar a régua operacional (quando alertar, com que
+severidade, quais regras valem) sem redeploy — e o health score (D-69) pedia uma regra própria.
+
+**Decisão:** migration **0040** cria `platform_alert_rules` (molde ESTRITO de `platform_admins`: sem RLS, sem
+GRANT, acesso só via SECURITY DEFINER `app_platform_alert_rules_list/rule_set`), uma linha por `kind`, semeada
+reproduzindo o comportamento original + regra nova:
+`payment_overdue` ≥1d (crítico) · `trial_ending` ≤7d (aviso) · `onboarding_stuck` >7d (aviso) ·
+`inactive_account` ≥30d (aviso) · `webhook_failures` ≥1 (crítico) · **`health_at_risk` score <40 (aviso, novo)**.
+CHECKs (kind/severity/threshold 0–1000) espelhados no ORM (`PlatformAlertRule`). Semântica do threshold por
+kind documentada na migration.
+
+**API:** `GET /platform/alert-rules` (com label/descrição/unidade — o frontend não conhece kinds) e
+`PUT /platform/alert-rules/{kind}` (valida faixa; health ≤100; audita `alert_rule_updated` em
+`platform_audit_log`). `GET /platform/alerts` refatorado para ser dirigido pelas regras: regra desligada não
+roda (nem paga o custo da consulta), threshold/severity vêm do banco; regra `health_at_risk` alerta por org
+não-suspensa com score abaixo do limiar (top 3 motivos no detail).
+
+**Superadmin (submódulo):** botão "Configurar regras" na Central de Operações abre painel inline com linha por
+regra (Ativa/Desligada, limiar com unidade, severidade Crítico/Atenção/Info, salvar por linha com validação e
+último editor visível). Testes: `tests/test_platform_alert_rules.py` (defaults do seed, PUT+auditoria,
+validações, "todas desligadas → zero alertas", coerência health_at_risk × /platform/health).
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 

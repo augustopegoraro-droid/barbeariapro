@@ -447,6 +447,16 @@ WhatsApp, reset de senha/revogação de sessão). `GET /admin/security/audit` (t
 (já existiam no catálogo desde o D-67). Frontend: `/admin/seguranca/auditoria` + item novo na sidebar. Suíte
 564 pass / 2 ambientais / 0 regressões; validado no browser (dev local). Detalhes em DECISIONS.md D-70.
 
+**Segurança / Governança — Painel de segurança para gestores (D-71, Fase 5 — pronto localmente 2026-07-09, não
+commitado/deployado):** dashboard construído inteiramente sobre `audit_logs` (D-70) — sem migration nova. Backend
+`app/services/security_dashboard.py::dashboard_summary` (7 cards, série diária logins×negados por fuso local,
+top ações negadas, últimas negações) + alerta de anomalia (negações de hoje ≥ máx(5, 3× média dos 7 dias
+anteriores)). `GET /admin/security/dashboard?days=` reaproveita `security.audit.view` (sem permissão nova).
+Frontend: `/admin/seguranca` (StatCards + gráfico CSS puro, molde DRE do Financeiro) + item "Segurança" na
+sidebar. Rota backend validada via `curl`; validação visual no browser ficou pendente por falha da própria
+ferramenta de automação. Suíte 576 pass / 2 ambientais / 0 regressões (1 falha adicional de poluição de teste,
+não é regressão). Detalhes em DECISIONS.md D-71.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

@@ -28,7 +28,9 @@ from app.core.config import settings
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.schemas.audit import AuditLogListOut, AuditLogOut
 from app.schemas.auth import AdminResetPasswordResponse, AdminUserOut, SessionOut
+from app.schemas.security_dashboard import SecurityDashboardOut
 from app.services.audit import purge_expired, record_event
+from app.services.security_dashboard import dashboard_summary
 from models import AuditLog, User, UserSession
 
 router = APIRouter(prefix="/admin/security", tags=["security"])
@@ -177,6 +179,24 @@ async def reset_user_password(
         user_agent=request.headers.get("user-agent"),
     )
     return AdminResetPasswordResponse(temporary_password=temp_password)
+
+
+# ─── Painel de segurança (Fase 5) ───────────────────────────────────────────
+
+@router.get("/dashboard", response_model=SecurityDashboardOut)
+async def security_dashboard(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    days: int = Query(30, ge=1, le=90),
+) -> SecurityDashboardOut:
+    """Cards + série diária + alerta de anomalia (ARQUITETURA_ALVO.md §3, Fase 5).
+
+    Gated por `security.audit.view` — o painel é construído em cima de
+    `audit_logs`, mesma fonte/permissão da tela de Auditoria (Fase 4); não
+    introduz permissão nova para não exigir re-sync do catálogo."""
+    await require_permission(db, current_user, "security.audit.view")
+    data = await dashboard_summary(db, current_user.organization_id, days=days)
+    return SecurityDashboardOut(**data)
 
 
 # ─── Auditoria (Fase 4) ─────────────────────────────────────────────────────

@@ -36,6 +36,22 @@ async def _login_headers(client, email: str):
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _flush_audit_tasks():
+    """Sem isso, uma Task fire-and-forget de auditoria (`app/services/audit.py`)
+    ainda em voo quando o event loop function-scoped do pytest-asyncio fecha
+    fica órfã: a transação nunca comita, a conexão fica "idle in transaction"
+    presa no pool e pode travar outro teste que dispute o mesmo lock/tabela
+    (observado: `pg_advisory_xact_lock` de `audit_logs` bloqueando um DELETE
+    de limpeza de `test_platform.py` por minutos). Produção não tem esse risco
+    (um único event loop vive pela vida do processo, a Task sempre roda até o
+    fim); é puramente um artefato do loop-por-teste do pytest-asyncio."""
+    yield
+    from app.services.audit import wait_for_pending
+
+    await wait_for_pending()
+
+
 @pytest_asyncio.fixture
 async def client():
     """AsyncClient httpx falando direto com o app ASGI (mesmo processo)."""

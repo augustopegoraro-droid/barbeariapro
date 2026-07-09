@@ -305,6 +305,15 @@ async def test_admin_reset_password_forces_change_and_revokes_sessions(client, a
         assert r_login.status_code == 200, r_login.text
         assert r_login.json()["must_change_password"] is True
     finally:
+        # A engine síncrona abaixo bloqueia a thread inteira — se uma Task
+        # fire-and-forget de auditoria (login/reset-password acima) ainda
+        # estiver com a transação aberta referenciando este `target_id`, o
+        # DELETE trava esperando um lock que só seria liberado pelo próprio
+        # event loop que a engine síncrona está impedindo de rodar
+        # (deadlock real, não só lentidão — observado travando minutos).
+        from app.services.audit import wait_for_pending
+
+        await wait_for_pending()
         with eng.begin() as conn:
             conn.execute(
                 text("DELETE FROM users WHERE organization_id=:o AND email=:e"),

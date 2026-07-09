@@ -97,6 +97,12 @@ async def billing_org(client):
     assert created.status_code == 201, created.text
     org_id = created.json()["org_id"]
     yield {"org_id": org_id, "plan_id": int(plan_id), "platform_headers": headers}
+    # Idem test_auth_sessions.py/test_platform.py: engine síncrona bloqueia a
+    # thread — esvazia as Tasks de auditoria do owner novo antes do DELETE
+    # síncrono para não deadlockar com uma escrita ainda em voo.
+    from app.services.audit import wait_for_pending
+
+    await wait_for_pending()
     _purge_billing_org(org_id)
     with Session(eng) as s, s.begin():
         s.execute(text("DELETE FROM platform_admins WHERE email=:e"), {"e": PLATFORM_EMAIL})

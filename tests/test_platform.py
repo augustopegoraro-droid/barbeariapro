@@ -196,6 +196,13 @@ async def test_cria_org_com_owner_e_seed(client, platform_headers):
         assert rreact.status_code == 200, rreact.text
     finally:
         if org_id is not None:
+            # Idem test_auth_sessions.py: a engine síncrona do _purge_org
+            # bloqueia a thread — sem esvaziar as Tasks de auditoria do
+            # login/suspend/reactivate do owner novo antes, o DELETE de
+            # `users` pode deadlockar com uma Task ainda em voo.
+            from app.services.audit import wait_for_pending
+
+            await wait_for_pending()
             _purge_org(org_id)
 
 

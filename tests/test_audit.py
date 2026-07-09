@@ -33,26 +33,49 @@ async def _last_events(organization_id: int, limit: int = 5):
             return rows
 
 
+async def _events_by_action(organization_id: int, action: str, limit: int = 20):
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            await set_current_org(session, organization_id)
+            rows = (
+                await session.execute(
+                    select(AuditLog)
+                    .where(AuditLog.organization_id == organization_id)
+                    .where(AuditLog.action == action)
+                    .order_by(AuditLog.id.desc())
+                    .limit(limit)
+                )
+            ).scalars().all()
+            return rows
+
+
 async def test_hash_chain_links_sequential_events():
+    """`record_event` é fire-and-forget (asyncio.ensure_future): duas chamadas
+    seguidas do MESMO caller não têm ordem de conclusão garantida entre si —
+    a propriedade que importa para a auditoria é a integridade do encadeamento
+    na ordem real de commit (cada linha aponta pro hash da anterior por `id`),
+    não a ordem em que o código as *chamou*. `org 1` é compartilhada por toda
+    a suíte, então também não dá pra assumir que as últimas N linhas da org
+    são exatamente as que este teste escreveu — por isso a verificação varre
+    todas as linhas adjacentes de uma janela recente, não um par específico."""
     audit_svc.record_event(
-        organization_id=SEED_ORG_ID,
-        action="test.chain.first",
-        result="allow",
+        organization_id=SEED_ORG_ID, action="test.chain.marker", result="allow"
     )
     audit_svc.record_event(
-        organization_id=SEED_ORG_ID,
-        action="test.chain.second",
-        result="allow",
+        organization_id=SEED_ORG_ID, action="test.chain.marker", result="allow"
     )
     await audit_svc.wait_for_pending()
 
-    rows = await _last_events(SEED_ORG_ID, limit=2)
-    assert len(rows) == 2
-    newer, older = rows
-    assert newer.action == "test.chain.second"
-    assert older.action == "test.chain.first"
-    assert newer.prev_hash == older.hash
-    assert newer.hash != older.hash
+    marker_rows = await _events_by_action(SEED_ORG_ID, "test.chain.marker", limit=2)
+    assert len(marker_rows) == 2
+    assert marker_rows[0].hash != marker_rows[1].hash
+
+    window = await _last_events(SEED_ORG_ID, limit=50)
+    window = list(reversed(window))  # ordem ascendente por id
+    for older, newer in zip(window, window[1:]):
+        assert newer.prev_hash == older.hash, (
+            f"cadeia quebrada entre id={older.id} e id={newer.id}"
+        )
 
 
 async def test_guard_deny_is_audited(client, barber_headers):
@@ -143,9 +166,12 @@ async def test_rls_hides_row_from_other_org_context():
     )
     await audit_svc.wait_for_pending()
 
-    rows = await _last_events(SEED_ORG_ID, limit=1)
+    # Filtra pelo action do marcador (não "a última linha da org") — org 1 é
+    # compartilhada pela suíte inteira, outra escrita concorrente poderia
+    # aterrissar depois da nossa antes desta consulta rodar.
+    rows = await _events_by_action(SEED_ORG_ID, "test.rls.marker", limit=1)
+    assert rows, "marcador não foi gravado"
     marker_id = rows[0].id
-    assert rows[0].action == "test.rls.marker"
 
     async with AsyncSessionLocal() as session:
         async with session.begin():
