@@ -1645,7 +1645,12 @@ sem migration): backup `~/predeploy_d69_20260709_044630.sql` → stash do `docke
 Evolution pinado, preservado) → `git pull` + `submodule update` (git na VM exige `sudo` — `.git` é do root; foi
 preciso `safe.directory` p/ o submódulo) → rebuild `backend`+`superadmin` → ambos healthy. Smoke externo:
 `/health` 200 · `/platform/health` e `/platform/metrics` 401 sem token · `admin.taylorethedy.com` 307 · logs
-limpos. Não validado com login real de produção (mesma ressalva do D-68).
+limpos. **Validado com login real do dono em 2026-07-09** — após corrigir um bug de deploy descoberto na hora:
+o rebuild assou `NEXT_PUBLIC_API_URL=localhost:8000` no bundle do browser porque `SUPERADMIN_API_URL` (build-arg
+do serviço `superadmin`) nunca fora setado no `.env` da VM (follow-up antigo baseado na premissa FALSA de que o
+superadmin não chama a API client-side — as queries React Query rodam no browser; só o login/SSR usa
+`API_URL_INTERNAL`). Fix: `SUPERADMIN_API_URL=https://api.taylorethedy.com` no `/opt/barbeariapro/.env` +
+rebuild. **Todo rebuild futuro do superadmin depende dessa var** (é build-arg, não runtime).
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
