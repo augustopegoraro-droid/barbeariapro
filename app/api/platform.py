@@ -1015,79 +1015,224 @@ class AlertsOut(BaseModel):
 
 _SEV_ORDER = {"critical": 0, "warning": 1, "info": 2}
 
+# Metadados de exibição das regras (a semântica do threshold está na migration
+# 0040). O frontend não conhece kinds: renderiza o que vier daqui.
+_RULE_META: dict[str, dict[str, str]] = {
+    "payment_overdue": {
+        "label": "Cobrança em atraso",
+        "description": "alerta quando o atraso atinge o limiar",
+        "unit": "dias",
+    },
+    "trial_ending": {
+        "label": "Trial terminando",
+        "description": "alerta quando faltam ≤ limiar dias de trial",
+        "unit": "dias",
+    },
+    "onboarding_stuck": {
+        "label": "Onboarding parado",
+        "description": "alerta quando o onboarding está parado há mais do que o limiar",
+        "unit": "dias",
+    },
+    "inactive_account": {
+        "label": "Conta pagante inativa",
+        "description": "conta ativa/em atraso sem atividade há ≥ limiar dias",
+        "unit": "dias",
+    },
+    "webhook_failures": {
+        "label": "Webhooks de billing falhos",
+        "description": "alerta quando há ≥ limiar webhooks falhos acumulados",
+        "unit": "eventos",
+    },
+    "health_at_risk": {
+        "label": "Health score em risco",
+        "description": "alerta quando o score da barbearia fica abaixo do limiar",
+        "unit": "pontos",
+    },
+}
+
+
+class AlertRuleOut(BaseModel):
+    kind: str
+    label: str
+    description: str
+    unit: str
+    enabled: bool
+    threshold: int
+    severity: str  # critical | warning | info
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+
+
+class AlertRulePutIn(BaseModel):
+    enabled: bool
+    threshold: int = Field(..., ge=0, le=1000)
+    severity: Literal["critical", "warning", "info"]
+
+
+def _rule_out(row: dict) -> AlertRuleOut:
+    meta = _RULE_META.get(row["kind"], {})
+    return AlertRuleOut(
+        kind=row["kind"],
+        label=meta.get("label", row["kind"]),
+        description=meta.get("description", ""),
+        unit=meta.get("unit", ""),
+        enabled=row["enabled"],
+        threshold=row["threshold"],
+        severity=row["severity"],
+        updated_at=row["updated_at"],
+        updated_by=row["updated_by"],
+    )
+
+
+@router.get("/alert-rules", response_model=list[AlertRuleOut])
+async def alert_rules(_admin: PlatformAdminId, db: PlatformDB) -> list[AlertRuleOut]:
+    rows = await platform_svc.alert_rules_list(db)
+    return [_rule_out(r) for r in rows]
+
+
+@router.put("/alert-rules/{kind}", response_model=AlertRuleOut)
+async def alert_rule_update(
+    kind: str,
+    body: AlertRulePutIn,
+    admin_id: PlatformAdminId,
+    db: PlatformDB,
+) -> AlertRuleOut:
+    if kind not in _RULE_META:
+        raise HTTPException(status_code=404, detail="Regra de alerta desconhecida.")
+    # health_at_risk é score 0–100; o CHECK do banco só garante 0–1000.
+    if kind == "health_at_risk" and body.threshold > 100:
+        raise HTTPException(
+            status_code=422, detail="Limiar de health score deve ser 0–100."
+        )
+    row = await platform_svc.alert_rule_set(
+        db,
+        kind=kind,
+        enabled=body.enabled,
+        threshold=body.threshold,
+        severity=body.severity,
+        admin_id=admin_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Regra de alerta desconhecida.")
+    await platform_svc.audit_add(
+        db, admin_id, action="alert_rule_updated", category="org",
+        target_type="alert_rule",
+        metadata={
+            "kind": kind, "enabled": body.enabled,
+            "threshold": body.threshold, "severity": body.severity,
+        },
+    )
+    return _rule_out(row)
+
 
 @router.get("/alerts", response_model=AlertsOut)
 async def alerts(_admin: PlatformAdminId, db: PlatformDB) -> AlertsOut:
-    """Central de Operações: alertas acionáveis derivados por regra.
+    """Central de Operações: alertas acionáveis dirigidos por regra.
 
-    Regras (limiares documentados em decisions.md/SA-D10):
-    cobrança em atraso (crítico) · webhooks de billing falhos (crítico) ·
-    trial terminando ≤7d (aviso) · onboarding parado >7d (aviso) ·
-    conta pagante sem atividade ≥30d (aviso).
+    Limiares/severidade/liga-desliga vêm de `platform_alert_rules` (editáveis
+    em PUT /platform/alert-rules/{kind}; semântica na migration 0040). Os
+    defaults semeados reproduzem o comportamento original (SA-D10).
     """
+    rules = {r["kind"]: r for r in await platform_svc.alert_rules_list(db)}
+
+    def rule(kind: str) -> Optional[dict]:
+        r = rules.get(kind)
+        return r if r is not None and r["enabled"] else None
+
     out: list[AlertOut] = []
 
-    billing_rows = await platform_svc.billing_subscriptions(db)
-    for r in billing_rows:
-        if r["org_deleted_at"] is not None:
-            continue
-        if (r["days_overdue"] or 0) > 0:
-            out.append(AlertOut(
-                severity="critical", kind="payment_overdue",
-                title=f"Cobrança em atraso há {r['days_overdue']} dia(s)",
-                detail=(
-                    f"R$ {float(r['open_amount'] or 0):.2f} em aberto"
-                    + (f" · última tentativa #{r['last_attempt']}" if r["last_attempt"] else "")
-                ),
-                org_id=r["org_id"], org_name=r["org_name"],
-                href=f"/tenants/{r['org_id']}",
-            ))
+    if (r_pay := rule("payment_overdue")) is not None:
+        billing_rows = await platform_svc.billing_subscriptions(db)
+        for r in billing_rows:
+            if r["org_deleted_at"] is not None:
+                continue
+            if (r["days_overdue"] or 0) >= max(r_pay["threshold"], 1):
+                out.append(AlertOut(
+                    severity=r_pay["severity"], kind="payment_overdue",
+                    title=f"Cobrança em atraso há {r['days_overdue']} dia(s)",
+                    detail=(
+                        f"R$ {float(r['open_amount'] or 0):.2f} em aberto"
+                        + (f" · última tentativa #{r['last_attempt']}" if r["last_attempt"] else "")
+                    ),
+                    org_id=r["org_id"], org_name=r["org_name"],
+                    href=f"/tenants/{r['org_id']}",
+                ))
 
-    signals = await platform_svc.onboarding_signals(db)
-    overrides = await platform_svc.onboarding_overrides(db)
-    for s in signals:
-        items = onb_progress.compute_checklist(s, overrides.get(s["org_id"], {}))
-        done = sum(1 for i in items if i["done"])
-        trial_left = onb_progress.trial_days_left(s)
-        stuck = onb_progress.stuck_days(s)
-        if trial_left is not None and 0 <= trial_left <= 7:
-            out.append(AlertOut(
-                severity="warning", kind="trial_ending",
-                title=f"Trial termina em {trial_left} dia(s)",
-                detail=f"onboarding {done}/{len(items)} — hora de converter",
-                org_id=s["org_id"], org_name=s["name"],
-                href=f"/tenants/{s['org_id']}",
-            ))
-        if done < len(items) and stuck > 7:
-            cur = onb_progress.current_stage(items)
-            out.append(AlertOut(
-                severity="warning", kind="onboarding_stuck",
-                title=f"Onboarding parado há {stuck} dia(s)",
-                detail=f"etapa atual: {cur['label'] if cur else '—'}",
-                org_id=s["org_id"], org_name=s["name"],
-                href=f"/tenants/{s['org_id']}",
-            ))
-        elif done == len(items) and stuck >= 30 and s["sub_status"] in ("active", "past_due"):
-            out.append(AlertOut(
-                severity="warning", kind="inactive_account",
-                title=f"Sem atividade há {stuck} dia(s)",
-                detail="conta pagante sem agendamentos/mensagens — risco de churn",
-                org_id=s["org_id"], org_name=s["name"],
-                href=f"/tenants/{s['org_id']}",
-            ))
+    r_trial = rule("trial_ending")
+    r_stuck = rule("onboarding_stuck")
+    r_inactive = rule("inactive_account")
+    if r_trial is not None or r_stuck is not None or r_inactive is not None:
+        signals = await platform_svc.onboarding_signals(db)
+        overrides = await platform_svc.onboarding_overrides(db)
+        for s in signals:
+            items = onb_progress.compute_checklist(s, overrides.get(s["org_id"], {}))
+            done = sum(1 for i in items if i["done"])
+            trial_left = onb_progress.trial_days_left(s)
+            stuck = onb_progress.stuck_days(s)
+            if (
+                r_trial is not None
+                and trial_left is not None
+                and 0 <= trial_left <= r_trial["threshold"]
+            ):
+                out.append(AlertOut(
+                    severity=r_trial["severity"], kind="trial_ending",
+                    title=f"Trial termina em {trial_left} dia(s)",
+                    detail=f"onboarding {done}/{len(items)} — hora de converter",
+                    org_id=s["org_id"], org_name=s["name"],
+                    href=f"/tenants/{s['org_id']}",
+                ))
+            if r_stuck is not None and done < len(items) and stuck > r_stuck["threshold"]:
+                cur = onb_progress.current_stage(items)
+                out.append(AlertOut(
+                    severity=r_stuck["severity"], kind="onboarding_stuck",
+                    title=f"Onboarding parado há {stuck} dia(s)",
+                    detail=f"etapa atual: {cur['label'] if cur else '—'}",
+                    org_id=s["org_id"], org_name=s["name"],
+                    href=f"/tenants/{s['org_id']}",
+                ))
+            elif (
+                r_inactive is not None
+                and done == len(items)
+                and stuck >= r_inactive["threshold"]
+                and s["sub_status"] in ("active", "past_due")
+            ):
+                out.append(AlertOut(
+                    severity=r_inactive["severity"], kind="inactive_account",
+                    title=f"Sem atividade há {stuck} dia(s)",
+                    detail="conta pagante sem agendamentos/mensagens — risco de churn",
+                    org_id=s["org_id"], org_name=s["name"],
+                    href=f"/tenants/{s['org_id']}",
+                ))
 
-    failed_webhooks = (
-        await db.execute(
-            select(func.count()).select_from(WebhookEvent).where(WebhookEvent.status == "failed")
-        )
-    ).scalar_one()
-    if failed_webhooks:
-        out.append(AlertOut(
-            severity="critical", kind="webhook_failures",
-            title=f"{failed_webhooks} webhook(s) de billing falharam",
-            detail="reprocesse na tela de logs ou investigue o gateway",
-            href="/logs",
-        ))
+    if (r_health := rule("health_at_risk")) is not None:
+        rows = await platform_svc.org_overview(db)
+        health_map = await _health_by_org(db, rows)
+        for r in rows:
+            h = health_map[r["id"]]
+            if h["band"] == health_svc.BAND_SUSPENDED:
+                continue  # suspensa é decisão nossa, não risco
+            if h["score"] < r_health["threshold"]:
+                out.append(AlertOut(
+                    severity=r_health["severity"], kind="health_at_risk",
+                    title=f"Health score {h['score']} — abaixo de {r_health['threshold']}",
+                    detail=" · ".join(h["reasons"][:3]) or None,
+                    org_id=r["id"], org_name=r["name"],
+                    href=f"/tenants/{r['id']}",
+                ))
+
+    if (r_wh := rule("webhook_failures")) is not None:
+        failed_webhooks = (
+            await db.execute(
+                select(func.count()).select_from(WebhookEvent).where(WebhookEvent.status == "failed")
+            )
+        ).scalar_one()
+        if failed_webhooks >= max(r_wh["threshold"], 1):
+            out.append(AlertOut(
+                severity=r_wh["severity"], kind="webhook_failures",
+                title=f"{failed_webhooks} webhook(s) de billing falharam",
+                detail="reprocesse na tela de logs ou investigue o gateway",
+                href="/logs",
+            ))
 
     out.sort(key=lambda a: _SEV_ORDER.get(a.severity, 9))
     counts = Counter(a.severity for a in out)

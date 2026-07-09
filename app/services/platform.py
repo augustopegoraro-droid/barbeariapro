@@ -234,6 +234,33 @@ async def audit_list(
     return [dict(r._mapping) for r in rows]
 
 
+async def alert_rules_list(db: AsyncSession) -> list[dict]:
+    """Regras da Central de Operações (uma por kind, ordem de seed)."""
+    rows = (
+        await db.execute(text("SELECT * FROM app_platform_alert_rules_list()"))
+    ).all()
+    return [dict(r._mapping) for r in rows]
+
+
+async def alert_rule_set(
+    db: AsyncSession,
+    *,
+    kind: str,
+    enabled: bool,
+    threshold: int,
+    severity: str,
+    admin_id: int,
+) -> Optional[dict]:
+    """Atualiza uma regra. None se o kind não existir OU o admin não existir."""
+    row = (
+        await db.execute(
+            text("SELECT * FROM app_platform_alert_rule_set(:k, :e, :t, :s, :a)"),
+            {"k": kind, "e": enabled, "t": threshold, "s": severity, "a": admin_id},
+        )
+    ).first()
+    return dict(row._mapping) if row is not None else None
+
+
 async def billing_subscriptions(db: AsyncSession) -> list[dict]:
     """Assinatura mais recente por org + plano + dunning (visão do painel)."""
     rows = (

@@ -87,6 +87,45 @@ class PlatformAuditLog(Base):
     )
 
 
+class PlatformAlertRule(Base):
+    """Regra configurável da Central de Operações (superadmin M11).
+
+    Uma linha por `kind` (semeadas na migration 0040 com os limiares que eram
+    hardcoded no GET /platform/alerts). O superadmin ajusta enabled/threshold/
+    severity pelo painel; a semântica do `threshold` por kind está documentada
+    na migration. Mesmo molde de acesso das demais tabelas de plataforma
+    (sem RLS/GRANT — só SECURITY DEFINER).
+    """
+
+    __tablename__ = "platform_alert_rules"
+    __table_args__ = (
+        UniqueConstraint("kind", name="platform_alert_rules_kind_unique"),
+        CheckConstraint(
+            "kind IN ('payment_overdue', 'trial_ending', 'onboarding_stuck', "
+            "'inactive_account', 'webhook_failures', 'health_at_risk')",
+            name="platform_alert_rules_kind_valid",
+        ),
+        CheckConstraint(
+            "threshold >= 0 AND threshold <= 1000",
+            name="platform_alert_rules_threshold_range",
+        ),
+        CheckConstraint(
+            "severity IN ('critical', 'warning', 'info')",
+            name="platform_alert_rules_severity_valid",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
+    threshold: Mapped[int] = mapped_column(nullable=False)
+    severity: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_by: Mapped[Optional[str]] = mapped_column(Text)
+
+
 class PlatformOnboardingOverride(Base):
     """Marcação MANUAL de etapa de onboarding pela plataforma.
 
