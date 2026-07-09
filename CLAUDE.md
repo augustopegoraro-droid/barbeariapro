@@ -418,17 +418,21 @@ botão "Conectar WhatsApp" gateado (V6). Typecheck limpo. **✅ DEPLOYADO em pro
 tem owner+barbeiro; 0 reception/manager). Migration/sync via repo do host montado (`scripts/` não vai na imagem;
 PG via `host.docker.internal`). Backup `~/predeploy_d67_20260707_205028.sql`.
 
-**Segurança / Governança — Sessão, dispositivos e hardening de autenticação (D-68, Fase 3 — pronto localmente,
-NÃO commitado/deployado):** access token curto (15min) + refresh token rotativo com detecção de reuso (tabela
-`sessions`, migration **0038** head `0038`, `FORCE ROW LEVEL SECURITY` em todas as tabelas RLS); rate
-limiting+lockout de login (Redis/slowapi); headers de segurança + `/docs` desligado por padrão; anti-enumeração;
-SSE do CRM trocou JWT-na-URL por ticket de uso único. `/admin/security/*` (gestor): reset administrativo de senha
-(sem e-mail no stack) e revogação de sessões de outro usuário. **UI de gestor** (`/admin/usuarios`, antes
-placeholder "em breve"): lista usuários da org + diálogos de sessões/reset de senha, consumindo
-`GET /admin/security/{users,sessions}`. Self-service em `/admin/seguranca/sessoes`. Corrigido nesta sessão: bug
-pré-existente que salvava o `repr()` Python do parsing de user-agent em vez de texto legível. Suíte **546 pass / 2
-ambientais / 0 regressões**; validado no browser (dev local); build+typecheck do frontend limpos. Detalhes em
-DECISIONS.md D-68.
+**Segurança / Governança — Sessão, dispositivos e hardening de autenticação (D-68, Fase 3 — ✅ DEPLOYADO em prod
+2026-07-09):** access token curto (15min) + refresh token rotativo com detecção de reuso (tabela `sessions`,
+migration **0038** head `0038`, `FORCE ROW LEVEL SECURITY` em todas as tabelas RLS); rate limiting+lockout de
+login (Redis/slowapi, **novo serviço `redis` no stack**); headers de segurança + `/docs` desligado por padrão;
+anti-enumeração; SSE do CRM trocou JWT-na-URL por ticket de uso único. `/admin/security/*` (gestor): reset
+administrativo de senha (sem e-mail no stack) e revogação de sessões de outro usuário. **UI de gestor**
+(`/admin/usuarios`, antes placeholder "em breve"): lista usuários da org + diálogos de sessões/reset de senha,
+consumindo `GET /admin/security/{users,sessions}`. Self-service em `/admin/seguranca/sessoes`. Corrigido nesta
+sessão: bug pré-existente que salvava o `repr()` Python do parsing de user-agent em vez de texto legível. Suíte
+**546 pass / 2 ambientais / 0 regressões**; validado no browser (dev local) e em prod via smoke test HTTP (login
+real com credencial de produção ainda não testado manualmente — recomendado). **✅ DEPLOYADO em prod 2026-07-09**
+(backend `db828cf` + frontend `c453b47`, direto na main; molde D-60/D-67): backup
+`~/predeploy_d68_20260709_034435.sql`, migration 0038 aplicada (FORCE RLS confirmado em 100% das tabelas),
+serviço `redis` novo saudável, backend+frontend rebuildados, smoke test OK (headers, `/docs` 404, rotas novas
+protegidas, refresh inválido devolve 401 e não 500). Detalhes em DECISIONS.md D-68.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
@@ -455,7 +459,7 @@ e instância WhatsApp (bot); falta só n8n `X-Instance`) · VM única sem HA.
 Exception` mudos · SQL via f-string em advisory lock · pool DB no default / sem PgBouncer / sem
 fila de workers · React Query não usado · páginas-monolito (`crm/page.tsx` 1389 linhas) ·
 cron n8n em série p/ todas as orgs · ~~repo frontend com remote morto~~ (✅ D-08, 2026-06-29: remote restaurado + submódulo registrado)
-· ~~JWT sem revogação/refresh~~ (✅ D-68, 2026-07-09, ainda não deployado: refresh rotativo + `sessions` + Redis
+· ~~JWT sem revogação/refresh~~ (✅ D-68, 2026-07-09, DEPLOYADO em prod: refresh rotativo + `sessions` + Redis
 para rate-limit/lockout/tickets — Redis passou a existir no stack, mas só para esse uso efêmero, não como cache
 geral).
 

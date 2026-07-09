@@ -1597,11 +1597,23 @@ administrativo sem e-mail), V12 (headers de segurança/`/docs` exposto), V13 (en
   confirmação + geração de senha temporária, badge "Troca de senha pendente" atualizando em tempo real via
   invalidação do React Query. Build de produção (`next build`) e `tsc --noEmit` limpos.
 
-**Status: pronto localmente, NADA commitado nem deployado** (backend e frontend). Falta: commit, aplicar migration
-`0038` em prod (mesmo molde D-60/D-67 — repo do host montado, `host.docker.internal:5432`), rebuild backend+frontend,
-smoke test em prod. **Débito consciente:** sem middleware de CSRF dedicado — mitigado arquiteturalmente (a API só
-aceita Bearer no header `Authorization`, nunca cookie; o refresh token não é acessível a JS de terceiros); revisar
-se algum fluxo futuro passar a depender de cookie de sessão da própria API.
+**✅ DEPLOYADO em prod 2026-07-09** (backend `db828cf` + frontend `c453b47`, direto na main; molde D-60/D-67):
+backup `~/predeploy_d68_20260709_034435.sql` → `git pull` (conflito local em `docker-compose.yml` — VM tinha o
+digest do Evolution pinado direto, não commitado; resolvido com `stash`/`pull`/`stash pop`, sem perda) →
+`git submodule update --init --recursive` (frontend em `c453b47`) → **migration 0038** aplicada (head `0038`,
+via repo do host montado + superuser `postgres`, mesmo molde) → **novo serviço `redis`** subiu no
+`docker-compose.app.yml` (`barbeariapro-app-redis`, saudável) → rebuild backend+frontend.
+**Validado em prod:** `sessions` com `relrowsecurity`/`relforcerowsecurity` = true; **0 tabelas** com RLS sem
+FORCE em todo o schema `public` (a migration dinâmica cobriu tudo); os 3 containers (`redis`/`backend`/`frontend`)
+saudáveis; `/health` 200 com headers de segurança (HSTS/X-Frame-Options/CSP) presentes; `/docs` 404 (desligado);
+`/admin/security/{users,sessions}` e `/auth/me/permissions` = 401 sem token (vivas+protegidas); `/auth/refresh`
+com token inválido devolve 401 com mensagem (não 500); `/auth/tenant?subdomain=taylor` = 200 (público, intacto);
+`/admin/usuarios` e `/trocar-senha` no frontend devolvem 307→login sem sessão (rotas existem, gate funcionando).
+**Não testado nesta validação:** login real ponta a ponta com credencial de produção (evitado por não digitar a
+senha real da conta em comando de shell) — recomendado um login manual do dono antes de considerar 100% fechado.
+**Débito consciente:** sem middleware de CSRF dedicado — mitigado arquiteturalmente (a API só aceita Bearer no
+header `Authorization`, nunca cookie; o refresh token não é acessível a JS de terceiros); revisar se algum fluxo
+futuro passar a depender de cookie de sessão da própria API.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
@@ -1615,7 +1627,7 @@ se algum fluxo futuro passar a depender de cookie de sessão da própria API.
 | Portas abertas ao mundo na VM | firewall GCP | Médio (reduzido) | D-40: 5678/8080 fechadas; 5432 já fechada. Restam 8000/3000 (uso direto do browser) — mover p/ nginx+HTTPS |
 | Estado do bot em memória (debounce) | `app/api/bot.py` | Médio | Restart perde estado. Aguarda Redis. |
 | SSE single-process | `app/services/sse_broker.py` | Baixo | Não funciona com múltiplos workers |
-| ~~Token JWT visível em query string do SSE~~ | `GET /crm/stream?token=` | ✅ Resolvido | D-68 (2026-07-09, ainda não deployado): ticket de uso único (30s) substitui o JWT na URL. |
+| ~~Token JWT visível em query string do SSE~~ | `GET /crm/stream?token=` | ✅ Resolvido | D-68 (2026-07-09, DEPLOYADO em prod): ticket de uso único (30s) substitui o JWT na URL. |
 | `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | Exportar da VM antes de qualquer edição local |
 | Formato de telefone 8 vs 9 dígitos | DB + `normalize_phone` | Médio | conv_id=1 tem 8 dígitos. Ver D-29. |
 | 3 testes ambientais falham | `tests/` | Baixo | n8n bypass_hours, RLS isolation, par `1/6` hardcoded — **não são bugs** |
