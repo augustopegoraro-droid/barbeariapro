@@ -1827,7 +1827,7 @@ do monorepo.** Smoke: `/health` 200 · `/platform/alert-rules`, `/platform/alert
 (D-71) 401 sem token · `admin.` 307 e tenant 307 · bundle do superadmin com `SUPERADMIN_API_URL` correto (D-69)
 · logs limpos. Pendências herdadas do D-70 seguem: cron n8n de `POST /internal/audit/purge`.
 
-### D-73 — Configuração de visibilidade do site público do cliente final (Fase 6 do plano de Segurança) — 2026-07-09 (local, não commitado)
+### D-73 — Configuração de visibilidade do site público do cliente final (Fase 6 do plano de Segurança) — 2026-07-09 (✅ COMMITADO, não deployado em prod)
 
 Fase 6 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §1.9`): "telas de configuração do que aparece no site
 público de agendamento". **Escopo combinado com o dono antes de começar:** o site público em si **não existe**
@@ -1878,7 +1878,8 @@ arquivos próprios. A sessão paralela acabou fazendo `git push` + deploy em pro
 localmente por mim (D-70/D-71) — ver nota no D-72 acima.
 
 Suíte completa após a Fase 6: **582 pass / 2 ambientais (pré-existentes) / 0 regressões**, ~82s, sem travar.
-**Pronto localmente, aguardando decisão de commit.**
+**✅ Commitado 2026-07-09** (backend `efde6fc` + frontend `5eff95d`, direto na main, molde D-67/D-68/D-69/D-70/D-71).
+**Pendente:** deploy em prod (aplicar migration `0041`); nenhuma env nova.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 

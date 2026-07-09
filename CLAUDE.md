@@ -460,7 +460,8 @@ o próprio event loop bloqueado poderia liberar) — corrigido com fixture `auto
 `await` explícito nos 3 pontos de risco identificados; não afeta produção (um único event loop de vida longa).
 Suíte 576 pass / 2 ambientais / 0 regressões reais. Detalhes em DECISIONS.md D-71.
 
-**Segurança / Governança — Visibilidade do site público (D-73, Fase 6 — local, não commitado 2026-07-09):**
+**Segurança / Governança — Visibilidade do site público (D-73, Fase 6 — ✅ COMMITADO 2026-07-09, não deployado
+em prod):**
 `client_visibility_settings` (migration `0041`, 1:1 por org, RLS+FORCE) guarda a CONFIGURAÇÃO de serviços/
 profissionais/horários/avaliações/promoções/banner/dados públicos exibidos — o site público em si **ainda não
 existe** no produto (decisão combinada: construir só a configuração, sem endpoint público de leitura, que fica
