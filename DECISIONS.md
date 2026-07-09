@@ -1730,7 +1730,7 @@ plataforma, sem RLS).
 `POST /internal/audit/purge` no n8n (mesmo molde dos demais crons — sem cron, a retenção configurada em
 `audit_retention_months` fica sem efeito prático, só a coluna existe).
 
-### D-71 — Painel de segurança para gestores (Fase 5 do plano de Segurança) — 2026-07-09 (pronto localmente, não commitado/deployado)
+### D-71 — Painel de segurança para gestores (Fase 5 do plano de Segurança) — 2026-07-09 (✅ COMMITADO, não deployado em prod)
 
 Fase 5 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §3`, item 4): "dashboard de segurança (logins, negados,
 dispositivos, exportações, mudanças de permissão) + alertas de anomalia". Construído inteiramente **sobre o
@@ -1765,23 +1765,27 @@ dispositivos, exportações, mudanças de permissão) + alertas de anomalia". Co
   persistente da própria ferramenta ("Frame with ID 0 is showing error page") que não cedeu após várias tentativas
   em abas novas — não foi possível confirmar visualmente nesta sessão; recomendado revisar manualmente.
 
-**Achado colateral desta fase — flakiness em `tests/test_audit.py` sob concorrência real:** ao investigar, dois
-processos `pytest tests/` completos ficaram rodando ao mesmo tempo por engano (chamadas em background sobrepostas)
-contra o mesmo Postgres de staging, e ambos travaram por ~9 minutos disputando o `pg_advisory_xact_lock` por-org do
-D-70 (muitas escritas concorrentes de auditoria de dois processos inteiros na mesma org). Precisaram ser mortos
-(`kill -9`) — o que também deixou **outra** organização de teste órfã (`teste-plataforma-xyz`, id 256, mesma causa
-do id 224 no D-70: `test_platform.py::test_cria_org_com_owner_e_seed` não roda seu `finally: _purge_org` quando o
-processo é morto à força). Consertado: os testes de hash-chain/RLS de `test_audit.py` (ver nota no D-70) e o achado
-em si não é um bug de produto — é um lembrete de que rodar múltiplas suítes completas em paralelo contra a mesma
-org é a própria situação de concorrência pesada que o `pg_advisory_xact_lock` deveria só serializar, não travar.
-**Pendente:** ~~apagar a org 256 (aguardando autorização explícita, mesmo molde do id 224)~~ — **purgada em
-2026-07-09 pela sessão do D-72**: era lixo de teste reconhecido (esta própria nota) e estava travando a suíte
-do D-72 (`test_cria_org_com_owner_e_seed` → 409 subdomínio em uso). Purga na ordem de FKs do `_purge_org` +
-`pg_terminate_backend` de transações penduradas no staging. Nenhum dado real envolvido.
+**Achado colateral desta fase — deadlock real sob `pytest`, não só flakiness:** investigar um teste instável
+(`test_audit.py::test_hash_chain_links_sequential_events`) levou a um bug estrutural genuíno. `record_event`
+(D-70) é fire-and-forget (`asyncio.ensure_future`) — o event loop **function-scoped** do `pytest-asyncio` fecha
+entre testes, e uma Task de auditoria ainda em voo fica órfã. Pior: **3 testes fazem `DELETE` síncrono** (engine
+bloqueante, `sqlalchemy.create_engine`) em `users`/`organizations` logo depois de ações que disparam auditoria
+(`test_auth_sessions.py`, `test_platform.py`, `test_billing_integration.py`) — a chamada síncrona bloqueia a
+THREAD inteira esperando um lock (FK `audit_logs.actor_user_id`/`organization_id`) que só seria liberado pelo
+próprio event loop que essa mesma chamada está impedindo de rodar. **Deadlock real**, observado travando o
+processo por 8-9 minutos até ser morto (`kill -9`) — reproduzido 3 vezes até o diagnóstico ficar claro (a sessão
+paralela do D-72, batendo no mesmo Postgres de staging ao mesmo tempo, também esbarrou nisso e fez sua própria
+limpeza de transações penduradas — ver nota do D-72). **Produção não tem esse risco** (um único event loop vive
+pela vida do processo; não há chamada síncrona bloqueante no caminho de request). Fix: `tests/conftest.py` ganhou
+uma fixture `autouse` (`_flush_audit_tasks`) que esvazia as Tasks pendentes no teardown de **todo** teste, mais
+`await wait_for_pending()` explícito imediatamente antes de cada uma das 3 limpezas síncronas identificadas.
+Depois do fix, suíte completa rodou limpa e rápida (~76s, sem travar) múltiplas vezes seguidas.
 
-**Pronto localmente, aguardando decisão de commit/deploy.** Suíte completa (limpa, um único processo):
-**576 pass / 2 ambientais (pré-existentes) / 1 falha de poluição de teste (org 256 órfã, não é regressão) / 2
-skip.**
+**✅ Commitado 2026-07-09** (backend `64ff540` + frontend `80aded5`, direto na main, molde D-67/D-68/D-69/D-70).
+Suíte completa (limpa, um único processo, sem o deadlock): **576 pass / 2 ambientais (pré-existentes,
+`test_bot_unit`/`test_e2e_flow`) / 0 regressões reais** (uma 3ª org de teste órfã, id 274, sobrou de uma execução
+morta à força **antes** do fix — pendente de limpeza, aguardando autorização explícita, mesmo molde dos ids
+224/256).
 
 ### D-72 — Central de Operações com regras configuráveis (M11) — 2026-07-09 (local, não deployado)
 
