@@ -1652,7 +1652,7 @@ superadmin não chama a API client-side — as queries React Query rodam no brow
 `API_URL_INTERNAL`). Fix: `SUPERADMIN_API_URL=https://api.taylorethedy.com` no `/opt/barbeariapro/.env` +
 rebuild. **Todo rebuild futuro do superadmin depende dessa var** (é build-arg, não runtime).
 
-### D-70 — Auditoria (Fase 4 do plano de Segurança) — 2026-07-09 (✅ COMMITADO, não deployado em prod)
+### D-70 — Auditoria (Fase 4 do plano de Segurança) — 2026-07-09 (✅ DEPLOYADO em prod)
 
 Fase 4 do `promptseguranca.md`, seguindo o núcleo de permissões do D-67 e a sessão/hardening do D-68. Fecha a
 lacuna estrutural (§1.7/§2 do `ARQUITETURA_ALVO.md`): nenhuma tabela de auditoria genérica existia — só trilhas
@@ -1726,11 +1726,12 @@ plataforma, sem RLS).
   "Negado" filtra de fato; `tsc --noEmit` e `eslint` limpos nos arquivos novos.
 
 **✅ Commitado 2026-07-09** (backend `0a0427c` + frontend `ecc071e`, direto na main, molde D-67/D-68/D-69).
-**Pendente para deploy em prod:** aplicar migration `0039` (head `0039`); nenhuma env nova. Agendar
+**✅ DEPLOYADO em prod 2026-07-09** — carona no deploy do D-72 (sessão paralela, backend `58112ea`): migration
+`0039` aplicada em prod (head na época `0040`, incluindo D-72). **Pendente:** agendar
 `POST /internal/audit/purge` no n8n (mesmo molde dos demais crons — sem cron, a retenção configurada em
 `audit_retention_months` fica sem efeito prático, só a coluna existe).
 
-### D-71 — Painel de segurança para gestores (Fase 5 do plano de Segurança) — 2026-07-09 (✅ COMMITADO, não deployado em prod)
+### D-71 — Painel de segurança para gestores (Fase 5 do plano de Segurança) — 2026-07-09 (✅ DEPLOYADO em prod)
 
 Fase 5 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §3`, item 4): "dashboard de segurança (logins, negados,
 dispositivos, exportações, mudanças de permissão) + alertas de anomalia". Construído inteiramente **sobre o
@@ -1784,8 +1785,11 @@ Depois do fix, suíte completa rodou limpa e rápida (~76s, sem travar) múltipl
 **✅ Commitado 2026-07-09** (backend `64ff540` + frontend `80aded5`, direto na main, molde D-67/D-68/D-69/D-70).
 Suíte completa (limpa, um único processo, sem o deadlock): **576 pass / 2 ambientais (pré-existentes,
 `test_bot_unit`/`test_e2e_flow`) / 0 regressões reais** (uma 3ª org de teste órfã, id 274, sobrou de uma execução
-morta à força **antes** do fix — pendente de limpeza, aguardando autorização explícita, mesmo molde dos ids
-224/256).
+morta à força **antes** do fix — purgada em seguida, autorizada pelo dono).
+**✅ DEPLOYADO em prod 2026-07-09** — carona no deploy do D-72 (sessão paralela, backend `58112ea`).
+**Reparo notado por essa sessão:** o bump do submódulo `barbearia-frontend` para `80aded5` tinha ido para a main
+do monorepo sem o push correspondente no repo do frontend — corrigido lá (lição: sempre pushar o submódulo antes
+do monorepo).
 
 ### D-72 — Central de Operações com regras configuráveis (M11) — 2026-07-09
 
@@ -1822,6 +1826,59 @@ do frontend — `git submodule update` quebrava em qualquer clone (visto na VM).
 do monorepo.** Smoke: `/health` 200 · `/platform/alert-rules`, `/platform/alerts` e `/admin/security/dashboard`
 (D-71) 401 sem token · `admin.` 307 e tenant 307 · bundle do superadmin com `SUPERADMIN_API_URL` correto (D-69)
 · logs limpos. Pendências herdadas do D-70 seguem: cron n8n de `POST /internal/audit/purge`.
+
+### D-73 — Configuração de visibilidade do site público do cliente final (Fase 6 do plano de Segurança) — 2026-07-09 (local, não commitado)
+
+Fase 6 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §1.9`): "telas de configuração do que aparece no site
+público de agendamento". **Escopo combinado com o dono antes de começar:** o site público em si **não existe**
+no produto (confirmado na Fase 0 da auditoria) — construir só a CONFIGURAÇÃO (não descartável: quando o site
+público entrar no roadmap, só passa a consumir o que já existe aqui) em vez de pular a fase ou simular consumo.
+
+**Backend:**
+- `client_visibility_settings` (migration **0041**, head `0041` — encadeada em `0040_platform_alert_rules`, a
+  migration do D-72 já era o head no disco compartilhado desta sessão): 1 linha por org (`organization_id` é a
+  própria PK, sem `id` separado), RLS + `FORCE ROW LEVEL SECURITY` explícito. Diferente do `audit_logs` (D-70,
+  append-only): aqui o gestor edita repetidamente, então `barber_app` recebe `SELECT`/`INSERT`/`UPDATE` (com
+  `UPDATE`, ao contrário do D-70). Campos: `services`/`professionals` (`{mode: all|custom, ids: []}`),
+  `show_hours`/`show_reviews`/`show_promotions` (bool), `banner` (`{enabled, image_url, title, subtitle,
+  cta_label, cta_url}`), `public_info` (`{address, phone, whatsapp, instagram, website}`), `updated_by`/`updated_at`.
+  **Bug pego na hora**: o default JSONB do banner (`'{"enabled": false}'`) quebrou a migration na primeira
+  tentativa — `sa.text()` interpreta `:false` como bind parameter (renderizou `NULL` em vez do literal),
+  mesma pegadinha de dois-pontos dentro de string; corrigido trocando por `sa.literal_column()` (não faz esse
+  parsing). Migration falhou e fez rollback limpo (transacional) antes do fix — sem sujeira no banco.
+- `GET/PUT /admin/security/site-visibility` (`app/services/site_visibility.py::get_or_create` — lazy-create do
+  registro no primeiro acesso, com defaults) — **reaproveita `security.site_visibility.manage`**, já no catálogo
+  desde o D-67, sem permissão nova. `PUT` audita a mudança (`settings.site_visibility.update`, D-70).
+  **Bug pego pelos próprios testes**: os dois handlers chamavam `db.commit()` manualmente **dentro** do escopo
+  de `session.begin()` da dependência `get_tenant_db` — o commit explícito fecha a transação da própria
+  dependência, e qualquer query seguinte no mesmo handler quebra com `Can't operate on closed transaction
+  inside context manager`. Como quase toda outra rota do arquivo não commita explicitamente (a dependência
+  commita sozinha ao fim do request), a correção foi só remover os dois `db.commit()` — nunca era necessário.
+- **Sem endpoint público de leitura ainda** (decisão explícita, ver escopo acima) — fica para quando o site
+  público entrar no roadmap do produto; reusaria `app_org_id_by_subdomain` (D-54) para resolver a org sem tenant,
+  como o `ARQUITETURA_ALVO.md §1.9` já previa.
+- Testes: `tests/test_site_visibility.py` (5 — permissão do GET/PUT, lazy-create com defaults, PUT reflete no
+  GET seguinte, evento de auditoria emitido).
+
+**Frontend (submódulo `barbearia-frontend`):**
+- `/admin/seguranca/visibilidade`: seletor Todos/Selecionados para serviços e profissionais (lista de checkboxes
+  reaproveitando `useServicos`/`useEquipe` já existentes — sem endpoint novo só para listar), toggles Sim/Não
+  (`SegmentedControl`, sem criar um componente `Switch` novo — nada no design system pedia um antes), seção de
+  banner condicional (só mostra os campos quando "Exibir banner" = Sim) e informações públicas. Item **"Visibilidade
+  do site"** na sidebar (grupo CONFIGURAÇÕES, gated por `security.site_visibility.manage`). `tsc --noEmit` e
+  `eslint` limpos.
+- **Validação visual não concluída** (mesma falha persistente da ferramenta de browser das Fases 4/5 — "Frame
+  with ID 0 is showing error page"); rota confirmada via `curl` autenticado com o shape e defaults corretos.
+
+**Nota de concorrência:** esta sessão trabalhou o tempo todo ao lado de uma sessão paralela (D-72, modelo Claude
+Fable 5) no MESMO diretório de trabalho — não um worktree separado. Cuidados tomados: nunca `git add -A`/`.`
+(sempre lista explícita de arquivos própria), migration nova sempre encadeada no head real do disco (não
+assumido), verificação de `git status`/`git diff --stat` antes de cada commit para confirmar que só entravam
+arquivos próprios. A sessão paralela acabou fazendo `git push` + deploy em prod do que já estava commitado
+localmente por mim (D-70/D-71) — ver nota no D-72 acima.
+
+Suíte completa após a Fase 6: **582 pass / 2 ambientais (pré-existentes) / 0 regressões**, ~82s, sem travar.
+**Pronto localmente, aguardando decisão de commit.**
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 

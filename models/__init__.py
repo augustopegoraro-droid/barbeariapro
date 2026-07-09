@@ -92,6 +92,7 @@ from .membership import (
     MembershipUsage,
 )
 from .audit import AuditLog
+from .client_visibility import ClientVisibilitySettings
 
 __all__ = [
     "Base",
@@ -199,4 +200,6 @@ __all__ = [
     "MembershipUsage",
     # auditoria (Fase 4)
     "AuditLog",
+    # visibilidade do site público (Fase 6)
+    "ClientVisibilitySettings",
 ]

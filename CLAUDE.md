@@ -434,7 +434,7 @@ real com credencial de produção ainda não testado manualmente — recomendado
 serviço `redis` novo saudável, backend+frontend rebuildados, smoke test OK (headers, `/docs` 404, rotas novas
 protegidas, refresh inválido devolve 401 e não 500). Detalhes em DECISIONS.md D-68.
 
-**Segurança / Governança — Auditoria (D-70, Fase 4 — ✅ COMMITADO 2026-07-09, não deployado em prod):**
+**Segurança / Governança — Auditoria (D-70, Fase 4 — ✅ DEPLOYADO em prod 2026-07-09):**
 `audit_logs` por tenant (migration `0039`, RLS+FORCE, append-only — só `SELECT`/`INSERT` para `barber_app`) com
 `prev_hash`/`hash` encadeados (adulteração/remoção no meio quebra a cadeia seguinte) e retenção configurável por
 org (`organizations.audit_retention_months`, purga via `SECURITY DEFINER` + cron interno `/internal/audit/purge`,
@@ -447,8 +447,8 @@ WhatsApp, reset de senha/revogação de sessão). `GET /admin/security/audit` (t
 (já existiam no catálogo desde o D-67). Frontend: `/admin/seguranca/auditoria` + item novo na sidebar. Suíte
 564 pass / 2 ambientais / 0 regressões; validado no browser (dev local). Detalhes em DECISIONS.md D-70.
 
-**Segurança / Governança — Painel de segurança para gestores (D-71, Fase 5 — ✅ COMMITADO 2026-07-09, não
-deployado em prod):** dashboard construído inteiramente sobre `audit_logs` (D-70) — sem migration nova. Backend
+**Segurança / Governança — Painel de segurança para gestores (D-71, Fase 5 — ✅ DEPLOYADO em prod 2026-07-09):**
+dashboard construído inteiramente sobre `audit_logs` (D-70) — sem migration nova. Backend
 `app/services/security_dashboard.py::dashboard_summary` (7 cards, série diária logins×negados por fuso local,
 top ações negadas, últimas negações) + alerta de anomalia (negações de hoje ≥ máx(5, 3× média dos 7 dias
 anteriores)). `GET /admin/security/dashboard?days=` reaproveita `security.audit.view` (sem permissão nova).
@@ -459,6 +459,14 @@ auditoria + `DELETE` síncrono na mesma linha `users`/`organizations` = thread b
 o próprio event loop bloqueado poderia liberar) — corrigido com fixture `autouse` em `tests/conftest.py` +
 `await` explícito nos 3 pontos de risco identificados; não afeta produção (um único event loop de vida longa).
 Suíte 576 pass / 2 ambientais / 0 regressões reais. Detalhes em DECISIONS.md D-71.
+
+**Segurança / Governança — Visibilidade do site público (D-73, Fase 6 — local, não commitado 2026-07-09):**
+`client_visibility_settings` (migration `0041`, 1:1 por org, RLS+FORCE) guarda a CONFIGURAÇÃO de serviços/
+profissionais/horários/avaliações/promoções/banner/dados públicos exibidos — o site público em si **ainda não
+existe** no produto (decisão combinada: construir só a configuração, sem endpoint público de leitura, que fica
+para quando o site entrar no roadmap). `GET/PUT /admin/security/site-visibility` reaproveita
+`security.site_visibility.manage` (já no catálogo desde o D-67). Frontend `/admin/seguranca/visibilidade` +
+item na sidebar. Suíte 582 pass / 2 ambientais / 0 regressões. Detalhes em DECISIONS.md D-73.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

@@ -29,8 +29,10 @@ from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.schemas.audit import AuditLogListOut, AuditLogOut
 from app.schemas.auth import AdminResetPasswordResponse, AdminUserOut, SessionOut
 from app.schemas.security_dashboard import SecurityDashboardOut
+from app.schemas.site_visibility import SiteVisibilityOut, SiteVisibilityUpdateIn
 from app.services.audit import purge_expired, record_event
 from app.services.security_dashboard import dashboard_summary
+from app.services.site_visibility import get_or_create as get_or_create_visibility
 from models import AuditLog, User, UserSession
 
 router = APIRouter(prefix="/admin/security", tags=["security"])
@@ -197,6 +199,72 @@ async def security_dashboard(
     await require_permission(db, current_user, "security.audit.view")
     data = await dashboard_summary(db, current_user.organization_id, days=days)
     return SecurityDashboardOut(**data)
+
+
+# ─── Visibilidade do site público (Fase 6) ──────────────────────────────────
+
+def _visibility_out(row) -> SiteVisibilityOut:
+    return SiteVisibilityOut(
+        services=row.services,
+        professionals=row.professionals,
+        show_hours=row.show_hours,
+        show_reviews=row.show_reviews,
+        show_promotions=row.show_promotions,
+        banner=row.banner,
+        public_info=row.public_info,
+        updated_by_email=None,
+        updated_at=row.updated_at,
+    )
+
+
+@router.get("/site-visibility", response_model=SiteVisibilityOut)
+async def get_site_visibility(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> SiteVisibilityOut:
+    """Configuração do que aparecerá no site público de agendamento — o site
+    em si ainda não existe (Fase 0 da auditoria); isto é só a configuração,
+    pronta para quando o produto tiver a página (ARQUITETURA_ALVO.md §1.9)."""
+    await require_permission(db, current_user, "security.site_visibility.manage")
+    row = await get_or_create_visibility(db, current_user.organization_id)
+    out = _visibility_out(row)
+    if row.updated_by:
+        email = (
+            await db.execute(select(User.email).where(User.id == row.updated_by))
+        ).scalar_one_or_none()
+        out.updated_by_email = email
+    return out
+
+
+@router.put("/site-visibility", response_model=SiteVisibilityOut)
+async def update_site_visibility(
+    body: SiteVisibilityUpdateIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> SiteVisibilityOut:
+    await require_permission(db, current_user, "security.site_visibility.manage")
+    row = await get_or_create_visibility(db, current_user.organization_id)
+
+    row.services = body.services.model_dump()
+    row.professionals = body.professionals.model_dump()
+    row.show_hours = body.show_hours
+    row.show_reviews = body.show_reviews
+    row.show_promotions = body.show_promotions
+    row.banner = body.banner.model_dump()
+    row.public_info = body.public_info.model_dump()
+    row.updated_by = current_user.id
+    row.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    out = _visibility_out(row)
+    out.updated_by_email = current_user.email
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="settings.site_visibility.update",
+        resource_type="client_visibility_settings",
+        resource_id=current_user.organization_id,
+    )
+    return out
 
 
 # ─── Auditoria (Fase 4) ─────────────────────────────────────────────────────
