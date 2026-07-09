@@ -1640,6 +1640,72 @@ com motivos). Testes: `tests/test_platform_health.py` (unidade da função pura 
 suíte 556 pass (2 falhas pré-existentes fora de plataforma: `test_bot_unit` e e2e dependente de redis local).
 Limiar/pesos são heurística inicial — recalibrar quando houver base real de churn observado.
 
+### D-70 — Auditoria (Fase 4 do plano de Segurança) — 2026-07-09 (pronto localmente, não commitado/deployado)
+
+Fase 4 do `promptseguranca.md`, seguindo o núcleo de permissões do D-67 e a sessão/hardening do D-68. Fecha a
+lacuna estrutural (§1.7/§2 do `ARQUITETURA_ALVO.md`): nenhuma tabela de auditoria genérica existia — só trilhas
+parciais por domínio (`LeadEvent`, `canceled_by_user_id`/`reverted_by_user_id`, `platform_audit_log` da
+plataforma, sem RLS).
+
+**Backend:**
+- **`audit_logs`** (migration **0039**, head `0039`): tenant, RLS + `FORCE ROW LEVEL SECURITY` explícito (nasce
+  depois do loop dinâmico do D-68 — não é coberta por ele). **Append-only de fato**: `barber_app` recebe só
+  `SELECT`/`INSERT` (sem `UPDATE`/`DELETE`), molde `platform_audit_log` (D-55) adaptado para RLS de tenant.
+  Campos: ator (`actor_user_id`+`actor_kind`), ação, recurso (`resource_type`/`resource_id`), `before`/`after`
+  (JSONB), `result` (`allow`/`deny`), motivo, IP, user-agent, e **`prev_hash`/`hash`** — cada evento inclui o hash
+  do anterior da mesma org (`app/services/audit.py`, SHA-256 sobre JSON canônico), serializado por
+  `pg_advisory_xact_lock` (mesmo mecanismo de `scheduling.py` para numeração atômica) — adulteração ou remoção de
+  uma linha no meio quebra a cadeia dos eventos seguintes. `organizations.audit_retention_months` (default 12,
+  aditivo) + função `SECURITY DEFINER app_audit_purge_expired()` (apaga por retenção, cruzando todas as orgs numa
+  única chamada) + cron interno `POST /internal/audit/purge` (`X-Bot-Token`, molde `/internal/billing/run-lifecycle`
+  — pendente de agendamento no n8n, mesmo padrão de todo cron do projeto).
+- **Emissão fire-and-forget** (`app/services/audit.py::record_event`): agenda a escrita numa `asyncio.Task` com
+  sessão própria (`AsyncSessionLocal`+`set_current_org`, molde `calendar_sync.py::push_appointment`) — não
+  bloqueia o response. **Sem fila/worker separado**: o projeto não tem infra de fila (Redis é só dado efêmero) nem
+  processo de worker (cron é sempre n8n batendo em `/internal/*`); a Task in-process é o "assíncrono" possível sem
+  infra nova — trade-off documentado no próprio módulo (débito: não sobrevive a crash entre o response e a
+  execução da Task).
+- **Guard central audita sozinho** (`app/authz.py`): os 3 pontos de `raise HTTPException(403)`
+  (`AuthContext.require`, `require_permission`, `require()._dep`) passaram a emitir `result=deny` **antes** de
+  negar — cobre **100% das ~90 rotas** já protegidas por permissão nomeada (D-67) sem tocar em nenhuma delas.
+  Só `require()._dep` (dependência de rota) captura IP/user-agent (tem `Request` injetado pelo FastAPI); os dois
+  caminhos imperativos (`require_permission`/`AuthContext.require`, usados pela maioria dos call-sites) gravam sem
+  IP/UA — trade-off para não re-tocar as ~90 chamadas da F2.5.
+- **Eventos obrigatórios instrumentados** (§1.7): login (sucesso/falha)/logout/reuso de refresh detectado
+  (`auth.py`); reset administrativo de senha e revogação de sessão (`security.py`); CRUD de clientes + bloqueio +
+  bot-pause (`clientes.py`); despesas (criar/excluir) + exports financeiros (`financeiro.py`); venda/cancelamento/
+  reativação/edição/exclusão de assinatura (`memberships.py`, reaproveita o `canceled_by_user_id` do D-51 como
+  primeira fonte já migrada); conclusão de atendimento + estorno de uso de assinatura (`barbeiro.py`); config da
+  empresa/unidade/horários (`empresa.py`); QR do WhatsApp (`integracoes.py`). **Não instrumentados** (confirmado
+  que não existem ainda, débito de fase anterior): mudança de papel/permissão/override e convite/desativação de
+  usuário — a UI "Papéis & Permissões" do `ARQUITETURA_ALVO.md §1.12` segue sem backend.
+- **`GET /admin/security/audit`** (timeline filtrável: ator/ação/recurso/período/`allow`|`deny`, paginada) e
+  **`GET /admin/security/audit/export.csv`** — cada uma atrás da permissão própria já existente no catálogo desde
+  o D-67 (`security.audit.view`/`security.audit.export`, sem migration nova de permissão); a exportação **audita a
+  si mesma** (§1.7: "exportação também controlada... e ela própria auditada").
+- Testes: `tests/test_audit.py` (8 — cadeia de hash sequencial, deny automático do guard nos dois caminhos
+  imperativo e `Depends(require)` com captura de IP/UA, gate de permissão das rotas novas, exportação auto-auditada,
+  isolamento por RLS). **Suíte: 564 pass / 2 ambientais (pré-existentes, `test_bot_unit`/`test_e2e_flow`, não
+  relacionadas) / 0 regressões.** Achado do próprio teste de cobertura (`test_authz_coverage.py`): a rota nova
+  `/internal/audit/purge` precisou entrar em `PUBLIC_PATHS` (autentica por `X-Bot-Token` no handler, não por
+  dependência) — mesmo tratamento já dado a `/internal/billing/run-lifecycle`.
+
+**Frontend (submódulo `barbearia-frontend`):**
+- `/admin/seguranca/auditoria` (`hooks/use-audit.ts` + página própria, molde `/admin/seguranca/sessoes`): timeline
+  com filtro por ação (busca), resultado (`SegmentedControl` Todos/Permitido/Negado), período, paginação, linha
+  expansível com `before`/`after`/motivo, botão "Exportar CSV" (mesmo padrão de download-por-blob do
+  `useDownloadCsv` do Financeiro). Item **"Auditoria"** novo na sidebar (grupo CONFIGURAÇÕES, ao lado de
+  "Sessões"), gated por `security.audit.view` via `usePermissions()` — decisão de escopo: manter a estrutura plana
+  atual em vez de introduzir o grupo "Segurança" com sub-abas do `ARQUITETURA_ALVO.md §1.12` (fica para quando
+  "Papéis & Permissões"/"Privacidade" também tiverem tela, evita um grupo com um item só).
+- Validado no browser (dev local, dados reais da org 1): bloqueio/desbloqueio de um cliente e a própria
+  exportação da auditoria aparecem corretamente na timeline (ator, ação, recurso, resultado, hora); filtro
+  "Negado" filtra de fato; `tsc --noEmit` e `eslint` limpos nos arquivos novos.
+
+**Pendente para deploy em prod** (nada foi commitado/deployado nesta sessão): aplicar migration `0039`
+(head `0039`); nenhuma env nova. Agendar `POST /internal/audit/purge` no n8n (mesmo molde dos demais crons —
+sem cron, a retenção configurada em `audit_retention_months` fica sem efeito prático, só a coluna existe).
+
 **✅ DEPLOYADO em prod 2026-07-09** (backend `a7ff73a` + superadmin `f8a62b2`, submódulo bumpado em `75a272d`;
 sem migration): backup `~/predeploy_d69_20260709_044630.sql` → stash do `docker-compose.yml` local (digest do
 Evolution pinado, preservado) → `git pull` + `submodule update` (git na VM exige `sudo` — `.git` é do root; foi

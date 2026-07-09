@@ -98,6 +98,10 @@ class Organization(Base):
     logo_url: Mapped[Optional[str]] = mapped_column(Text)
     # Meta de faturamento mensal (R$); NULL = sem meta. Usada no alerta proativo.
     monthly_revenue_goal: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2))
+    # Retenção da auditoria (meses), configurável por org (Fase 4, D-70).
+    audit_retention_months: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("12")
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

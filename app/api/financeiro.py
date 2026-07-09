@@ -18,6 +18,7 @@ from app.core.dates import local_date
 from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services.audit import record_event
 from app.services.management import barber_revenue_rows
 from models import (
     Appointment,
@@ -583,6 +584,14 @@ async def criar_despesa(
     )
     db.add(expense)
     await db.flush()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.expenses.create",
+        resource_type="expense",
+        resource_id=expense.id,
+        after={"category": category.name, "amount": float(expense.amount), "month": body.month},
+    )
 
     return ExpenseOut(
         id=expense.id,
@@ -607,8 +616,17 @@ async def remover_despesa(
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND, detail="Despesa não encontrada."
         )
+    before = {"category_id": expense.category_id, "amount": float(expense.amount)}
     await db.delete(expense)
     await db.flush()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.expenses.delete",
+        resource_type="expense",
+        resource_id=expense_id,
+        before=before,
+    )
 
 
 # ─── Export CSV ───────────────────────────────────────────────────────────────
@@ -655,6 +673,13 @@ async def export_comissoes_csv(
     total_com = sum(float(Decimal(str(r.revenue)) * r.commission_pct) for r in barber_rows)
     rows.append(["TOTAL", sum(r.appt_count for r in barber_rows), total_rev, "", total_com])
 
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.export",
+        resource_type="comissoes",
+        resource_id=month,
+    )
     return _csv_response(
         f"comissoes-{month}.csv",
         ["Barbeiro", "Atendimentos", "Receita (R$)", "Comissão (%)", "Comissão (R$)"],
@@ -698,6 +723,13 @@ async def export_faturamento_csv(
         sum(float(r.rev) for r in daily_rows),
     ])
 
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.export",
+        resource_type="faturamento",
+        resource_id=month,
+    )
     return _csv_response(
         f"faturamento-{month}.csv",
         ["Data", "Atendimentos concluídos", "Receita (R$)"],

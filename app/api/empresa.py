@@ -24,6 +24,7 @@ from starlette import status as http_status
 from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services.audit import record_event
 from models import Barber, BusinessHours, Organization, Subscription, Unit
 
 router = APIRouter(tags=["empresa"])
@@ -229,7 +230,8 @@ async def atualizar_empresa(
         )
     ).scalar_one()
 
-    for field, value in body.model_dump(exclude_unset=True).items():
+    changed = body.model_dump(exclude_unset=True)
+    for field, value in changed.items():
         # Strings vazias viram NULL (limpa o campo); demais valores normalizam o trim.
         if isinstance(value, str):
             value = value.strip() or None
@@ -238,6 +240,14 @@ async def atualizar_empresa(
     await db.flush()
     out = OrganizationOut.model_validate(org)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="settings.company.update",
+        resource_type="organization",
+        resource_id=org.id,
+        after=changed,
+    )
     return out
 
 
@@ -268,6 +278,14 @@ async def atualizar_unidade(
     await db.flush()
     out = UnitOut.model_validate(unit)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="settings.company.update_unit",
+        resource_type="unit",
+        resource_id=unit.id,
+        after=data,
+    )
     return out
 
 
@@ -319,4 +337,12 @@ async def substituir_horarios(
     await db.flush()
     out = sorted(body.slots, key=lambda s: (s.weekday, s.open_time))
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="settings.company.update_hours",
+        resource_type="unit",
+        resource_id=unit.id,
+        after={"slots_count": len(body.slots)},
+    )
     return out

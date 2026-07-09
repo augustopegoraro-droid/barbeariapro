@@ -17,12 +17,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_current_user, get_tenant_db
+from app.services.audit import record_event
 from app.services.authz import resolve_permissions
 from models import User
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 @dataclass
@@ -38,6 +46,13 @@ class AuthContext:
     def require(self, code: str) -> None:
         """Levanta 403 se faltar a permissão (uso imperativo dentro do handler)."""
         if code not in self.permissions:
+            record_event(
+                organization_id=self.user.organization_id,
+                actor_user_id=self.user.id,
+                action=code,
+                result="deny",
+                reason="Permissão necessária ausente",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permissão necessária: {code}",
@@ -61,6 +76,13 @@ async def require_permission(db: AsyncSession, user: User, code: str) -> None:
     papéis reproduz o guard antigo. 403 se faltar (fail-closed)."""
     perms = await resolve_permissions(db, user)
     if code not in perms:
+        record_event(
+            organization_id=user.organization_id,
+            actor_user_id=user.id,
+            action=code,
+            result="deny",
+            reason="Permissão necessária ausente",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Permissão necessária: {code}",
@@ -75,10 +97,20 @@ def require(*permissions: str):
     """
 
     async def _dep(
+        request: Request,
         ctx: Annotated[AuthContext, Depends(get_auth_context)],
     ) -> AuthContext:
         missing = [p for p in permissions if p not in ctx.permissions]
         if missing:
+            record_event(
+                organization_id=ctx.user.organization_id,
+                actor_user_id=ctx.user.id,
+                action=", ".join(missing),
+                result="deny",
+                reason="Permissão necessária ausente",
+                ip=_client_ip(request),
+                user_agent=request.headers.get("user-agent"),
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permissão necessária: {', '.join(missing)}",

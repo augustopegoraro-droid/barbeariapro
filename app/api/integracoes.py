@@ -31,6 +31,7 @@ from app.core.crypto import TokenCryptoError, encrypt_token
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.services import google_calendar as gc
+from app.services.audit import record_event
 from models import User
 from models.enums import IntegrationProvider, IntegrationStatus
 from models.integration import IntegrationAccount
@@ -307,6 +308,13 @@ async def whatsapp_qr(
             qr = data.get("base64", "")
             if not qr:
                 raise HTTPException(status_code=503, detail="QR code indisponível — WhatsApp pode já estar conectado")
+            record_event(
+                organization_id=current_user.organization_id,
+                actor_user_id=current_user.id,
+                action="integrations.whatsapp.qr_requested",
+                resource_type="integration",
+                resource_id="whatsapp",
+            )
             return WhatsAppQrOut(qr=qr)
     except HTTPException:
         raise

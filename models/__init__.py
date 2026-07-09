@@ -91,6 +91,7 @@ from .membership import (
     MembershipPlanItem,
     MembershipUsage,
 )
+from .audit import AuditLog
 
 __all__ = [
     "Base",
@@ -196,4 +197,6 @@ __all__ = [
     "MembershipPlanItem",
     "ClientMembership",
     "MembershipUsage",
+    # auditoria (Fase 4)
+    "AuditLog",
 ]

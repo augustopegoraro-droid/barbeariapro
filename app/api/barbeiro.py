@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.rbac import check_appointment_ownership
 from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
+from app.services.audit import record_event
 from app.services.calendar_sync import push_appointment
 from app.services.loyalty import (
     recalculate as _recalculate_loyalty,
@@ -141,6 +142,14 @@ async def concluir_atendimento(
         await db.flush()
         await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
         await db.commit()
+        record_event(
+            organization_id=current_user.organization_id,
+            actor_user_id=current_user.id,
+            action="appointments.complete",
+            resource_type="appointment",
+            resource_id=appt_id,
+            after={"paid_by": "membership", "tip_amount": float(tip) if tip else 0.0},
+        )
 
         background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
         final_total = float(appt.total_amount) + float(tip or Decimal("0"))
@@ -178,6 +187,14 @@ async def concluir_atendimento(
     await db.flush()
     await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="appointments.complete",
+        resource_type="appointment",
+        resource_id=appt_id,
+        after={"paid_by": body.method, "amount": float(amount), "tip_amount": float(tip) if tip else 0.0},
+    )
 
     final_total = amount + (tip or Decimal("0"))
     background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
@@ -276,6 +293,14 @@ async def estornar_uso_atendimento(
     )
     await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="appointments.revert_usage",
+        resource_type="appointment",
+        resource_id=appt_id,
+        reason="Estorno de uso de assinatura em atendimento concluído",
+    )
 
     background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "delete")
     return AtendimentoOut(id=appt_id, status="cancelado", total_amount=float(appt.total_amount))

@@ -26,6 +26,7 @@ from app.deps import (
     resolve_current_role,
 )
 from app.services import membership as svc
+from app.services.audit import record_event
 from models import (
     Appointment,
     Client,
@@ -539,6 +540,14 @@ async def vender_assinatura(
     await db.refresh(membership, ["usages"])
     out = await _membership_out_full(db, membership)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="memberships.sell",
+        resource_type="membership",
+        resource_id=membership.id,
+        after={"client_id": body.client_id, "plan_id": body.plan_id},
+    )
     return out
 
 
@@ -615,6 +624,13 @@ async def cancelar_assinatura(
     await db.flush()
     out = await _membership_out_full(db, m)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="memberships.cancel",
+        resource_type="membership",
+        resource_id=membership_id,
+    )
     return out
 
 
@@ -634,6 +650,13 @@ async def reativar_assinatura(
     await svc.reactivate_membership(db, m, reactivated_by_user_id=current_user.id)
     out = await _membership_out_full(db, m)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="memberships.reactivate",
+        resource_type="membership",
+        resource_id=membership_id,
+    )
     return out
 
 
@@ -676,6 +699,14 @@ async def editar_assinatura(
     )
     out = await _membership_out_full(db, m)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="memberships.edit",
+        resource_type="membership",
+        resource_id=membership_id,
+        after=kwargs,
+    )
     return out
 
 
@@ -691,6 +722,13 @@ async def excluir_assinatura(
     m = await _load_membership(db, membership_id)
     await svc.delete_membership(db, m)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="memberships.delete",
+        resource_type="membership",
+        resource_id=membership_id,
+    )
 
 
 @router.post(

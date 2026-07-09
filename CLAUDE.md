@@ -434,6 +434,19 @@ real com credencial de produção ainda não testado manualmente — recomendado
 serviço `redis` novo saudável, backend+frontend rebuildados, smoke test OK (headers, `/docs` 404, rotas novas
 protegidas, refresh inválido devolve 401 e não 500). Detalhes em DECISIONS.md D-68.
 
+**Segurança / Governança — Auditoria (D-70, Fase 4 — pronto localmente 2026-07-09, não commitado/deployado):**
+`audit_logs` por tenant (migration `0039`, RLS+FORCE, append-only — só `SELECT`/`INSERT` para `barber_app`) com
+`prev_hash`/`hash` encadeados (adulteração/remoção no meio quebra a cadeia seguinte) e retenção configurável por
+org (`organizations.audit_retention_months`, purga via `SECURITY DEFINER` + cron interno `/internal/audit/purge`,
+ainda sem agendamento no n8n). Emissão fire-and-forget (`app/services/audit.py`, Task própria — sem fila/worker
+separado, débito documentado). O **guard central audita sozinho** toda negação (`app/authz.py`, cobre as ~90
+rotas do D-67 sem tocar nelas); eventos obrigatórios instrumentados nos pontos críticos (login/logout, CRUD de
+clientes, despesas/exports financeiros, assinaturas, conclusão/estorno de atendimento, config da empresa, QR do
+WhatsApp, reset de senha/revogação de sessão). `GET /admin/security/audit` (timeline filtrável) +
+`GET /admin/security/audit/export.csv` (audita a si mesma), atrás de `security.audit.view`/`security.audit.export`
+(já existiam no catálogo desde o D-67). Frontend: `/admin/seguranca/auditoria` + item novo na sidebar. Suíte
+564 pass / 2 ambientais / 0 regressões; validado no browser (dev local). Detalhes em DECISIONS.md D-70.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
@@ -500,8 +513,8 @@ frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i1
   export SEED_ORG_ID=1
   .venv/bin/python -m pytest tests/ -q
   ```
-  Baseline atual: **205 pass / 3 fail (ambientais) / 4 skip**. As 3 falhas (config workflow n8n
-  `bypass_hours`, RLS isolation, e2e link barbeiro↔serviço) são de seed/ambiente, não de código.
+  Baseline atual (2026-07-09, pós D-70): **564 pass / 2 fail (ambientais) / 2 skip**. As 2 falhas (config workflow
+  n8n `bypass_hours`, e2e link barbeiro↔serviço) são de seed/ambiente, não de código.
 - **Deploy:** procedimentos backend (git pull + compose) e frontend (scp + build) em `PROJECT_CONTEXT.md §2`.
 
 ---

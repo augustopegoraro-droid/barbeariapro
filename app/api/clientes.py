@@ -16,6 +16,7 @@ from app.authz import AuthContext, require, require_permission
 from app.core.phone import normalize_phone as _validate_phone
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services.audit import record_event
 from models import Client, ClientLoyalty, Conversation, User
 from models.enums import ContactChannel, LoyaltyNivel, LoyaltyStatus
 
@@ -237,6 +238,14 @@ async def create_cliente(
         is_blocked=False,
     )
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="clients.create",
+        resource_type="client",
+        resource_id=client.id,
+        after={"name": client.name, "phone": client.phone_e164},
+    )
     return response
 
 
@@ -259,6 +268,7 @@ async def edit_cliente(
     if client is None:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
 
+    before = {"name": client.name, "phone": client.phone_e164}
     if body.name is not None:
         client.name = body.name
     if body.phone is not None:
@@ -274,6 +284,15 @@ async def edit_cliente(
 
     response = _to_client_out(client)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="clients.edit",
+        resource_type="client",
+        resource_id=client.id,
+        before=before,
+        after={"name": client.name, "phone": client.phone_e164},
+    )
     return response
 
 
@@ -295,6 +314,14 @@ async def delete_cliente(
 
     client.deleted_at = datetime.now(timezone.utc)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="clients.delete",
+        resource_type="client",
+        resource_id=client_id,
+        before={"name": client.name, "phone": client.phone_e164},
+    )
 
 
 @router.patch("/{client_id}/bloquear", response_model=ClientOut)
@@ -318,6 +345,13 @@ async def bloquear_cliente(
     client.is_blocked = not client.is_blocked
     response = _to_client_out(client)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="clients.block" if client.is_blocked else "clients.unblock",
+        resource_type="client",
+        resource_id=client_id,
+    )
     return response
 
 
@@ -354,4 +388,12 @@ async def toggle_bot_pause(
 
     response = _to_client_out(client)
     await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="clients.bot_pause",
+        resource_type="client",
+        resource_id=client_id,
+        after={"paused": paused},
+    )
     return response

@@ -81,6 +81,7 @@ app.include_router(billing.router)
 app.include_router(billing.internal_router)
 app.include_router(platform_billing.router)
 app.include_router(security.router)
+app.include_router(security.internal_router)
 
 
 @app.get("/")

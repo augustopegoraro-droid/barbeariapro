@@ -23,6 +23,7 @@ PUBLIC_PATHS = {
     "/chatwoot/webhook",         # token no handler (fail-closed)
     "/billing/webhooks/{provider_name}",  # assinatura do provider
     "/internal/billing/run-lifecycle",    # X-Bot-Token (secrets_match) no handler
+    "/internal/audit/purge",              # X-Bot-Token (secrets_match) no handler (Fase 4)
     "/integracoes/google/calendar/callback",  # state JWT assinado
     "/crm/stream",               # autentica por ticket/token no handler (V4)
     "/auth/refresh",             # credencial é o refresh token (corpo), não Bearer (D-68)

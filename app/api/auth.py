@@ -45,6 +45,7 @@ from app.schemas.auth import (
     TokenData,
     TokenResponse,
 )
+from app.services.audit import record_event
 from app.services.tenant import org_id_by_refresh_token_hash, org_id_by_subdomain
 from models import Organization, User, UserSession
 
@@ -202,6 +203,16 @@ async def login(
     org_ok = org is not None and org.deleted_at is None
     if not (password_ok and account_ok and org_ok):
         await _register_login_failure(ip_key, combo_key)
+        if org is not None:
+            record_event(
+                organization_id=org.id,
+                actor_user_id=user.id if user is not None else None,
+                action="auth.login",
+                result="deny",
+                reason="Credenciais inválidas",
+                ip=ip,
+                user_agent=request.headers.get("user-agent"),
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciais inválidas",
@@ -210,6 +221,14 @@ async def login(
     await _clear_login_failures(ip_key, combo_key)
     assert user is not None  # narrows p/ o type checker (já garantido por account_ok)
     role = await resolve_current_role(db, user)
+    record_event(
+        organization_id=user.organization_id,
+        actor_user_id=user.id,
+        action="auth.login",
+        result="allow",
+        ip=ip,
+        user_agent=request.headers.get("user-agent"),
+    )
     return await _issue_session(db, request, user, role)
 
 
@@ -267,6 +286,17 @@ async def refresh(
             session_row.id, session_row.user_id, org_id,
         )
         await db.commit()
+        record_event(
+            organization_id=org_id,
+            actor_user_id=session_row.user_id,
+            action="auth.refresh_reuse_detected",
+            result="deny",
+            resource_type="session",
+            resource_id=session_row.id,
+            reason="Reuso de refresh token rotacionado — sessão revogada",
+            ip=_client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessão revogada (reuso de refresh token detectado)",
@@ -304,6 +334,7 @@ async def refresh(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     body: LogoutRequest,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     """Revoga a sessão do refresh token informado. Idempotente: token já
@@ -326,6 +357,16 @@ async def logout(
         return
     session_row.revoked_at = datetime.now(timezone.utc)
     await _denylist_jti(session_row.jti_current)
+    record_event(
+        organization_id=org_id,
+        actor_user_id=session_row.user_id,
+        action="auth.logout",
+        result="allow",
+        resource_type="session",
+        resource_id=session_row.id,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
