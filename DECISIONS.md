@@ -1787,7 +1787,7 @@ Suíte completa (limpa, um único processo, sem o deadlock): **576 pass / 2 ambi
 morta à força **antes** do fix — pendente de limpeza, aguardando autorização explícita, mesmo molde dos ids
 224/256).
 
-### D-72 — Central de Operações com regras configuráveis (M11) — 2026-07-09 (local, não deployado)
+### D-72 — Central de Operações com regras configuráveis (M11) — 2026-07-09
 
 **Contexto:** os limiares dos alertas do superadmin eram hardcoded no `GET /platform/alerts` (SA-D10). Com o
 SaaS abrindo para várias empresas, o dono precisa calibrar a régua operacional (quando alertar, com que
@@ -1811,6 +1811,17 @@ não-suspensa com score abaixo do limiar (top 3 motivos no detail).
 regra (Ativa/Desligada, limiar com unidade, severidade Crítico/Atenção/Info, salvar por linha com validação e
 último editor visível). Testes: `tests/test_platform_alert_rules.py` (defaults do seed, PUT+auditoria,
 validações, "todas desligadas → zero alertas", coerência health_at_risk × /platform/health).
+
+**✅ DEPLOYADO em prod 2026-07-09** (backend `58112ea` + superadmin `775fd71`, bump `10143b0`; molde D-60/D-69):
+backup `~/predeploy_d72_*.sql` → pull → **migrations `0039`+`0040`** aplicadas (head `0040`; seed das 6 regras
+conferido no banco) → rebuild backend+frontend+superadmin, todos healthy. **Este deploy carregou junto D-70 e
+D-71** (já estavam na main local; push desta sessão os publicou). **Reparo no caminho:** o bump do submódulo
+`barbearia-frontend` para `80aded5` (D-71) tinha ido para a main do monorepo SEM o push correspondente no repo
+do frontend — `git submodule update` quebrava em qualquer clone (visto na VM). Corrigido pushando `80aded5`
+(já commitado na main local do submódulo). Lição: **ao bumpar ponteiro de submódulo, pushe o submódulo ANTES
+do monorepo.** Smoke: `/health` 200 · `/platform/alert-rules`, `/platform/alerts` e `/admin/security/dashboard`
+(D-71) 401 sem token · `admin.` 307 e tenant 307 · bundle do superadmin com `SUPERADMIN_API_URL` correto (D-69)
+· logs limpos. Pendências herdadas do D-70 seguem: cron n8n de `POST /internal/audit/purge`.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
