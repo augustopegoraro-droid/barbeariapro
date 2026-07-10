@@ -1825,7 +1825,8 @@ do frontend — `git submodule update` quebrava em qualquer clone (visto na VM).
 (já commitado na main local do submódulo). Lição: **ao bumpar ponteiro de submódulo, pushe o submódulo ANTES
 do monorepo.** Smoke: `/health` 200 · `/platform/alert-rules`, `/platform/alerts` e `/admin/security/dashboard`
 (D-71) 401 sem token · `admin.` 307 e tenant 307 · bundle do superadmin com `SUPERADMIN_API_URL` correto (D-69)
-· logs limpos. Pendências herdadas do D-70 seguem: cron n8n de `POST /internal/audit/purge`.
+· logs limpos. **Validado com login real do dono em 2026-07-09** (edição de regras funcionando no painel).
+Pendências herdadas do D-70 seguem: cron n8n de `POST /internal/audit/purge`.
 
 ### D-73 — Configuração de visibilidade do site público do cliente final (Fase 6 do plano de Segurança) — 2026-07-09 (✅ COMMITADO, não deployado em prod)
 
