@@ -471,8 +471,8 @@ para quando o site entrar no roadmap). `GET/PUT /admin/security/site-visibility`
 `security.site_visibility.manage` (já no catálogo desde o D-67). Frontend `/admin/seguranca/visibilidade` +
 item na sidebar. Suíte 582 pass / 2 ambientais / 0 regressões. Detalhes em DECISIONS.md D-73.
 
-**Segurança / Governança — Direitos do titular + histórico de consentimento (D-74, Fase 8 — local, não commitado
-2026-07-09):** escopo recortado (Fase 7/analytics e banner de cookies/Consent Mode ficam para quando existir site
+**Segurança / Governança — Direitos do titular + histórico de consentimento (D-74, Fase 8 — ✅ COMMITADO
+2026-07-12, não deployado em prod):** escopo recortado (Fase 7/analytics e banner de cookies/Consent Mode ficam para quando existir site
 público de verdade — ver `promptsitepublico.md`, ainda não iniciado). `consent_records` (migration `0042`,
 append-only, molde `audit_logs`/D-70) evolui o opt-in/opt-out do WhatsApp (D-51) sem substituir `client_consents`.
 `clients.anonymized_at` + `app/services/lgpd.py`: exportar dados do titular (JSON portável) e anonimizar PII

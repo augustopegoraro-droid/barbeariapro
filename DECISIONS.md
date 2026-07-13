@@ -1882,7 +1882,7 @@ Suíte completa após a Fase 6: **582 pass / 2 ambientais (pré-existentes) / 0 
 **✅ Commitado 2026-07-09** (backend `efde6fc` + frontend `5eff95d`, direto na main, molde D-67/D-68/D-69/D-70/D-71).
 **Pendente:** deploy em prod (aplicar migration `0041`); nenhuma env nova.
 
-### D-74 — Direitos do titular + histórico de consentimento (Fase 8 do plano de Segurança) — 2026-07-09 (local, não commitado)
+### D-74 — Direitos do titular + histórico de consentimento (Fase 8 do plano de Segurança) — 2026-07-09 (✅ COMMITADO 2026-07-12, não deployado em prod)
 
 Fase 8 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §1.11`). **Escopo recortado** (mesmo espírito do D-73):
 banner de cookies / central de preferências por categoria / Consent Mode fazem sentido para um site público com
@@ -1930,7 +1930,9 @@ clientes reais já importados da Trinks (D-56).
   ponta a ponta no backend de dev.
 
 Suíte completa: **589 pass / 2 ambientais (pré-existentes) / 0 regressões**, ~81s.
-**Pronto localmente, aguardando decisão de commit.**
+**✅ Commitado 2026-07-12** (backend `afed2a4` + frontend `60de9c3`, direto na main, molde D-67…D-73). Mesmo
+commit versionou `promptseguranca.md` pela primeira vez (estava untracked desde o início da iniciativa) e criou
+`promptsitepublico.md`. **Pendente:** deploy em prod (aplicar migration `0042`); nenhuma env nova.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
