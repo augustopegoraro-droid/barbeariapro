@@ -1882,6 +1882,56 @@ Suíte completa após a Fase 6: **582 pass / 2 ambientais (pré-existentes) / 0 
 **✅ Commitado 2026-07-09** (backend `efde6fc` + frontend `5eff95d`, direto na main, molde D-67/D-68/D-69/D-70/D-71).
 **Pendente:** deploy em prod (aplicar migration `0041`); nenhuma env nova.
 
+### D-74 — Direitos do titular + histórico de consentimento (Fase 8 do plano de Segurança) — 2026-07-09 (local, não commitado)
+
+Fase 8 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §1.11`). **Escopo recortado** (mesmo espírito do D-73):
+banner de cookies / central de preferências por categoria / Consent Mode fazem sentido para um site público com
+cookies de analytics/marketing — que não existe (`promptsitepublico.md`, ainda não iniciado). Construído aqui só
+o que já tem valor real HOJE sobre dado que já existe: histórico de consentimento do WhatsApp (evolui o opt-in/
+opt-out do D-51) e os dois direitos do titular mais concretos (exportar e ser esquecido), aplicáveis aos ~2.900
+clientes reais já importados da Trinks (D-56).
+
+**Backend:**
+- **`consent_records`** (migration **0042**, head `0042`): histórico **append-only** (molde `audit_logs`/D-70:
+  RLS+FORCE, só `SELECT`/`INSERT` para `barber_app`) — evolui `client_consents` (D-51) **sem substituí-la**:
+  `client_consents` continua sendo o estado atual, lido por `reminders.py`/`reactivation.py` antes de disparar
+  mensagem proativa; `consent_records` é o log completo (canal, status, origem, IP, quando) de cada mudança, para
+  prova de consentimento numa auditoria de verdade. `app/services/consent.py::record_consent` — chamado a partir
+  de `opt_out.py::register_opt_out` (opt-out por palavra-chave) e `lead_funnel.py` (opt-in implícito no primeiro
+  contato via bot) **sem alterar o comportamento existente** de nenhum dos dois (puramente aditivo).
+- **`clients.anonymized_at`** (aditivo) + `app/services/lgpd.py`:
+  - `export_client_data`: dados do titular (cadastro, fidelidade, agendamentos, assinaturas, consentimentos) em
+    JSON portável.
+  - `anonymize_client`: remove nome/telefone/e-mail/nascimento/observações/fotos — **preserva `Payment`/
+    `AppointmentItem` intocados** (a receita já reconhecida não pode sumir do relatório financeiro, conforme
+    `ARQUITETURA_ALVO.md §1.11: "anonimiza PII, preserva agregados financeiros"`). Telefone vira um placeholder
+    sintético único (`+1000000000<id>`) — não pode ser `NULL`/vazio (`CHECK` de formato E-164 + `UNIQUE` por org
+    na própria tabela `clients`).
+- **Ambas ações são gestor-assistidas**, não self-service: não existe portal do cliente final ainda
+  (`promptsitepublico.md`) — o titular pede por telefone/WhatsApp e o gestor executa em
+  `/admin/security/lgpd/*` (`app/api/lgpd.py`, router novo — `security.py` já ia em 425 linhas). Gated por
+  `privacy.lgpd.manage`, que no catálogo (D-67) é **owner-only** (excluído até do `manager`) — decisão deliberada
+  de origem: dado de titular externo é sensível demais para delegar por padrão. Ambas as ações auditam a si
+  mesmas (`privacy.lgpd.export`/`privacy.lgpd.anonymize`, D-70).
+- **Fora de escopo desta sessão** (decisão explícita): banner de cookies, central de preferências por categoria,
+  Consent Mode, retenção configurável por tipo de dado (a de auditoria já existe, D-70) — ficam para quando
+  houver um site público de verdade ou tracking de terceiros a governar.
+- Testes: `tests/test_lgpd.py` (7 — permissão de export/anonimização, shape do export, 404 de cliente
+  inexistente, PII realmente removida após anonimizar, evento de auditoria emitido, `register_opt_out` passa a
+  gravar em `consent_records` além de `client_consents`).
+
+**Frontend (submódulo `barbearia-frontend`):**
+- Tela de Clientes ganhou 2 ações novas no menu de cada linha (`cliente-row.tsx`), visíveis só para quem tem
+  `privacy.lgpd.manage` (owner): "Exportar dados (LGPD)" (baixa o JSON) e "Anonimizar (LGPD)" (diálogo de
+  confirmação destrutivo, molde `DeleteClienteDialog`, invalida a lista de clientes ao concluir). Sem tela
+  dedicada nova — o ponto de entrada natural é a própria ficha do cliente, não um painel separado.
+- `tsc --noEmit` e `eslint` limpos. Validação visual no browser não concluída (mesma falha persistente da
+  ferramenta desde a Fase 4); fluxo completo (criar cliente → exportar → conferir JSON) validado via `curl`
+  ponta a ponta no backend de dev.
+
+Suíte completa: **589 pass / 2 ambientais (pré-existentes) / 0 regressões**, ~81s.
+**Pronto localmente, aguardando decisão de commit.**
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.consent import record_consent
 from models import Client, ClientConsent, ConsentStatus, ContactChannel
 
 _logger = logging.getLogger(__name__)
@@ -103,5 +104,13 @@ async def register_opt_out(
                 "updated_at": func.now(),
             },
         )
+    )
+    await record_consent(
+        session,
+        organization_id=org_id,
+        subject_id=client_id,
+        channel=ContactChannel.whatsapp.value,
+        status=ConsentStatus.opt_out.value,
+        source="wa_keyword",
     )
     return client_id

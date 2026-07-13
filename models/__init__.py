@@ -93,6 +93,7 @@ from .membership import (
 )
 from .audit import AuditLog
 from .client_visibility import ClientVisibilitySettings
+from .consent import ConsentRecord
 
 __all__ = [
     "Base",
@@ -202,4 +203,6 @@ __all__ = [
     "AuditLog",
     # visibilidade do site público (Fase 6)
     "ClientVisibilitySettings",
+    # LGPD (Fase 8)
+    "ConsentRecord",
 ]

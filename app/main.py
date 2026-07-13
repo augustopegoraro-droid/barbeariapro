@@ -11,7 +11,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import agenda, auth, barbeiro, billing, platform_billing, bot, chatwoot, clientes, conversations, crm, dashboard, debts, empresa, equipe, financeiro, gestor, health, imports, integracoes, kernel_ia, loyalty, memberships, platform, reminders, reschedule, security, servicos, wa_webhook
+from app.api import agenda, auth, barbeiro, billing, platform_billing, bot, chatwoot, clientes, conversations, crm, dashboard, debts, empresa, equipe, financeiro, gestor, health, imports, integracoes, kernel_ia, lgpd, loyalty, memberships, platform, reminders, reschedule, security, servicos, wa_webhook
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.security_headers import SecurityHeadersMiddleware
@@ -81,6 +81,7 @@ app.include_router(billing.router)
 app.include_router(billing.internal_router)
 app.include_router(platform_billing.router)
 app.include_router(security.router)
+app.include_router(lgpd.router)
 app.include_router(security.internal_router)
 
 

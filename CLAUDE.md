@@ -11,6 +11,8 @@
 > - `CURRENT_SPRINT.md` — sprint corrente.
 > - `barbearia-frontend/AGENTS.md` — convenções do frontend (ler antes de mexer no Next.js).
 > - `CHATWOOT_CLOUD_API_ARQUITETURA.md` + `CHATWOOT_FASE1_FASE4_SPEC.md` — direção da camada de comunicação (D-49): Chatwoot + WhatsApp Cloud API.
+> - `promptseguranca.md` — prompt master da iniciativa de Segurança/Governança (Fases 0-6 prontas, ver §6/D-67…D-73).
+> - `promptsitepublico.md` — prompt master do site público de agendamento do cliente final (ainda não iniciado; requisito central: login persistente, sem senha, no mesmo aparelho).
 > - `/Users/apleandro/.claude/plans/partitioned-greeting-stearns.md` — auditoria completa + plano de evolução (origem deste arquivo).
 
 ---
@@ -468,6 +470,16 @@ existe** no produto (decisão combinada: construir só a configuração, sem end
 para quando o site entrar no roadmap). `GET/PUT /admin/security/site-visibility` reaproveita
 `security.site_visibility.manage` (já no catálogo desde o D-67). Frontend `/admin/seguranca/visibilidade` +
 item na sidebar. Suíte 582 pass / 2 ambientais / 0 regressões. Detalhes em DECISIONS.md D-73.
+
+**Segurança / Governança — Direitos do titular + histórico de consentimento (D-74, Fase 8 — local, não commitado
+2026-07-09):** escopo recortado (Fase 7/analytics e banner de cookies/Consent Mode ficam para quando existir site
+público de verdade — ver `promptsitepublico.md`, ainda não iniciado). `consent_records` (migration `0042`,
+append-only, molde `audit_logs`/D-70) evolui o opt-in/opt-out do WhatsApp (D-51) sem substituir `client_consents`.
+`clients.anonymized_at` + `app/services/lgpd.py`: exportar dados do titular (JSON portável) e anonimizar PII
+preservando agregados financeiros (`Payment`/`AppointmentItem` intocados). Ações gestor-assistidas (sem portal do
+cliente final ainda) em `app/api/lgpd.py`, gated por `privacy.lgpd.manage` (owner-only no catálogo desde o D-67).
+Frontend: 2 ações novas no menu de cada cliente (Clientes), sem tela dedicada. Suíte 589 pass / 2 ambientais / 0
+regressões. Detalhes em DECISIONS.md D-74.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
