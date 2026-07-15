@@ -114,9 +114,16 @@ class AppointmentItem(Base):
         Index("idx_appt_items_appt", "appointment_id"),
         Index("idx_appt_items_barber", "barber_id"),
         Index("idx_appt_items_service", "service_id"),
+        Index("idx_appt_items_org", "organization_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    # Denormalizado de `appointments.organization_id` (V17): antes, isolamento
+    # dependia só de disciplina de JOIN — sem coluna própria, RLS direta não é
+    # possível. Sempre igual ao da `Appointment` pai (setado no insert).
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
     appointment_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("appointments.id", ondelete="CASCADE"),

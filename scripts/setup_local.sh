@@ -40,6 +40,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO barber_ap
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO barber_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO barber_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO barber_app;
+
+-- V16: tabelas de PLATAFORMA (superadmin) não têm RLS de propósito — o
+-- isolamento delas é "sem GRANT direto, só via função SECURITY DEFINER"
+-- (molde platform_admin.py/D-55). O GRANT ON ALL TABLES acima concede a
+-- todas por padrão; revoga explicitamente aqui pra este script local
+-- reproduzir a mesma postura da prod, não só confiar em "esquecer de
+-- conceder" em migrations futuras.
+REVOKE ALL ON platform_admins, platform_alert_rules, platform_audit_log,
+  platform_onboarding_overrides, platform_org_notes FROM barber_app;
 SQL
 
 echo "== 5/5 OK — banco local pronto (head 0023, role barber_app com RLS) =="

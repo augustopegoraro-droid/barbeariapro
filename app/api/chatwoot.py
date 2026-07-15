@@ -26,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.phone import normalize_phone
+from app.core.phone import mask_phone, normalize_phone
 from app.core.security import secrets_match
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.services import conversation as conv_svc
@@ -158,7 +158,7 @@ async def chatwoot_webhook(
 
     _logger.info(
         "chatwoot_webhook sender=%s incoming=%s phone=%s conv=%s msg=%s",
-        parsed.sender_type.value, parsed.is_incoming, phone,
+        parsed.sender_type.value, parsed.is_incoming, mask_phone(phone),
         parsed.conversation_id, parsed.chatwoot_message_id,
     )
 
@@ -207,7 +207,7 @@ async def chatwoot_webhook(
 
         await db.commit()
     except Exception as exc:  # ack 200 mesmo em erro, evita retry-storm do Chatwoot
-        _logger.error("chatwoot_webhook record falhou phone=%s: %s", phone, exc)
+        _logger.error("chatwoot_webhook record falhou phone=%s: %s", mask_phone(phone), exc)
         await db.rollback()
         return {"ok": False, "error": "internal"}
 

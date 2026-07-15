@@ -8,6 +8,7 @@ import logging
 import httpx
 
 from app.core.config import settings
+from app.core.phone import mask_phone
 
 _logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ async def send_text(phone: str, message: str) -> bool:
     """Envia texto para um telefone E.164. Retorna False em qualquer falha."""
     if not settings.evolution_api_url or not settings.evolution_instance_name:
         _logger.warning(
-            "Evolution API não configurada — mensagem não enviada para %s", phone
+            "Evolution API não configurada — mensagem não enviada para %s", mask_phone(phone)
         )
         return False
 
@@ -34,5 +35,5 @@ async def send_text(phone: str, message: str) -> bool:
             resp.raise_for_status()
             return True
     except Exception as exc:
-        _logger.error("Falha ao enviar WhatsApp para %s: %s", phone, exc)
+        _logger.error("Falha ao enviar WhatsApp para %s: %s", mask_phone(phone), exc)
         return False

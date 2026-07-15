@@ -785,8 +785,9 @@ async def test_content_dedup_normalization_catches_whitespace_variation():
 
 @pytest.mark.asyncio
 async def test_content_dedup_logs_warning_on_redelivery(caplog):
-    """Redelivery suspeito deve gerar log WARNING com phone e elapsed_s."""
+    """Redelivery suspeito deve gerar log WARNING com phone (mascarado, V14) e elapsed_s."""
     import logging
+    from app.core.phone import mask_phone
     _reset_content_state()
     from app.api.bot import _DebounceIn, _FlushIn, debounce_entry, debounce_flush
 
@@ -802,8 +803,11 @@ async def test_content_dedup_logs_warning_on_redelivery(caplog):
     assert r2.proceed is False
     assert any("redelivery_suspected" in rec.message for rec in caplog.records), \
         "Deve logar WARNING com 'redelivery_suspected'"
-    assert any(phone in rec.message for rec in caplog.records), \
-        "Log deve conter o phone"
+    # V14 (LGPD): telefone vai mascarado no log, não cru.
+    assert any(mask_phone(phone) in rec.message for rec in caplog.records), \
+        "Log deve conter o phone mascarado"
+    assert not any(phone in rec.message for rec in caplog.records), \
+        "Log NÃO deve conter o phone em texto puro"
 
 
 @pytest.mark.asyncio

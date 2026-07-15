@@ -302,7 +302,7 @@ async def criar_agendamento(
         raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, "Nenhuma unidade configurada.")
 
     # display_number sequencial com advisory lock
-    await db.execute(text(f"SELECT pg_advisory_xact_lock({unit.id})"))
+    await db.execute(text("SELECT pg_advisory_xact_lock(:unit_id)"), {"unit_id": unit.id})
     next_num = (
         await db.execute(
             select(func.coalesce(func.max(Appointment.display_number), 0) + 1)
@@ -335,6 +335,7 @@ async def criar_agendamento(
     total = float(appt.total_amount)
 
     db.add(AppointmentItem(
+        organization_id=appt.organization_id,
         appointment_id=appt_id,
         service_id=svc.id,
         barber_id=barber.id,

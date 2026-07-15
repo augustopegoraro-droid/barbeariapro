@@ -20,6 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.platform import PlatformAdminId, PlatformDB
 from app.services import platform as platform_svc
@@ -458,7 +459,13 @@ async def create_coupon(body: CouponCreateIn, _admin: PlatformAdminId, db: Platf
     db.add(coupon)
     try:
         await db.flush()
-    except Exception:
+    except IntegrityError:
+        # V28: só a violação de UNIQUE vira "já existe" — qualquer outro erro
+        # (ex.: permissão, conexão) propaga de verdade em vez de ficar
+        # mascarado como um 409 enganoso (achado real desta sessão: um GRANT
+        # revogado por engano em `coupons` apareceu como "já existe" até o
+        # log do Postgres revelar que era "permission denied").
+        await db.rollback()
         raise HTTPException(status_code=409, detail="Código de cupom já existe.")
     return _coupon_out(coupon)
 

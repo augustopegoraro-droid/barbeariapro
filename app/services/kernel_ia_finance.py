@@ -207,6 +207,21 @@ def extract_numbers(text: str) -> list[str]:
     return _NUM_RE.findall(text)
 
 
+_CLIENT_LINE_RE = re.compile(r"^• .+? — ", re.MULTILINE)
+
+
+def redact_for_llm(topic: str, block: str) -> str:
+    """V15 (LGPD): tira nome de cliente do texto antes de virar contexto do
+    OpenAI — o bloco original (com nome) continua indo pro gestor no chat
+    normalmente, só o que vira prompt do LLM é anonimizado. Só o tópico
+    'inativos' lista nome de cliente por linha hoje (`_format_inativos`);
+    números (dias sem visita etc.) não são tocados — `guard_insight` só
+    valida número, nunca nome."""
+    if topic != "inativos":
+        return block
+    return _CLIENT_LINE_RE.sub("• Cliente — ", block)
+
+
 def guard_insight(insight: str, grounding_text: str) -> Optional[str]:
     """Defesa em profundidade contra alucinação de números no insight do LLM.
 

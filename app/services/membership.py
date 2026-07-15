@@ -765,7 +765,7 @@ async def consume_membership(
 
     # 5) display_number sequencial com advisory lock (mesmo padrão da agenda).
     unit = await _default_unit(db, organization_id)
-    await db.execute(text(f"SELECT pg_advisory_xact_lock({unit.id})"))
+    await db.execute(text("SELECT pg_advisory_xact_lock(:unit_id)"), {"unit_id": unit.id})
     next_num = (
         await db.execute(
             select(func.coalesce(func.max(Appointment.display_number), 0) + 1).where(
@@ -800,6 +800,7 @@ async def consume_membership(
         sid = c["service_id"]
         db.add(
             AppointmentItem(
+                organization_id=appt.organization_id,
                 appointment_id=appt.id,
                 service_id=sid,
                 barber_id=barber_by_service[sid],

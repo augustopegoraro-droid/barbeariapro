@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.dates import local_tz
-from app.core.phone import normalize_phone
+from app.core.phone import mask_phone, normalize_phone
 from app.deps import get_bot_db, get_bot_org_id, get_bot_unit_id
 from app.services.scheduling import barber_has_conflict
 from app.services.lead_funnel import advance_lead_on_inbound, upsert_client_and_lead
@@ -169,7 +169,7 @@ async def debounce_entry(body: _DebounceIn, _auth: _BotAuth = None):
                 elapsed = now - _seen_content[content_key]
                 _logger.warning(
                     "redelivery_suspected phone=%s elapsed_s=%.1f message_id=%s",
-                    phone, elapsed, body.message_id or "none",
+                    mask_phone(phone), elapsed, body.message_id or "none",
                 )
                 return _DebounceOut(proceed=False, is_new_session=False)
             _seen_content[content_key] = now
@@ -282,7 +282,7 @@ async def log_message(body: _MessageLogIn, db: BotDB, org_id: BotOrgId, _auth: _
 
     _logger.info(
         "conversation_log direction=%s phone=%s wamid=%s body_len=%d",
-        direction.value, phone, body.whatsapp_message_id or "none",
+        direction.value, mask_phone(phone), body.whatsapp_message_id or "none",
         len(body.body or ""),
     )
 
@@ -318,7 +318,7 @@ async def log_message(body: _MessageLogIn, db: BotDB, org_id: BotOrgId, _auth: _
         await advance_lead_on_inbound(db, org_id=org_id, client_id=client.id, now=now)
 
     await db.commit()
-    _logger.info("conversation_log saved direction=%s phone=%s", direction.value, phone)
+    _logger.info("conversation_log saved direction=%s phone=%s", direction.value, mask_phone(phone))
     return {"ok": True, "duplicate": False}
 
 
@@ -902,7 +902,7 @@ async def create_appointment(body: AppointmentCreateIn, db: BotDB, org_id: BotOr
 
     # display_number sequencial por unidade — advisory lock garante atomicidade
     # pg_advisory_xact_lock é liberado automaticamente ao fim da transação
-    await db.execute(text(f"SELECT pg_advisory_xact_lock({unit_id})"))
+    await db.execute(text("SELECT pg_advisory_xact_lock(:unit_id)"), {"unit_id": unit_id})
     next_num = (
         await db.execute(
             select(func.coalesce(func.max(Appointment.display_number), 0) + 1)
@@ -926,6 +926,7 @@ async def create_appointment(body: AppointmentCreateIn, db: BotDB, org_id: BotOr
 
     db.add(
         AppointmentItem(
+            organization_id=appt.organization_id,
             appointment_id=appt.id,
             service_id=svc.id,
             barber_id=barber.id,

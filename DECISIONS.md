@@ -1934,6 +1934,102 @@ Suíte completa: **589 pass / 2 ambientais (pré-existentes) / 0 regressões**, 
 commit versionou `promptseguranca.md` pela primeira vez (estava untracked desde o início da iniciativa) e criou
 `promptsitepublico.md`. **Pendente:** deploy em prod (aplicar migration `0042`); nenhuma env nova.
 
+### D-75 — Fase 9: revisão final da iniciativa de Segurança/Governança — 2026-07-13 (checkpoint, sem código)
+
+Checkpoint obrigatório de encerramento do `promptseguranca.md` (Fases 0-8 endereçadas: D-67…D-74). Produzido
+`FASE9_REVISAO_FINAL.md` (raiz do repo) com: checklist V1-V29 verificado **no código atual** (não no plano),
+matriz completa papel×permissão, runbook de criação de papel/permissão, ADRs resumidos e plano de rollout.
+
+**Resultado da verificação, achado por achado (agente dedicado, cruzando `AUDITORIA_SEGURANCA.md` × código real):**
+**12 resolvidos** (V2, V4, V5, V6, V7, V9, V10, V11, V12, V13, V19, V23), **4 parciais** (V3, V8, V16, V21), **13
+em aberto** (V1, V14, V15, V17, V18, V20, V22, V24*, V25, V26, V27, V28, V29). *V24 é aceite consciente já
+registrado (D-2/histórico), não pendência real.
+
+**O item que importa mais: V1 (Crítica) segue aberto** — `WA_WEBHOOK_SECRET` continua opcional em
+`app/api/wa_webhook.py:59`. Não é negligência: o webhook já recebe tráfego real do WhatsApp em produção, e
+tornar o secret obrigatório no código sem confirmar que a Evolution API da VM já envia o header
+`X-Webhook-Secret` derrubaria o bot em prod. Fix é trivial (poucas linhas) — **aguardando confirmação do dono**
+de que o secret já está configurado nos dois lados antes de flipar para fail-closed.
+
+Demais itens abertos classificados em `FASE9_REVISAO_FINAL.md` §2/§3: alguns exigem decisão do dono antes de
+mexer (V29 reescreve histórico git — destrutivo; V22 CORS mexe em middleware que toda requisição passa), outros
+são seguros para corrigir numa sessão futura sem dependência externa (V14/V15/V16/V17/V18/V20/V25/V26/V28).
+
+**Sem código nesta entrada** — é só o checkpoint de revisão. Próxima ação depende da decisão do dono sobre os
+itens da seção 2 do `FASE9_REVISAO_FINAL.md`.
+
+### D-76 — Fase 9: fechamento em lote dos achados de baixo risco (V1, V14-V18a, V25, V26, V28) — 2026-07-14
+
+Continuação do D-75: o dono confirmou o secret do WhatsApp e autorizou "os dois, nessa ordem" — primeiro fechar
+os achados de baixo risco sem dependência externa, depois um deploy único combinado (ver plano em
+`FASE9_REVISAO_FINAL.md` §7).
+
+**V1 (Crítica) — resolvido em produção, sem deploy de código:** `WA_WEBHOOK_SECRET` gerado e configurado nos
+dois lados — `.env` da VM e header `X-Webhook-Secret` na config do webhook da Evolution API
+(`/webhook/set/{instance}`). Testado ao vivo: requisição sem o header ou com valor errado → `401`; com o valor
+correto → `200`. O código (`app/api/wa_webhook.py`/`config.py`) já era fail-closed quando o secret está setado —
+o achado sempre foi de configuração de infra, não de lógica.
+
+**Fixes de código (commitados, aguardando deploy — migration `0043`):**
+- **V14** (PII em log) — `app/core/phone.py::mask_phone` (mantém DDI+DDD+últimos 3 dígitos) aplicado em todo
+  `_logger.*(...phone...)` de `wa_webhook.py`, `bot.py`, `chatwoot.py`, `whatsapp.py`.
+- **V15** (dados de cliente ao OpenAI) — `kernel_ia_finance.py::redact_for_llm` tira o nome do cliente do bloco
+  de texto **antes** de virar prompt do LLM (só o tópico `inativos` lista nome por linha hoje); o relatório que
+  o gestor vê no chat continua com o nome real — só o que vai pro OpenAI é anonimizado. `guard_insight` segue
+  validando apenas números.
+- **V16** (tabelas de plataforma sem `REVOKE`) — confirmado design intencional (acesso só via `SECURITY
+  DEFINER`, molde D-55); `scripts/setup_local.sh` agora revoga explicitamente `platform_admins`,
+  `platform_alert_rules`, `platform_audit_log`, `platform_onboarding_overrides`, `platform_org_notes` do
+  `barber_app` depois do `GRANT ON ALL TABLES` genérico, fechando a brecha de setup local.
+- **V17** (`appointment_items` sem RLS própria) — migration `0043` denormaliza `organization_id` (sempre igual
+  ao da `Appointment` pai; backfill via `UPDATE ... FROM appointments`), cria índice + RLS + `FORCE`; os 4 pontos
+  de criação (`agenda.py`, `bot.py`, `membership.py`, `trinks_appointments.py`) passam a setar o campo.
+- **V18a** (`webhook_events` sem RLS) — mesma migration, política "global OU tenant"
+  (`organization_id IS NULL OR organization_id = NULLIF(current_setting(...), '')::bigint`) porque a linha pode
+  chegar antes da org ser resolvida (nullable de propósito, D-32).
+- **V25** (confusão de tipo no `state` OAuth do Google Calendar) — `integracoes.py::_build_state`/`_verify_state`
+  ganham `typ="oauth_state"` dedicado no payload do JWT, rejeitando token de outro tipo reaproveitado no fluxo.
+- **V26** (advisory lock com f-string) — `agenda.py:305`, `bot.py:905`, `membership.py:768` trocados para bind
+  parameter (`text("SELECT pg_advisory_xact_lock(:unit_id)"), {"unit_id": ...}`); não era explorável hoje (sem
+  input externo no valor), mas fecha o padrão perigoso antes que alguém copie o molde para um caso injetável.
+- **V28** (`except Exception` mascarando erro como sucesso) — só em `platform_billing.py::create_coupon`: agora
+  captura especificamente `IntegrityError` → `409` ("já existe"); qualquer outra exceção propaga. `wa_webhook.py`
+  e `chatwoot.py` foram **revistos e mantidos como estão** — o ack `200` ali é design deliberado anti-retry-storm
+  do provedor, com log de erro real por trás, não mascaramento silencioso.
+
+**V18b (`coupons`) tentado e revertido — fica registrado como lição:** a primeira versão da migration `0043`
+também revogava `INSERT`/`UPDATE`/`DELETE` em `coupons` do `barber_app`. Quebrou o resgate real de cupom em
+staging (`permission denied for table coupons`) porque **todas** as rotas — tenant e plataforma — compartilham a
+mesma conexão `barber_app`; não existe um papel elevado separado para rotas de plataforma como existe para
+`platform_admins`/`platform_audit_log` (que só são acessíveis via função `SECURITY DEFINER`, D-55). `coupons` é
+catálogo global de verdade (sem `organization_id`, RLS não se aplica). Corrigir de verdade exige mover a escrita
+para uma função `SECURITY DEFINER` no molde do D-55 — fora do escopo desta sessão; a migration final **não
+mexe em `coupons`**. **V18b segue aberto.**
+
+**Segundo achado real durante o desenvolvimento — GUC residual em conexão pooled:** a política "global OU
+tenant" do V18a inicialmente usava `current_setting('app.current_org_id', true)::bigint` direto. Sob a suíte
+completa (conexões reaproveitadas do pool), estourava `invalid input syntax for type bigint: ""` — numa conexão
+que já teve `set_current_org` chamado antes (LOCAL-scoped) e cuja transação encerrou, o valor reverte para
+string vazia `''`, não `NULL`. Só afetava `webhook_events` porque é a única tabela com RLS acessada por sessão
+sem tenant (`_mark_webhook` usa uma `AsyncSessionLocal()` fresca, sem `set_current_org`); as demais tabelas
+sempre passam por `get_tenant_db`/`get_bot_db`, que sempre setam o GUC primeiro. Corrigido com
+`NULLIF(current_setting(...), '')::bigint`.
+
+**V20 (debounce cross-tenant) — adiado conscientemente, não corrigido:** chavear o debounce por org exigiria o
+n8n (workflow na VM) passar o header `X-Instance` aos nós HTTP de Debounce/Flush — hoje não passa (`grep` em
+`workflows.json` = 0 ocorrências). Mudar só o backend sem isso não resolve nada; fica para quando o bot for
+multi-tenant de verdade (mesmo gatilho do V21, já parcial).
+
+**Testes:** suíte completa **589 pass / 2 falhas ambientais conhecidas / 0 regressões**, confirmado limpo em 2
+execuções consecutivas. Durante o desenvolvimento, pollution numa staging DB muito reutilizada (15-20+ runs
+completos na mesma sessão) causou falhas intermitentes em `test_platform_alert_rules.py`,
+`test_platform_alerts_audit.py`, `test_membership_corrections.py`, `test_membership_integration.py`,
+`test_lgpd.py` — todas passam isoladas, confirmadas como ruído de ambiente, não regressão real.
+
+**Documentação:** `FASE9_REVISAO_FINAL.md` atualizado (checklist V1-V29, sumário executivo, seções 2/3, ADRs,
+plano de rollout). **Deploy ainda pendente** — ver plano combinado (D-73 + D-74 + D-76) em
+`FASE9_REVISAO_FINAL.md` §7.
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

@@ -304,6 +304,7 @@ async def import_appointments(
         await session.flush()
         session.add(
             AppointmentItem(
+                organization_id=appt.organization_id,
                 appointment_id=appt.id,
                 service_id=service_id,
                 barber_id=barber_id,

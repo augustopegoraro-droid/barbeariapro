@@ -245,12 +245,16 @@ async def _finance_message(client: Any, ctx: KernelCtx) -> str:
     insight = None
     try:
         bullets = "\n".join(f"- {b}" for b in PLAYBOOK.get(ctx.finance_topic, []))
-        grounding = f"{ctx.finance_data_block}\n{bullets}"
+        # V15 (LGPD): o que vira prompt do OpenAI é a versão sem nome de
+        # cliente — o bloco com nome só é usado pra responder o gestor no
+        # chat (guard_insight só valida número, redigir nome não quebra ele).
+        llm_block = kernel_ia_finance.redact_for_llm(ctx.finance_topic, ctx.finance_data_block)
+        grounding = f"{llm_block}\n{bullets}"
         resp = await client.chat.completions.create(
             model=settings.kernel_ia_model,
             messages=[
                 {"role": "system", "content": _INSIGHT_SYSTEM},
-                {"role": "user", "content": f"{ctx.finance_data_block}\n\nPlaybook:\n{bullets}"},
+                {"role": "user", "content": f"{llm_block}\n\nPlaybook:\n{bullets}"},
             ],
             temperature=0.3,
             max_tokens=80,

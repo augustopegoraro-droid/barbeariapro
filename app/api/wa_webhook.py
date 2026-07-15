@@ -20,6 +20,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.phone import mask_phone
 from app.core.security import secrets_match
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.services import conversation as conv_svc
@@ -197,7 +198,7 @@ async def evolution_webhook(
     await set_current_org(db, org_id)
 
     sender_type = MessageSenderType.bot if from_me else MessageSenderType.client
-    _logger.info("wa_webhook event=%s phone=%s sender=%s", event, phone, sender_type.value)
+    _logger.info("wa_webhook event=%s phone=%s sender=%s", event, mask_phone(phone), sender_type.value)
 
     wa_message_id: Optional[str] = key.get("id")
     crm_msg_type = _MSG_TYPE_MAP.get(msg_type_raw, MessageType.text)
@@ -223,14 +224,14 @@ async def evolution_webhook(
             opt_out_registered = registered_id is not None
         await db.commit()
     except Exception as exc:
-        _logger.error("wa_webhook record_message falhou phone=%s: %s", phone, exc)
+        _logger.error("wa_webhook record_message falhou phone=%s: %s", mask_phone(phone), exc)
         await db.rollback()
         opt_out_registered = False
 
     # Confirmação fora da transação (I/O de rede; send_text nunca lança e
     # respeita a trava de staging). Só confirma se de fato registrou o consent.
     if opt_out_registered:
-        _logger.info("wa_webhook opt-out registrado phone=%s", phone)
+        _logger.info("wa_webhook opt-out registrado phone=%s", mask_phone(phone))
         await send_text(phone=phone, message=opt_out_svc.CONFIRMATION)
 
     return {"ok": True}

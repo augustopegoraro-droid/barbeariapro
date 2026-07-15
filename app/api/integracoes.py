@@ -64,10 +64,14 @@ _STATE_TTL_SECONDS = 300  # 5 minutos
 
 # ─── helpers de state ─────────────────────────────────────────────────────────
 
+_STATE_TYP = "oauth_state"
+
+
 def _build_state(org_id: int) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(org_id),
+        "typ": _STATE_TYP,
         "iat": now,
         "exp": now + timedelta(seconds=_STATE_TTL_SECONDS),
     }
@@ -75,8 +79,12 @@ def _build_state(org_id: int) -> str:
 
 
 def _verify_state(state: str) -> int:
+    """V25: exige `typ=oauth_state` — sem isso, um JWT de sessão de tenant
+    (mesma chave HS256, `sub`=user_id) seria aceito como state válido."""
     try:
         payload = jwt.decode(state, settings.secret_key, algorithms=[_STATE_ALG])
+        if payload.get("typ") != _STATE_TYP:
+            raise ValueError("typ inválido")
         return int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         raise HTTPException(

@@ -11,7 +11,8 @@
 > - `CURRENT_SPRINT.md` — sprint corrente.
 > - `barbearia-frontend/AGENTS.md` — convenções do frontend (ler antes de mexer no Next.js).
 > - `CHATWOOT_CLOUD_API_ARQUITETURA.md` + `CHATWOOT_FASE1_FASE4_SPEC.md` — direção da camada de comunicação (D-49): Chatwoot + WhatsApp Cloud API.
-> - `promptseguranca.md` — prompt master da iniciativa de Segurança/Governança (Fases 0-6 prontas, ver §6/D-67…D-73).
+> - `promptseguranca.md` — prompt master da iniciativa de Segurança/Governança (Fases 0-8 prontas, ver §6/D-67…D-74).
+> - `FASE9_REVISAO_FINAL.md` — checkpoint final: checklist V1-V29, matriz papel×permissão, runbook, ADRs, rollout.
 > - `promptsitepublico.md` — prompt master do site público de agendamento do cliente final (ainda não iniciado; requisito central: login persistente, sem senha, no mesmo aparelho).
 > - `/Users/apleandro/.claude/plans/partitioned-greeting-stearns.md` — auditoria completa + plano de evolução (origem deste arquivo).
 
@@ -481,6 +482,30 @@ cliente final ainda) em `app/api/lgpd.py`, gated por `privacy.lgpd.manage` (owne
 Frontend: 2 ações novas no menu de cada cliente (Clientes), sem tela dedicada. Suíte 589 pass / 2 ambientais / 0
 regressões. Detalhes em DECISIONS.md D-74.
 
+**Segurança / Governança — Fase 9: revisão final + fechamento em lote (D-75/D-76, 2026-07-13/14 — V1 ✅
+DEPLOYADO em prod; demais itens ✅ COMMITADOS, aguardando deploy combinado):** checkpoint obrigatório do
+`promptseguranca.md` (`FASE9_REVISAO_FINAL.md`, checklist V1-V29 verificado no código real, não no plano — D-75)
+seguido do fechamento dos achados de baixo risco sem dependência externa (D-76). **V1 (Crítica) resolvido em
+produção sem deploy de código:** `WA_WEBHOOK_SECRET` configurado nos dois lados (VM + Evolution API), testado
+ao vivo (sem/errado→401, correto→200) — o código já era fail-closed, o achado sempre foi de config de infra.
+**Fixes de código (migration `0043`, commitados):** V14 (`mask_phone` em todos os logs com telefone), V15
+(`redact_for_llm` tira nome de cliente do prompt ao OpenAI, sem tocar no relatório real do gestor), V16
+(`platform_*` explicitamente revogado do `barber_app` em `scripts/setup_local.sh`), V17 (`appointment_items`
+ganha `organization_id` denormalizado + RLS + `FORCE`), V18a (`webhook_events` RLS "global OU tenant"), V25
+(`typ=oauth_state` dedicado no state OAuth do Calendar), V26 (bind parameter nos 3 advisory locks, era
+f-string), V28 (`create_coupon` só trata `IntegrityError` como 409, não qualquer exceção). **V18b (`coupons`)
+tentado e revertido:** revogar escrita quebrou o resgate real de cupom em staging — `barber_app` é o ÚNICO papel
+de DB para toda rota (tenant e plataforma), sem um papel elevado separado como `platform_admins`/
+`platform_audit_log` (que usam `SECURITY DEFINER`, D-55); corrigir de verdade exige o mesmo molde, fora de
+escopo — **V18b segue aberto**. **Achado colateral do V18a:** RLS acessada por sessão sem tenant (`_mark_webhook`)
+precisou de `NULLIF(current_setting(...), '')::bigint` — GUC local reverte para string vazia (não NULL) numa
+conexão pooled reaproveitada, `''::bigint` estoura erro; só aparecia sob suíte completa (conexões reaproveitadas),
+nunca isolado. **V20 adiado conscientemente:** depende do n8n (workflow na VM) passar `X-Instance` ao debounce
+— hoje não passa; corrigir só o backend não muda nada. Suíte 589 pass / 2 ambientais / 0 regressões, confirmado
+limpo em 2 execuções consecutivas. **Pendente:** deploy único combinando D-73 (migration `0041`) + D-74
+(migration `0042`) + D-76 (migration `0043`) — plano em `FASE9_REVISAO_FINAL.md` §7. Detalhes completos em
+DECISIONS.md D-75/D-76.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
@@ -502,10 +527,12 @@ portas Postgres/n8n/Evolution abertas ao mundo + sem HTTPS · SSE single-process
 DNS ativo desde D-64 2026-07-05: resolução por subdomínio (`taylor.taylorethedy.com`, confirmado em prod)
 e instância WhatsApp (bot); falta só n8n `X-Instance`) · VM única sem HA.
 
-**🟠 Alto:** webhook secret opcional (tornar obrigatório após provisionar nos dois lados) · `except
-Exception` mudos · SQL via f-string em advisory lock · pool DB no default / sem PgBouncer / sem
-fila de workers · React Query não usado · páginas-monolito (`crm/page.tsx` 1389 linhas) ·
-cron n8n em série p/ todas as orgs · ~~repo frontend com remote morto~~ (✅ D-08, 2026-06-29: remote restaurado + submódulo registrado)
+**🟠 Alto:** ~~webhook secret opcional~~ (✅ D-76, 2026-07-14, DEPLOYADO em prod: `WA_WEBHOOK_SECRET` configurado
+nos dois lados, testado ao vivo) · `except Exception` mudos (✅ D-76 parcial: `create_coupon` corrigido; demais
+já eram design deliberado, não mascaramento) · ~~SQL via f-string em advisory lock~~ (✅ D-76, commitado: bind
+parameter nos 3 pontos) · pool DB no default / sem PgBouncer / sem fila de workers · React Query não usado ·
+páginas-monolito (`crm/page.tsx` 1389 linhas) · cron n8n em série p/ todas as orgs ·
+~~repo frontend com remote morto~~ (✅ D-08, 2026-06-29: remote restaurado + submódulo registrado)
 · ~~JWT sem revogação/refresh~~ (✅ D-68, 2026-07-09, DEPLOYADO em prod: refresh rotativo + `sessions` + Redis
 para rate-limit/lockout/tickets — Redis passou a existir no stack, mas só para esse uso efêmero, não como cache
 geral).

@@ -26,3 +26,16 @@ def normalize_phone(raw: str) -> str:
     if not _E164.match(candidate):
         raise ValueError(f"Telefone fora do formato E.164: {candidate!r}")
     return candidate
+
+
+def mask_phone(phone: str | None) -> str:
+    """Mascara para log (LGPD, V14): mantém DDI+DDD e os 2 últimos dígitos.
+
+    `+5563992287396` → `+5563***396`. Nunca levanta — entra o que vier,
+    inclusive já malformado; é só para log, não para persistência/validação.
+    """
+    if not phone:
+        return "-"
+    if len(phone) <= 6:
+        return "*" * len(phone)
+    return f"{phone[:6]}***{phone[-3:]}"
