@@ -463,8 +463,8 @@ o próprio event loop bloqueado poderia liberar) — corrigido com fixture `auto
 `await` explícito nos 3 pontos de risco identificados; não afeta produção (um único event loop de vida longa).
 Suíte 576 pass / 2 ambientais / 0 regressões reais. Detalhes em DECISIONS.md D-71.
 
-**Segurança / Governança — Visibilidade do site público (D-73, Fase 6 — ✅ COMMITADO 2026-07-09, não deployado
-em prod):**
+**Segurança / Governança — Visibilidade do site público (D-73, Fase 6 — ✅ DEPLOYADO em prod 2026-07-15, junto
+com D-74/D-76):**
 `client_visibility_settings` (migration `0041`, 1:1 por org, RLS+FORCE) guarda a CONFIGURAÇÃO de serviços/
 profissionais/horários/avaliações/promoções/banner/dados públicos exibidos — o site público em si **ainda não
 existe** no produto (decisão combinada: construir só a configuração, sem endpoint público de leitura, que fica
@@ -472,8 +472,8 @@ para quando o site entrar no roadmap). `GET/PUT /admin/security/site-visibility`
 `security.site_visibility.manage` (já no catálogo desde o D-67). Frontend `/admin/seguranca/visibilidade` +
 item na sidebar. Suíte 582 pass / 2 ambientais / 0 regressões. Detalhes em DECISIONS.md D-73.
 
-**Segurança / Governança — Direitos do titular + histórico de consentimento (D-74, Fase 8 — ✅ COMMITADO
-2026-07-12, não deployado em prod):** escopo recortado (Fase 7/analytics e banner de cookies/Consent Mode ficam para quando existir site
+**Segurança / Governança — Direitos do titular + histórico de consentimento (D-74, Fase 8 — ✅ DEPLOYADO em prod
+2026-07-15, junto com D-73/D-76):** escopo recortado (Fase 7/analytics e banner de cookies/Consent Mode ficam para quando existir site
 público de verdade — ver `promptsitepublico.md`, ainda não iniciado). `consent_records` (migration `0042`,
 append-only, molde `audit_logs`/D-70) evolui o opt-in/opt-out do WhatsApp (D-51) sem substituir `client_consents`.
 `clients.anonymized_at` + `app/services/lgpd.py`: exportar dados do titular (JSON portável) e anonimizar PII
@@ -482,8 +482,8 @@ cliente final ainda) em `app/api/lgpd.py`, gated por `privacy.lgpd.manage` (owne
 Frontend: 2 ações novas no menu de cada cliente (Clientes), sem tela dedicada. Suíte 589 pass / 2 ambientais / 0
 regressões. Detalhes em DECISIONS.md D-74.
 
-**Segurança / Governança — Fase 9: revisão final + fechamento em lote (D-75/D-76, 2026-07-13/14 — V1 ✅
-DEPLOYADO em prod; demais itens ✅ COMMITADOS, aguardando deploy combinado):** checkpoint obrigatório do
+**Segurança / Governança — Fase 9: revisão final + fechamento em lote (D-75/D-76, 2026-07-13/14 — ✅ DEPLOYADO
+em prod 2026-07-15):** checkpoint obrigatório do
 `promptseguranca.md` (`FASE9_REVISAO_FINAL.md`, checklist V1-V29 verificado no código real, não no plano — D-75)
 seguido do fechamento dos achados de baixo risco sem dependência externa (D-76). **V1 (Crítica) resolvido em
 produção sem deploy de código:** `WA_WEBHOOK_SECRET` configurado nos dois lados (VM + Evolution API), testado
@@ -502,9 +502,13 @@ precisou de `NULLIF(current_setting(...), '')::bigint` — GUC local reverte par
 conexão pooled reaproveitada, `''::bigint` estoura erro; só aparecia sob suíte completa (conexões reaproveitadas),
 nunca isolado. **V20 adiado conscientemente:** depende do n8n (workflow na VM) passar `X-Instance` ao debounce
 — hoje não passa; corrigir só o backend não muda nada. Suíte 589 pass / 2 ambientais / 0 regressões, confirmado
-limpo em 2 execuções consecutivas. **Pendente:** deploy único combinando D-73 (migration `0041`) + D-74
-(migration `0042`) + D-76 (migration `0043`) — plano em `FASE9_REVISAO_FINAL.md` §7. Detalhes completos em
-DECISIONS.md D-75/D-76.
+limpo em 2 execuções consecutivas. **✅ DEPLOYADO em prod 2026-07-15** (backend `51f6125`, molde D-59/D-63/D-65/
+D-67/D-68): backup `~/predeploy_d76_20260715_024101.sql` → deploy único combinando D-73 (migration `0041`) +
+D-74 (migration `0042`) + D-76 (migration `0043`) → rebuild backend. Validado: `appointment_items` 115/115
+com `organization_id`; RLS+FORCE ativos em `appointment_items`/`webhook_events`; `/health` 200; rotas novas
+protegidas (401, não 404/500); `coupons` confirmado com GRANTs intocados (V18b nunca chegou a tocar a tabela).
+Com a iniciativa formalmente fechada, restam só itens de decisão do dono como débito consciente (V22 CORS, V27
+Fernet, V29 histórico git, V18b coupons). Detalhes completos em DECISIONS.md D-75/D-76.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

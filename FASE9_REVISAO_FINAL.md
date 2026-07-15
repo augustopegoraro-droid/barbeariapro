@@ -192,17 +192,17 @@ consequência), para não duplicar.
 
 ## 7. Plano de rollout
 
-**Já em produção:** D-67, D-68, D-69 (fora desta iniciativa, mas no mesmo trem de deploy), D-70, D-71, D-72 (de
-outra sessão, carregou D-70/D-71 junto). V1 também já está em produção (config de infra, sem deploy de código —
-ver seção 3).
+**✅ Tudo em produção (2026-07-15):** D-67, D-68, D-69 (fora desta iniciativa, mas no mesmo trem de deploy), D-70,
+D-71, D-72, D-73, D-74, D-76 — deploy único combinando D-73 (migration `0041`) + D-74 (migration `0042`) + D-76
+(migration `0043` + fixes de código V14/V15/V16/V17/V18a/V25/V26/V28), molde D-59/D-63/D-65/D-67/D-68: backup
+(`~/predeploy_d76_20260715_024101.sql`) → `git pull` (sem `submodule update` — frontend não mudou neste lote) →
+migrations `0041`→`0042`→`0043` em sequência → rebuild backend → smoke test (`/health` 200, rotas novas 401 sem
+token, `appointment_items` com backfill 100%, RLS+FORCE ativos, `coupons` com GRANTs intocados). V1 (Crítica)
+também já estava em produção desde antes, via config de infra (secret configurado nos dois lados).
 
-**Commitado, aguardando deploy:** D-73 (migration `0041`), D-74 (migration `0042`) e D-76 (migration `0043` +
-fixes de código V14/V15/V16/V17/V18a/V25/V26/V28) — sem env nova em nenhum dos três. Sugestão: um único deploy
-juntando os três (mesmo molde D-59/D-63/D-65/D-67/D-68: backup → `git pull`/`submodule update` → aplicar as 3
-migrations em sequência (`0041`→`0042`→`0043`) → rebuild backend+frontend → smoke test:
-`/admin/security/site-visibility` e `/admin/security/lgpd/clients/{id}/export` devolvendo 401 sem token,
-`/health` 200, e conferir que resgate de cupom continua funcionando (ponto que quebrou e foi revertido em
-staging durante o desenvolvimento da `0043` — vale um teste manual pós-deploy, não só a suíte).
+Com isso, a iniciativa `promptseguranca.md` está **formalmente fechada**. O que resta é débito consciente,
+listado na seção 2 (V18b coupons, V22 CORS, V29 histórico git) e V20/V27 (baixa urgência, sem dependência
+crítica hoje).
 
 **Sem feature flag dedicado:** toda a iniciativa foi construída retrocompatível por natureza (permissões novas
 não quebram nada que já funcionava; tabelas novas são aditivas) — não há necessidade de liberação gradual por

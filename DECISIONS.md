@@ -1828,7 +1828,7 @@ do monorepo.** Smoke: `/health` 200 · `/platform/alert-rules`, `/platform/alert
 · logs limpos. **Validado com login real do dono em 2026-07-09** (edição de regras funcionando no painel).
 Pendências herdadas do D-70 seguem: cron n8n de `POST /internal/audit/purge`.
 
-### D-73 — Configuração de visibilidade do site público do cliente final (Fase 6 do plano de Segurança) — 2026-07-09 (✅ COMMITADO, não deployado em prod)
+### D-73 — Configuração de visibilidade do site público do cliente final (Fase 6 do plano de Segurança) — 2026-07-09 (✅ DEPLOYADO em prod 2026-07-15, junto com D-74/D-76)
 
 Fase 6 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §1.9`): "telas de configuração do que aparece no site
 público de agendamento". **Escopo combinado com o dono antes de começar:** o site público em si **não existe**
@@ -1880,9 +1880,10 @@ localmente por mim (D-70/D-71) — ver nota no D-72 acima.
 
 Suíte completa após a Fase 6: **582 pass / 2 ambientais (pré-existentes) / 0 regressões**, ~82s, sem travar.
 **✅ Commitado 2026-07-09** (backend `efde6fc` + frontend `5eff95d`, direto na main, molde D-67/D-68/D-69/D-70/D-71).
-**Pendente:** deploy em prod (aplicar migration `0041`); nenhuma env nova.
+**✅ DEPLOYADO em prod 2026-07-15** — migration `0041` aplicada no deploy combinado do D-76 (backend `51f6125`);
+detalhes de backup/validação na entrada D-76.
 
-### D-74 — Direitos do titular + histórico de consentimento (Fase 8 do plano de Segurança) — 2026-07-09 (✅ COMMITADO 2026-07-12, não deployado em prod)
+### D-74 — Direitos do titular + histórico de consentimento (Fase 8 do plano de Segurança) — 2026-07-09 (✅ DEPLOYADO em prod 2026-07-15, junto com D-73/D-76)
 
 Fase 8 do `promptseguranca.md` (`ARQUITETURA_ALVO.md §1.11`). **Escopo recortado** (mesmo espírito do D-73):
 banner de cookies / central de preferências por categoria / Consent Mode fazem sentido para um site público com
@@ -1932,7 +1933,8 @@ clientes reais já importados da Trinks (D-56).
 Suíte completa: **589 pass / 2 ambientais (pré-existentes) / 0 regressões**, ~81s.
 **✅ Commitado 2026-07-12** (backend `afed2a4` + frontend `60de9c3`, direto na main, molde D-67…D-73). Mesmo
 commit versionou `promptseguranca.md` pela primeira vez (estava untracked desde o início da iniciativa) e criou
-`promptsitepublico.md`. **Pendente:** deploy em prod (aplicar migration `0042`); nenhuma env nova.
+`promptsitepublico.md`. **✅ DEPLOYADO em prod 2026-07-15** — migration `0042` aplicada no deploy combinado do
+D-76 (backend `51f6125`); detalhes de backup/validação na entrada D-76.
 
 ### D-75 — Fase 9: revisão final da iniciativa de Segurança/Governança — 2026-07-13 (checkpoint, sem código)
 
@@ -2027,8 +2029,21 @@ completos na mesma sessão) causou falhas intermitentes em `test_platform_alert_
 `test_lgpd.py` — todas passam isoladas, confirmadas como ruído de ambiente, não regressão real.
 
 **Documentação:** `FASE9_REVISAO_FINAL.md` atualizado (checklist V1-V29, sumário executivo, seções 2/3, ADRs,
-plano de rollout). **Deploy ainda pendente** — ver plano combinado (D-73 + D-74 + D-76) em
-`FASE9_REVISAO_FINAL.md` §7.
+plano de rollout).
+
+**✅ DEPLOYADO em prod 2026-07-15** (backend `51f6125`, direto na main; molde D-59/D-63/D-65/D-67/D-68 — deploy
+único combinando D-73 + D-74 + D-76): backup `~/predeploy_d76_20260715_024101.sql` → `git stash` (VM tinha o
+digest do Evolution pinado localmente em `docker-compose.yml`, mesmo resíduo do D-68) → `git pull --ff-only`
+(head `0040`→`51f6125`, sem recursar submódulo — frontend não mudou neste lote) → `git stash pop` → **migrations
+`0041`→`0042`→`0043`** aplicadas em sequência via repo do host montado (`-v /opt/barbeariapro:/repo:ro -w /repo`,
+superuser `postgres`, molde D-60/D-67) → rebuild `backend`. **Validado em prod:** `alembic current` = `0043`
+(head); `appointment_items` com backfill 100% (115/115 linhas com `organization_id`); `relrowsecurity`/
+`relforcerowsecurity` = true em `appointment_items` e `webhook_events`; `/health` 200 (HTTPS); rotas novas
+protegidas (`/admin/security/site-visibility` 401, `/admin/security/lgpd/clients/{id}/export` 401,
+`/platform/billing/coupons` 401 — todas vivas, não 404/500); `/auth/tenant` público segue 200. **`coupons`
+confirmado intocado:** GRANTs do `barber_app` (INSERT/SELECT/UPDATE) idênticos aos de antes do deploy — a
+migration final nunca mexeu nessa tabela (V18b revertido ainda em staging), então o resgate real de cupom não
+foi exposto a risco nesta produção.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
