@@ -27,11 +27,11 @@ def test_rotas_por_papel():
 
 
 def test_tools_por_papel():
-    assert {t["function"]["name"] for t in kernel_ia._tools_for_role("owner")} == {
+    assert {t["name"] for t in kernel_ia._tools_for_role("owner")} == {
         "navegar",
         "consultar_financas",
     }
-    assert {t["function"]["name"] for t in kernel_ia._tools_for_role("barber")} == {
+    assert {t["name"] for t in kernel_ia._tools_for_role("barber")} == {
         "navegar",
         "solicitar_remarcacao_turno",
     }
@@ -39,20 +39,20 @@ def test_tools_por_papel():
 
 def test_tools_por_papel_financas_gestor():
     for role in ("owner", "manager"):
-        names = {t["function"]["name"] for t in kernel_ia._tools_for_role(role)}
+        names = {t["name"] for t in kernel_ia._tools_for_role(role)}
         assert "consultar_financas" in names
 
 
 def test_tools_por_papel_financas_recepcao_bloqueada():
     # regressão: FULL_ACCESS inclui reception (navegação), mas dados financeiros
     # são MANAGER_ACCESS apenas — recepção não pode ganhar consultar_financas.
-    names = {t["function"]["name"] for t in kernel_ia._tools_for_role("reception")}
+    names = {t["name"] for t in kernel_ia._tools_for_role("reception")}
     assert names == {"navegar"}
     assert "consultar_financas" not in names
 
 
 def test_tools_por_papel_financas_barbeiro_bloqueado():
-    names = {t["function"]["name"] for t in kernel_ia._tools_for_role("barber")}
+    names = {t["name"] for t in kernel_ia._tools_for_role("barber")}
     assert "consultar_financas" not in names
 
 
@@ -113,8 +113,8 @@ async def test_query_exige_auth(client):
 
 @pytest.mark.asyncio
 async def test_query_sem_key_responde_gracioso(client, auth_headers):
-    if settings.openai_api_key:
-        pytest.skip("OPENAI_API_KEY configurada; teste cobre o caminho SEM key.")
+    if settings.anthropic_api_key:
+        pytest.skip("ANTHROPIC_API_KEY configurada; teste cobre o caminho SEM key.")
     r = await client.post(
         "/kernel-ia/query", json={"prompt": "abrir agenda"}, headers=auth_headers
     )

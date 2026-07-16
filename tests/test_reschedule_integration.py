@@ -247,5 +247,5 @@ async def test_listar_ordena_deterministico_no_empate():
 
 
 # Nota: o disparo de remarcação VIA Kernel IA (texto livre → tool) depende do LLM
-# (OPENAI_API_KEY válida) e não é determinístico → coberto manualmente, não aqui.
+# (ANTHROPIC_API_KEY válida) e não é determinístico → coberto manualmente, não aqui.
 # O fluxo de dados de /remarcacoes é validado deterministicamente pelos testes acima.

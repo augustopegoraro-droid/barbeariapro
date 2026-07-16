@@ -2045,6 +2045,37 @@ confirmado intocado:** GRANTs do `barber_app` (INSERT/SELECT/UPDATE) idênticos 
 migration final nunca mexeu nessa tabela (V18b revertido ainda em staging), então o resgate real de cupom não
 foi exposto a risco nesta produção.
 
+### D-77 — Kernel IA migrado da OpenAI para a API do Claude (Anthropic) — 2026-07-15
+
+**Contexto.** A `OPENAI_API_KEY` de prod está inválida desde 2026-07-02 (Kernel IA D-57/D-58 inteiro fora do ar,
+degradando com graça em `action=config`). Como seria preciso rotacionar chave de qualquer forma, decidiu-se
+trocar o provedor do Kernel IA de OpenAI (`gpt-4o-mini`) para **Anthropic/Claude** (`claude-opus-4-8`,
+configurável via `KERNEL_IA_MODEL`). O bot "Raquel" no n8n **não** foi tocado (segue OpenAI; decisão separada).
+
+**O que mudou (só camada de provedor — contrato, RBAC e guardrails intactos):**
+- `app/core/config.py`: `openai_api_key` → `anthropic_api_key` (`ANTHROPIC_API_KEY` no `.env`);
+  `kernel_ia_model` default `gpt-4o-mini` → `claude-opus-4-8`.
+- `app/services/kernel_ia.py`: SDK `anthropic` (`AsyncAnthropic`, import tardio como antes); tools no formato
+  Claude (`name`/`description`/`input_schema` — antes `function.parameters`); loop de tool-use com blocos
+  `tool_use`/`tool_result` (o `input` já vem parseado → helper `_json` removido); `system` como parâmetro
+  top-level; **sem `temperature`** (removida na API do Opus 4.8 — enviar dá 400); insight do D-58 com
+  `max_tokens=150`. Chave inválida → `AuthenticationError` → mesma degradação `action=config` de antes.
+- `requirements.txt`: `openai>=1.40` → `anthropic>=0.69` (nada mais no backend importava `openai`).
+- Testes: shape das tools atualizado (`t["name"]`), skip por `anthropic_api_key`. **Suíte 589 pass / 2
+  ambientais / 0 regressões** (o 3º fail intermitente `test_excluir_venda_sem_uso` passa isolado — ruído de
+  ordenação já visto no D-76).
+
+**O que NÃO mudou:** catálogo fechado de rotas, mensagens templadas, `guard_insight` fail-closed,
+`redact_for_llm` (V15/LGPD), RBAC por papel (recepção/barbeiro sem `consultar_financas`), contrato do endpoint
+(`action ∈ {navigate, reschedule, finance_answer, answer, config, erro}`) — frontend não precisa de mudança.
+
+**Custo:** Opus 4.8 ($5/$25 por MTok) > `gpt-4o-mini`; volume atual é baixo (chat interno do gestor). Se o
+custo incomodar, trocar `KERNEL_IA_MODEL=claude-haiku-4-5` ($1/$5) sem mexer em código. O débito "sem rate
+limiting em `/kernel-ia/query`" continua valendo (agora com custo maior por chamada).
+
+**Pendente:** provisionar `ANTHROPIC_API_KEY` no `.env` da VM + rebuild; validação manual "LLM real" (navegação
++ finanças) — mesma pendência que o D-58 tinha com a OpenAI. A `OPENAI_API_KEY` da VM fica só para o n8n.
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -2067,4 +2098,4 @@ foi exposto a risco nesta produção.
 | VM sem política de reinício automático | GCP VM | ⚠️ Alto | WhatsApp cai toda vez que VM reinicia; usar /admin/integracoes |
 | ~~Migrations 0012–0014 + telas novas não deployadas~~ | VM / `barbearia-frontend` | ✅ Resolvido | D-46 (2026-06-27): 0012/0013 já estavam; 0014 aplicada; `/admin/assinaturas`+`/admin/empresa` deployadas. Falta só smoke test visual. |
 | `ADMIN_DATABASE_URL` ausente no `.env` da VM | `/opt/barbeariapro/.env` | Médio | Só nos `.example`; `deploy/update.sh` quebra no passo de migration (`set -u`). Provisionar p/ deploy automatizado (D-46). |
-| `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Médio | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas OpenAI. Preexistente ao D-58, ficou mais visível com o custo do agente financeiro. |
+| `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Médio | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas LLM (Claude desde o D-77 — custo por chamada maior que o gpt-4o-mini). |

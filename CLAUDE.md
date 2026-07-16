@@ -18,6 +18,23 @@
 
 ---
 
+## 0. Graphify — knowledge graph do código (OBRIGATÓRIO)
+
+O knowledge graph do projeto vive em `graphify-out/` (skill `graphify`, `~/.claude/skills/graphify/SKILL.md`).
+Regras permanentes de fluxo de trabalho:
+
+1. **Antes de responder qualquer pergunta sobre o código ou de fazer qualquer alteração**, consultar
+   primeiro o graphify (query no grafo em `graphify-out/`) para se contextualizar sobre arquitetura,
+   arquivos e relacionamentos — só então ler os arquivos necessários e executar a tarefa.
+2. **Depois de qualquer alteração no código** (criar/editar/remover arquivos, migrations, rotas,
+   serviços, frontend), atualizar **automaticamente e sem pedir permissão**:
+   - o **graphify** (reindexar/incorporar as mudanças no grafo), e
+   - este **`CLAUDE.md`** (se a mudança tocar arquitetura, regra de negócio, convenção ou pendência).
+3. Essas duas atualizações fazem parte da definição de "tarefa concluída" — junto com rodar os testes
+   (ver rodapé deste arquivo). Não encerrar uma tarefa de código sem elas.
+
+---
+
 ## 1. Visão do produto
 
 **BarbeariaPro** está sendo evoluído para uma **plataforma SaaS multi-tenant** de gestão para
@@ -348,7 +365,8 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 **Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — ✅ DEPLOYADO em prod 2026-07-02,
 código + migrations `0024`/`0025`, head `0025`):**
 - **Kernel IA = NAVEGADOR por linguagem natural (anti-alucinação):** `app/services/kernel_ia.py` +
-  `POST /kernel-ia/query` — o LLM (OpenAI `gpt-4o-mini`, `OPENAI_API_KEY`) só escolhe uma rota de
+  `POST /kernel-ia/query` — o LLM (Claude `claude-opus-4-8`, `ANTHROPIC_API_KEY` — D-77; era OpenAI
+  `gpt-4o-mini` até 2026-07-15) só escolhe uma rota de
   um **catálogo fechado** filtrado por papel (RBAC: barbeiro → só a própria agenda + tool
   `solicitar_remarcacao_turno`); mensagem templada + `action=navigate`/`route` → o frontend
   redireciona (FAB `kernel-ia-launcher.tsx` no admin). **Não responde dados no chat** — exceto a
@@ -390,12 +408,15 @@ número citado que não esteja no relatório real nem no playbook é descartado 
 Recepção e barbeiro seguem sem acesso a dados financeiros (regressão coberta em
 `tests/test_kernel_ia.py`). `action=finance_answer` novo no contrato do endpoint; frontend só
 precisou de `whitespace-pre-line` no balão + tipo do `action`.
-> ⚠️ **Bloqueio conhecido em prod (2026-07-02): `OPENAI_API_KEY` da VM está inválida/expirada**
-> (401 da OpenAI). Kernel IA inteiro (D-57 navegação + D-58 finanças) degrada com graça
-> (`action=config`, "chave inválida ou expirada" — sem 500), mas **ninguém consegue usar o chat
-> até a chave ser rotacionada** em `/opt/barbeariapro/.env`. Pré-existente, não causado pelo D-58 —
-> só ficou visível agora porque foi a 1ª vez que o Kernel IA (FAB do frontend) foi de fato
-> deployado em prod. Validação manual "LLM real" do D-58 **ainda pendente** por causa disso.
+> ⚠️ **Bloqueio conhecido em prod:** o Kernel IA está fora do ar desde 2026-07-02 (a `OPENAI_API_KEY`
+> da VM expirou; degrada com graça em `action=config`, sem 500). **Resolução decidida (D-77,
+> 2026-07-15): o Kernel IA migrou de provedor — OpenAI → Anthropic/Claude** (`claude-opus-4-8`,
+> configurável via `KERNEL_IA_MODEL`; SDK `anthropic` substitui `openai` no `requirements.txt`).
+> Só a camada de provedor mudou — catálogo fechado, mensagens templadas, `guard_insight`,
+> `redact_for_llm` (V15) e RBAC intactos; contrato do endpoint inalterado (frontend sem mudança).
+> Suíte 589 pass / 2 ambientais / 0 regressões. **Falta:** provisionar `ANTHROPIC_API_KEY` em
+> `/opt/barbeariapro/.env` + rebuild do backend + validação manual "LLM real" (pendente desde o
+> D-58). A `OPENAI_API_KEY` da VM continua existindo só para o n8n (Raquel — não migrada).
 
 **Painel SuperAdmin completo + Billing (D-61, 2026-07-03 — ✅ DEPLOYADO EM PROD, head `0034`):**
 missão autônoma implementou M1–MF do painel de plataforma (dashboard executivo,
@@ -584,5 +605,6 @@ frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i1
 
 ---
 
-> **Ao concluir qualquer tarefa:** rodar testes, validar fluxos relacionados, atualizar este arquivo e
-> `DECISIONS.md`/`CURRENT_SPRINT.md` quando aplicável, e informar claramente o que mudou.
+> **Ao concluir qualquer tarefa:** rodar testes, validar fluxos relacionados, **atualizar o graphify
+> (`graphify-out/`) automaticamente** (§0), atualizar este arquivo e `DECISIONS.md`/`CURRENT_SPRINT.md`
+> quando aplicável, e informar claramente o que mudou.

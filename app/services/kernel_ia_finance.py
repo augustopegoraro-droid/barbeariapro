@@ -212,7 +212,7 @@ _CLIENT_LINE_RE = re.compile(r"^• .+? — ", re.MULTILINE)
 
 def redact_for_llm(topic: str, block: str) -> str:
     """V15 (LGPD): tira nome de cliente do texto antes de virar contexto do
-    OpenAI — o bloco original (com nome) continua indo pro gestor no chat
+    LLM (Claude) — o bloco original (com nome) continua indo pro gestor no chat
     normalmente, só o que vira prompt do LLM é anonimizado. Só o tópico
     'inativos' lista nome de cliente por linha hoje (`_format_inativos`);
     números (dias sem visita etc.) não são tocados — `guard_insight` só

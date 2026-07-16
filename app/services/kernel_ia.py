@@ -1,6 +1,6 @@
 """Kernel IA — assistente de NAVEGAÇÃO por linguagem natural (anti-alucinação).
 
-Decisão (2026-07-02, D-57): o motor (gpt-4o-mini) alucina ao responder dados/
+Decisão (2026-07-02, D-57): o motor LLM alucina ao responder dados/
 números no chat. Então o Kernel IA **não responde os dados** — ele entende o
 pedido e **ENCAMINHA o usuário para a página certa** (o dado real aparece na
 página, sem alucinação). O LLM só faz duas coisas de baixo risco:
@@ -20,7 +20,8 @@ passa por `kernel_ia_finance.guard_insight` — qualquer número citado que não
 esteja no relatório real nem no playbook de referência é descartado antes de
 chegar ao usuário. Recepção e barbeiro continuam sem acesso a dados financeiros.
 
-Provedor isolado (OpenAI). Sem/`OPENAI_API_KEY` inválida → mensagem amigável.
+Provedor isolado (Anthropic/Claude — D-77, antes OpenAI). Sem/`ANTHROPIC_API_KEY`
+inválida → mensagem amigável.
 
 Contrato: `answer(...) -> {"intent", "message", "action", "route", "task_id"}`
 onde `action ∈ {navigate, reschedule, finance_answer, answer, config, erro}`.
@@ -111,84 +112,76 @@ class KernelCtx:
 
 
 def _tools_for_role(role: str) -> list[dict]:
+    """Tools no formato da API do Claude (`name`/`description`/`input_schema`)."""
     routes = _routes_for_role(role)
     tools: list[dict] = [
         {
-            "type": "function",
-            "function": {
-                "name": "navegar",
-                "description": "Encaminha o usuário para a página que responde ao pedido dele.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "pagina": {
-                            "type": "string",
-                            "enum": list(routes.keys()),
-                            "description": "\n".join(f"{k}: {d}" for k, (_, d) in routes.items()),
-                        }
-                    },
-                    "required": ["pagina"],
+            "name": "navegar",
+            "description": "Encaminha o usuário para a página que responde ao pedido dele.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "pagina": {
+                        "type": "string",
+                        "enum": list(routes.keys()),
+                        "description": "\n".join(f"{k}: {d}" for k, (_, d) in routes.items()),
+                    }
                 },
+                "required": ["pagina"],
             },
         }
     ]
     if role in MANAGER_ACCESS:  # owner/manager apenas — recepção NÃO recebe esta tool
         tools.append(
             {
-                "type": "function",
-                "function": {
-                    "name": "consultar_financas",
-                    "description": (
-                        "Consulta um indicador financeiro/de gestão REAL do negócio (dados "
-                        "exatos vindos do banco — você nunca calcula ou inventa números). Use "
-                        "para perguntas sobre faturamento/receita/despesas/comissões "
-                        "(financeiro), produção por profissional (ranking), receita recorrente "
-                        "de assinaturas (mrr), custo de equipe e se a receita recorrente cobre "
-                        "a folha (folha), resultado atribuível ao WhatsApp/IA (ia_faturamento), "
-                        "clientes parados/candidatos a reativação (inativos), ou horários "
-                        "ociosos na agenda de um dia (buracos)."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "topico": {
-                                "type": "string",
-                                "enum": list(kernel_ia_finance.TOPICS),
-                                "description": (
-                                    "financeiro: faturamento/receita/despesas/comissões/caixa\n"
-                                    "ranking: produção por barbeiro (receita, ticket médio, comissão)\n"
-                                    "mrr: receita recorrente das assinaturas ativas\n"
-                                    "folha: custo da equipe (fixo+comissão+aluguel) e cobertura pela receita recorrente\n"
-                                    "ia_faturamento: atendimentos/receita atribuíveis ao WhatsApp/IA\n"
-                                    "inativos: clientes parados, candidatos a reativação\n"
-                                    "buracos: horários ociosos na agenda de um dia"
-                                ),
-                            },
-                            "periodo": {
-                                "type": "string",
-                                "enum": ["hoje", "ontem", "semana", "mes"],
-                                "description": (
-                                    "Período do indicador. Ignorado em 'mrr' e 'inativos' "
-                                    "(sempre atuais); em 'buracos' só 'hoje'/'ontem' têm efeito."
-                                ),
-                            },
+                "name": "consultar_financas",
+                "description": (
+                    "Consulta um indicador financeiro/de gestão REAL do negócio (dados "
+                    "exatos vindos do banco — você nunca calcula ou inventa números). Use "
+                    "para perguntas sobre faturamento/receita/despesas/comissões "
+                    "(financeiro), produção por profissional (ranking), receita recorrente "
+                    "de assinaturas (mrr), custo de equipe e se a receita recorrente cobre "
+                    "a folha (folha), resultado atribuível ao WhatsApp/IA (ia_faturamento), "
+                    "clientes parados/candidatos a reativação (inativos), ou horários "
+                    "ociosos na agenda de um dia (buracos)."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "topico": {
+                            "type": "string",
+                            "enum": list(kernel_ia_finance.TOPICS),
+                            "description": (
+                                "financeiro: faturamento/receita/despesas/comissões/caixa\n"
+                                "ranking: produção por barbeiro (receita, ticket médio, comissão)\n"
+                                "mrr: receita recorrente das assinaturas ativas\n"
+                                "folha: custo da equipe (fixo+comissão+aluguel) e cobertura pela receita recorrente\n"
+                                "ia_faturamento: atendimentos/receita atribuíveis ao WhatsApp/IA\n"
+                                "inativos: clientes parados, candidatos a reativação\n"
+                                "buracos: horários ociosos na agenda de um dia"
+                            ),
                         },
-                        "required": ["topico", "periodo"],
+                        "periodo": {
+                            "type": "string",
+                            "enum": ["hoje", "ontem", "semana", "mes"],
+                            "description": (
+                                "Período do indicador. Ignorado em 'mrr' e 'inativos' "
+                                "(sempre atuais); em 'buracos' só 'hoje'/'ontem' têm efeito."
+                            ),
+                        },
                     },
+                    "required": ["topico", "periodo"],
                 },
             }
         )
     if role not in FULL_ACCESS:  # barbeiro
         tools.append(
             {
-                "type": "function",
-                "function": {
-                    "name": "solicitar_remarcacao_turno",
-                    "description": "Registra um pedido de remarcação dos atendimentos do próprio barbeiro (pendente até um gestor aprovar).",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"motivo": {"type": "string", "description": "Motivo do pedido."}},
-                    },
+                "name": "solicitar_remarcacao_turno",
+                "description": "Registra um pedido de remarcação dos atendimentos do próprio barbeiro (pendente até um gestor aprovar).",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"motivo": {"type": "string", "description": "Motivo do pedido."}},
                 },
             }
         )
@@ -245,21 +238,20 @@ async def _finance_message(client: Any, ctx: KernelCtx) -> str:
     insight = None
     try:
         bullets = "\n".join(f"- {b}" for b in PLAYBOOK.get(ctx.finance_topic, []))
-        # V15 (LGPD): o que vira prompt do OpenAI é a versão sem nome de
+        # V15 (LGPD): o que vira prompt do LLM é a versão sem nome de
         # cliente — o bloco com nome só é usado pra responder o gestor no
         # chat (guard_insight só valida número, redigir nome não quebra ele).
         llm_block = kernel_ia_finance.redact_for_llm(ctx.finance_topic, ctx.finance_data_block)
         grounding = f"{llm_block}\n{bullets}"
-        resp = await client.chat.completions.create(
+        resp = await client.messages.create(
             model=settings.kernel_ia_model,
+            max_tokens=150,
+            system=_INSIGHT_SYSTEM,
             messages=[
-                {"role": "system", "content": _INSIGHT_SYSTEM},
                 {"role": "user", "content": f"{llm_block}\n\nPlaybook:\n{bullets}"},
             ],
-            temperature=0.3,
-            max_tokens=80,
         )
-        raw = (resp.choices[0].message.content or "").strip()
+        raw = next((b.text for b in resp.content if b.type == "text"), "").strip()
         insight = kernel_ia_finance.guard_insight(raw, grounding)
     except Exception:
         logger.exception("consultar_financas: falha ao gerar insight (topico=%s)", ctx.finance_topic)
@@ -290,45 +282,44 @@ async def answer(
     """Roteia o pedido para a página certa, cria remarcação, ou (owner/manager)
     responde um indicador financeiro real via `consultar_financas`. Nunca levanta."""
     base = {"intent": "geral", "message": "", "action": "answer", "route": None, "task_id": None}
-    if not settings.openai_api_key:
+    if not settings.anthropic_api_key:
         return {**base, "intent": "config", "action": "config",
-                "message": "O Kernel IA ainda não está configurado (falta OPENAI_API_KEY)."}
+                "message": "O Kernel IA ainda não está configurado (falta ANTHROPIC_API_KEY)."}
 
     ctx = KernelCtx(role=role, org_id=org_id, barber_id=barber_id, user_id=user_id, unit_id=unit_id)
     try:
-        from openai import AsyncOpenAI  # import tardio
+        from anthropic import AsyncAnthropic  # import tardio
 
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
-        messages: list[dict] = [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": prompt},
-        ]
+        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        messages: list[dict] = [{"role": "user", "content": prompt}]
         tools = _tools_for_role(role)
 
         for _ in range(_MAX_ITERS):
-            resp = await client.chat.completions.create(
-                model=settings.kernel_ia_model, messages=messages, tools=tools,
-                tool_choice="auto", temperature=0,
+            resp = await client.messages.create(
+                model=settings.kernel_ia_model, max_tokens=1024,
+                system=_SYSTEM, messages=messages, tools=tools,
             )
-            msg = resp.choices[0].message
-            if not msg.tool_calls:
+            tool_uses = [b for b in resp.content if b.type == "tool_use"]
+            if not tool_uses:
                 # sem tool → pergunta de esclarecimento ou "não encontrei" (sem dados).
-                return {**base, "message": msg.content or "Não entendi. Sobre o que você quer ver?"}
+                text = next((b.text for b in resp.content if b.type == "text"), "").strip()
+                return {**base, "message": text or "Não entendi. Sobre o que você quer ver?"}
 
-            messages.append(msg.model_dump(exclude_none=True))
-            for tc in msg.tool_calls:
-                args = _json(tc.function.arguments)
-                result = await _dispatch(tc.function.name, args, db, ctx)
+            messages.append({"role": "assistant", "content": resp.content})
+            tool_results: list[dict] = []
+            for tc in tool_uses:
+                args = tc.input if isinstance(tc.input, dict) else {}
+                result = await _dispatch(tc.name, args, db, ctx)
                 # Terminal: navegar / remarcação → mensagem TEMPLADA (sem texto do LLM).
-                if tc.function.name == "navegar" and ctx.route:
+                if tc.name == "navegar" and ctx.route:
                     label = _LABELS.get(ctx.route_label or "", "a página")
                     return {**base, "intent": "navegar", "action": "navigate",
                             "route": ctx.route, "message": f"Certo! Vou te encaminhar para {label}."}
-                if tc.function.name == "solicitar_remarcacao_turno" and ctx.task_id:
+                if tc.name == "solicitar_remarcacao_turno" and ctx.task_id:
                     return {**base, "intent": "solicitar_remarcacao_turno", "action": "reschedule",
                             "task_id": ctx.task_id,
                             "message": "Pedido de remarcação registrado — um gestor vai avaliar."}
-                if tc.function.name == "consultar_financas":
+                if tc.name == "consultar_financas":
                     if ctx.finance_data_block:
                         message = await _finance_message(client, ctx)
                         return {**base, "intent": ctx.finance_topic, "action": "finance_answer",
@@ -336,21 +327,15 @@ async def answer(
                     return {**base, "intent": "financeiro", "action": "erro",
                             "message": "Não consegui buscar esse indicador agora. Tenta de novo "
                                        "ou peça pra abrir o Financeiro."}
-                messages.append({"role": "tool", "tool_call_id": tc.id,
-                                 "content": json.dumps(result, ensure_ascii=False)})
+                tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
+                                     "content": json.dumps(result, ensure_ascii=False)})
+            messages.append({"role": "user", "content": tool_results})
 
         return {**base, "message": "Não consegui identificar a página. Pode reformular?"}
     except Exception as e:  # noqa: BLE001
         logger.exception("kernel_ia.answer falhou")
-        if type(e).__name__ == "AuthenticationError" or "invalid_api_key" in str(e):
+        if type(e).__name__ == "AuthenticationError" or "invalid x-api-key" in str(e):
             return {**base, "intent": "config", "action": "config",
-                    "message": "A chave da OpenAI está inválida ou expirada. Atualize a OPENAI_API_KEY."}
+                    "message": "A chave da Anthropic está inválida ou expirada. Atualize a ANTHROPIC_API_KEY."}
         return {**base, "intent": "erro", "action": "erro",
                 "message": "Tive um problema ao processar agora. Tenta de novo?"}
-
-
-def _json(s: Optional[str]) -> dict:
-    try:
-        return json.loads(s or "{}")
-    except json.JSONDecodeError:
-        return {}
