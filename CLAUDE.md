@@ -414,9 +414,12 @@ precisou de `whitespace-pre-line` no balão + tipo do `action`.
 > configurável via `KERNEL_IA_MODEL`; SDK `anthropic` substitui `openai` no `requirements.txt`).
 > Só a camada de provedor mudou — catálogo fechado, mensagens templadas, `guard_insight`,
 > `redact_for_llm` (V15) e RBAC intactos; contrato do endpoint inalterado (frontend sem mudança).
-> Suíte 589 pass / 2 ambientais / 0 regressões. **Falta:** provisionar `ANTHROPIC_API_KEY` em
-> `/opt/barbeariapro/.env` + rebuild do backend + validação manual "LLM real" (pendente desde o
-> D-58). A `OPENAI_API_KEY` da VM continua existindo só para o n8n (Raquel — não migrada).
+> Suíte 589 pass / 2 ambientais / 0 regressões. **✅ DEPLOYADO em prod 2026-07-15** (backend
+> `5cea9af`; backup `~/predeploy_d77_*.sql`; `anthropic 0.116.0` na imagem, `openai` removido;
+> `/health` 200, `/kernel-ia/query` 401 sem auth). **Falta só:** provisionar `ANTHROPIC_API_KEY`
+> em `/opt/barbeariapro/.env` (criar em console.anthropic.com; `up -d backend` recarrega, sem
+> rebuild) + validação manual "LLM real" (pendente desde o D-58). A `OPENAI_API_KEY` da VM
+> continua existindo só para o n8n (Raquel — não migrada).
 
 **Painel SuperAdmin completo + Billing (D-61, 2026-07-03 — ✅ DEPLOYADO EM PROD, head `0034`):**
 missão autônoma implementou M1–MF do painel de plataforma (dashboard executivo,

@@ -2073,8 +2073,16 @@ configurável via `KERNEL_IA_MODEL`). O bot "Raquel" no n8n **não** foi tocado 
 custo incomodar, trocar `KERNEL_IA_MODEL=claude-haiku-4-5` ($1/$5) sem mexer em código. O débito "sem rate
 limiting em `/kernel-ia/query`" continua valendo (agora com custo maior por chamada).
 
-**Pendente:** provisionar `ANTHROPIC_API_KEY` no `.env` da VM + rebuild; validação manual "LLM real" (navegação
-+ finanças) — mesma pendência que o D-58 tinha com a OpenAI. A `OPENAI_API_KEY` da VM fica só para o n8n.
+**✅ DEPLOYADO em prod 2026-07-15** (backend `5cea9af`, direto na main; molde D-76 — sem migration): backup
+`~/predeploy_d77_*.sql` → `git merge --ff-only origin/main` (`51f6125`→`5cea9af`, sem stash — o lote não toca o
+`docker-compose.yml` com digest pinado) → rebuild `backend`. **Validado:** container healthy; `anthropic 0.116.0`
+na imagem e `openai` removido (import falha, como esperado); `/health` 200 (HTTPS); `/kernel-ia/query` sem auth
+→ 401.
+
+**Pendente:** `ANTHROPIC_API_KEY` **confirmada ausente no `.env` da VM** — até ser provisionada (criar em
+console.anthropic.com → `/opt/barbeariapro/.env` → `docker compose up -d backend`, sem rebuild), o Kernel IA
+responde `action=config` ("falta ANTHROPIC_API_KEY"), mesma degradação graciosa de antes. Depois disso, validação
+manual "LLM real" (navegação + finanças) — pendência herdada do D-58. A `OPENAI_API_KEY` da VM fica só para o n8n.
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
