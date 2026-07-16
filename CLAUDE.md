@@ -13,7 +13,7 @@
 > - `CHATWOOT_CLOUD_API_ARQUITETURA.md` + `CHATWOOT_FASE1_FASE4_SPEC.md` — direção da camada de comunicação (D-49): Chatwoot + WhatsApp Cloud API.
 > - `promptseguranca.md` — prompt master da iniciativa de Segurança/Governança (Fases 0-8 prontas, ver §6/D-67…D-74).
 > - `FASE9_REVISAO_FINAL.md` — checkpoint final: checklist V1-V29, matriz papel×permissão, runbook, ADRs, rollout.
-> - `promptsitepublico.md` — prompt master do site público de agendamento do cliente final (ainda não iniciado; requisito central: login persistente, sem senha, no mesmo aparelho).
+> - `promptsitepublico.md` — prompt master do site público de agendamento do cliente final (ainda não iniciado; requisito central: login persistente, sem senha, no mesmo aparelho). Hosts decididos (D-78): apex = site público; `app.taylorethedy.com` = portal da equipe. Melhorias de 2026-07-16 incorporadas ao próprio arquivo.
 > - `/Users/apleandro/.claude/plans/partitioned-greeting-stearns.md` — auditoria completa + plano de evolução (origem deste arquivo).
 
 ---
@@ -117,9 +117,12 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
     server-side no next-auth). Solução: `cors_origin_regex` (`app/core/config.py` → `allow_origin_regex` em
     `app/main.py`), em **OR** com a allowlist. Prod: `CORS_ORIGIN_REGEX=https://([a-z0-9-]+\.)?taylorethedy\.com`
     no `.env` da VM cobre o apex + qualquer subdomínio (`taylor.`/`org.`/`admin.`) **sem redeploy por tenant**.
-  - **Arquitetura de domínios (decisão do dono, 2026-07-06):** `taylorethedy.com` (apex) = **página do cliente
-    final** da org 1 (a fazer); `taylor.taylorethedy.com` será renomeado para **`org.taylorethedy.com`** = portal
-    de login de funcionários/donos/gerentes. A regex de CORS já cobre ambos — o rename não toca o backend.
+  - **Arquitetura de domínios (D-78, 2026-07-16 — substitui a decisão de 2026-07-06):** `taylorethedy.com`
+    (apex) = **site público do cliente final** com a logo da Taylor & Thedy (a fazer — `promptsitepublico.md`);
+    `taylor.taylorethedy.com` será renomeado para **`app.taylorethedy.com`** = portal de login de
+    funcionários/donos/gerentes (não mais `org.`). Execução: `UPDATE organizations SET subdomain='app'` +
+    server block do apex no nginx → futuro serviço público + redirect 301 do `taylor.`. A regex de CORS já
+    cobre tudo — nada a mudar no backend. Detalhe na D-78. **Nada implementado ainda.**
 - Bot: header `X-Bot-Token` validado contra `settings.bot_api_key`. Webhook Evolution:
   `X-Webhook-Secret` (hoje opcional). Comparações de segredo são **tempo-constante** via
   `app.core.security.secrets_match()`.
@@ -611,3 +614,13 @@ frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i1
 > **Ao concluir qualquer tarefa:** rodar testes, validar fluxos relacionados, **atualizar o graphify
 > (`graphify-out/`) automaticamente** (§0), atualizar este arquivo e `DECISIONS.md`/`CURRENT_SPRINT.md`
 > quando aplicável, e informar claramente o que mudou.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

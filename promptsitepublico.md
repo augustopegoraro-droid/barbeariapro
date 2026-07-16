@@ -48,9 +48,12 @@ Implicações técnicas que a Fase 0/1 precisam resolver de verdade (não assumi
 
 ## OUTROS PRINCÍPIOS NÃO NEGOCIÁVEIS
 
-1. **Multi-tenant por subdomínio**, reaproveitando `app_org_id_by_subdomain` (D-54) — cada barbearia tem sua
-   própria URL pública (`taylor.taylorethedy.com` é o painel; o site do cliente final é outro subdomínio/apex,
-   já discutido em D-66 — reconfirmar com o dono qual host exato usar antes de codar).
+1. **Multi-tenant por subdomínio**, reaproveitando `app_org_id_by_subdomain` (D-54). **Hosts decididos pelo dono
+   (D-78, 2026-07-16 — substitui o `org.taylorethedy.com` do D-66):** `taylorethedy.com` (apex) = **este site
+   público**, com a logo da Taylor & Thedy em destaque; `app.taylorethedy.com` = portal dos profissionais/
+   gestores (o painel que hoje responde em `taylor.taylorethedy.com`, com redirect 301 na transição). Plano de
+   migração de domínios (DNS/banco/nginx/CORS) detalhado na D-78 do `DECISIONS.md` — pode ser executado antes
+   e independentemente do site.
 2. **`client_visibility_settings` (D-73) já existe e é a fonte de verdade do que aparece** — serviços,
    profissionais, horários, avaliações, promoções, banner, dados públicos. Este site **consome** essa
    configuração via um endpoint público novo (read-only, sem autenticação, escopado por subdomínio) — não
@@ -156,6 +159,38 @@ Apresente e aguarde aprovação explícita antes de qualquer código.
 
 - Revalide a promessa central (login persistente) com teste manual real em iPhone e Android, não só teoria.
 - Plano de rollout (piloto com uma unidade/organização antes de abrir para todas).
+
+---
+
+## MELHORIAS INCORPORADAS (análise de 2026-07-16, cruzada com a logística atual do sistema — ver D-78)
+
+As fases acima devem absorver os pontos abaixo (cada um indica a fase dona):
+
+1. **[Fase 0 — DEPENDÊNCIA DE CAMINHO CRÍTICO] OTP via WhatsApp está bloqueado hoje.** O princípio central
+   assume "a barbearia já tem WhatsApp Cloud API (D-49)", mas o D-49 é só plano: o número atual está **restrito**
+   (D-41) e não entrega mensagens. Ou a Fase 0 do Chatwoot/Cloud API vira pré-requisito deste site, ou a Fase 1
+   especifica um fallback de OTP por **SMS** (Twilio/Zenvia, ~R$0,10/envio). Não iniciar a Fase 2 sem esse
+   destravamento resolvido.
+2. **[Fase 1/4] Não existe endpoint de "horários disponíveis".** `scheduling.py` só detecta conflito na criação;
+   o site precisa de listagem de slots livres (serviço × profissional × dia, considerando `TimeOff` e horário de
+   funcionamento do D-45). Construir como serviço novo em `app/services/` para reúso pelo painel e pelo bot.
+3. **[Fases 2/3] Reusar o Redis do D-68**: rate limit do OTP (telefone+IP) e cache do
+   `GET /public/{subdomain}/info` — não inventar outra camada.
+4. **[Fases 2/4] Auditar ações do cliente final no `audit_logs` (D-70):** OTP solicitado/verificado, agendamento
+   criado/cancelado, sessão revogada — alimenta de graça o painel de segurança (D-71).
+5. **[Fases 2/5] Merge com a base existente:** o cliente que verificar o telefone deve casar por `phone_e164`
+   (mesmo `normalize_phone` do import da Trinks — ~2.913 clientes reais na org 1) e enxergar histórico, **pontos
+   de fidelidade (D-50/D-62) e assinatura (D-44/D-48)** — nunca nascer duplicado. Exibir fidelidade/vouchers no
+   site é diferencial de retenção já pronto no backend.
+6. **[Fase 5] SEO/conversão no apex:** SSR/ISR (não SPA pura), dados estruturados `LocalBusiness`, Open Graph
+   com a logo, página rápida (link aberto do WhatsApp em 4G).
+7. **[Fase 1] Regras de cancelamento/remarcação configuráveis** (antecedência mínima, limite de remarcações)
+   precisam de um lugar definido: `client_visibility_settings` ou tabela irmã — decidir na arquitetura.
+8. **[Fase 6] Estender `reminders.py`**, que já faz o lembrete 24h, para agendamentos nascidos no site — não
+   criar canal paralelo de notificação.
+9. **[Fase 5] Logo por org:** não existe asset de logo no repo; adicionar `logo_url` ao `public_info` (JSONB do
+   `client_visibility_settings`, sem migration) + upload na tela `/admin/seguranca/visibilidade`. Para a Taylor
+   & Thedy, começar com arquivo estático fornecido pelo dono e evoluir para upload.
 
 ---
 

@@ -2084,6 +2084,44 @@ console.anthropic.com → `/opt/barbeariapro/.env` → `docker compose up -d bac
 responde `action=config` ("falta ANTHROPIC_API_KEY"), mesma degradação graciosa de antes. Depois disso, validação
 manual "LLM real" (navegação + finanças) — pendência herdada do D-58. A `OPENAI_API_KEY` da VM fica só para o n8n.
 
+### D-78 — Arquitetura de domínios do site público: apex = cliente final, `app.` = portal da equipe — 2026-07-16 (decisão, nada implementado)
+
+**Contexto:** análise do `promptsitepublico.md` (site público de agendamento, iniciativa ainda não iniciada)
+cruzada com a logística atual (nginx, `lib/tenant.ts`, CORS regex do D-66, `client_visibility_settings` do D-73).
+Hoje o nginx serve o painel da equipe tanto no apex quanto em qualquer subdomínio
+(`taylorethedy.com` e `*.taylorethedy.com` → :3000).
+
+**Decisão do dono (substitui o rename `org.taylorethedy.com` registrado no D-66):**
+- **`taylorethedy.com` (apex)** = site público do cliente final, com a **logo da Taylor & Thedy** em destaque.
+- **`app.taylorethedy.com`** = portal dos profissionais/gestores da org 1 (o painel que hoje responde em
+  `taylor.taylorethedy.com`).
+
+**Plano de execução (barato, independente do site em si):**
+1. DNS: nada a criar — wildcard `*.taylorethedy.com` + TLS coringa (D-64) já cobrem `app.`.
+2. Banco: `UPDATE organizations SET subdomain = 'app' WHERE id = 1` — o login resolve org pelo subdomínio
+   (`lib/tenant.ts` → `GET /auth/tenant?subdomain=`), então funciona sem tocar em código. Trade-off aceito:
+   `app` é nome genérico e fica "tomado" pela org 1 — OK porque o domínio é da própria Taylor & Thedy
+   (tenants futuros terão domínio/subdomínio próprios).
+3. nginx: server block dedicado ao apex apontando para o futuro serviço do site público (ex.: :3200),
+   deixando o wildcard para o painel (:3000).
+4. CORS: nada a fazer — `CORS_ORIGIN_REGEX` já cobre apex + qualquer subdomínio.
+5. Transição: manter `taylor.taylorethedy.com` com redirect 301 → `app.` por um tempo (favoritos da equipe).
+
+**Logo:** não existe nenhum arquivo de logo no repositório (`barbearia-frontend/public/` só tem SVGs padrão do
+Next). Além do asset (dono precisa fornecer SVG/PNG), a logo deve virar configuração por org: campo `logo_url`
+dentro de `public_info` (JSONB do `client_visibility_settings` — sem migration) + upload futuro na tela
+`/admin/seguranca/visibilidade`.
+
+**Melhorias incorporadas ao `promptsitepublico.md`** (seção "Melhorias incorporadas — 2026-07-16" no próprio
+arquivo): OTP via WhatsApp é dependência de caminho crítico (número restrito D-41, Cloud API D-49 só plano —
+prever fallback SMS); endpoint de "horários disponíveis" não existe e deve nascer em `app/services/` (reúso por
+painel/bot); reusar Redis (D-68) para rate limit do OTP e cache do `/public/{subdomain}/info`; auditar ações do
+cliente final no `audit_logs` (D-70); merge por `phone_e164` com os ~2.913 clientes da Trinks + exibir
+fidelidade/assinatura no site; SEO no apex (SSR/ISR, `LocalBusiness`, Open Graph com a logo); regras de
+cancelamento/remarcação configuráveis num lugar definido; Fase 6 estende `reminders.py`, não cria canal paralelo.
+
+**Status:** decisão registrada; nenhuma mudança aplicada (nem DNS/banco/nginx, nem código do site).
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
