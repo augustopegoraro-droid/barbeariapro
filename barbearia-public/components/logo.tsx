@@ -1,19 +1,17 @@
-/* Lockup da marca Taylor & Thedy, recriado da FACHADA real (D-79, v2 fiel à
-   foto da placa): ligadura caligráfica "lt" — um "l" fino à esquerda e um "t"
-   de haste larga com cabeça em curl, bandeira em vírgula (baseline do
-   "aylor") e bojo de ponta erguida (altura-x do "hedy"). O traço fica
-   grafite DENTRO do painel claro e prata fora dele, como na placa.
-   Inline SVG: os <text> herdam as webfonts da página (Tenor Sans ≈ Optima
-   da placa; Quicksand ≈ o rounded do slogan). */
+/* Lockup da marca Taylor & Thedy, recriado da FACHADA real (D-79): um único
+   "t" caligráfico dentro da caixa clara alta — cabeça em curl, bandeira em
+   vírgula (baseline do "aylor") e bojo de ponta erguida (altura-x do
+   "hedy"). O traço fica grafite DENTRO da caixa e prata fora dela, como na
+   placa. Inline SVG: os <text> herdam as webfonts da página (Tenor Sans ≈
+   Optima da placa; Quicksand ≈ o rounded do slogan). */
 
 const LIG = `
-  M 76 96 C 74 56 94 34 130 28 C 162 23 188 26 210 34
-  C 246 48 264 94 258 150 C 254 196 238 210 222 196
-  C 228 140 214 120 198 112 L 198 428
-  C 198 500 224 532 248 518 C 263 508 268 486 270 450
-  L 280 436 C 281 506 254 570 202 584 C 148 598 124 542 120 458
-  L 114 116 C 96 114 78 108 76 96 Z
-  M 44 14 L 66 14 C 64 160 64 300 68 446 L 46 446 C 42 300 42 160 44 14 Z`;
+  M 60 96 C 58 56 78 34 114 28 C 146 23 172 26 194 34
+  C 230 48 248 94 242 150 C 238 196 222 210 206 196
+  C 212 140 198 120 182 112 L 182 428
+  C 182 500 208 532 232 518 C 247 508 252 486 254 450
+  L 264 436 C 265 506 238 570 186 584 C 132 598 108 542 104 458
+  L 98 116 C 80 114 62 108 60 96 Z`;
 
 function Mark({ clipId }: { clipId: string }) {
   return (
