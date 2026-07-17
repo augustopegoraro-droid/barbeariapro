@@ -94,6 +94,7 @@ from .membership import (
 from .audit import AuditLog
 from .client_visibility import ClientVisibilitySettings
 from .consent import ConsentRecord
+from .client_session import ClientSession
 
 __all__ = [
     "Base",
@@ -205,4 +206,6 @@ __all__ = [
     "ClientVisibilitySettings",
     # LGPD (Fase 8)
     "ConsentRecord",
+    # site público do cliente final (D-79)
+    "ClientSession",
 ]

@@ -32,6 +32,11 @@ PUBLIC_PATHS = {
     "/docs",
     "/docs/oauth2-redirect",
     "/redoc",
+    # Site público do cliente final (D-79) — vitrine/slots são públicos por
+    # desenho (escopados por subdomínio + RLS); criar sessão É o login.
+    "/public/{subdomain}/info",
+    "/public/{subdomain}/slots",
+    "/public/{subdomain}/auth/session",
 }
 
 # Pontos de entrada de autenticação: se um deles aparece na árvore de deps da
@@ -44,6 +49,8 @@ AUTH_ENTRYPOINTS = {
     "_require_bot_token",
     "require_platform_admin",
     "_get_webhook_db",
+    # Cookie de sessão do cliente final (site público, D-79).
+    "get_client_session",
 }
 
 

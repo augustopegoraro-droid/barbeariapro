@@ -106,6 +106,14 @@ class Settings(BaseSettings):
     # Se vazio, o callback devolve JSON (útil em testes de API diretos).
     google_frontend_success_url: str = ""
 
+    # Site público do cliente final (D-79). Cookie de sessão de longa duração:
+    # Domain compartilhado apex ↔ api. (ex.: ".taylorethedy.com"); vazio em dev
+    # (cookie host-only). 400 dias = teto aceito pelo Safari p/ cookie de servidor.
+    public_cookie_domain: str = ""
+    public_session_max_age_days: int = 400
+    # Antecedência mínima (horas) para o cliente cancelar pelo site (fixo na v1).
+    public_cancel_min_hours: int = 2
+
     # Reativação de clientes
     reactivation_trigger_days: int = 60
     reactivation_cooldown_days: int = 60

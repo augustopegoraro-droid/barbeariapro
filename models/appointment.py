@@ -86,6 +86,11 @@ class Appointment(Base):
     created_by_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
+    # Sessão do site público que criou o agendamento (D-79): delimita o
+    # "meus agendamentos" de sessão não verificada (sem OTP).
+    created_by_client_session_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("client_sessions.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

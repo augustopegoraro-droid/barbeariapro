@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* Tokens — identidade do site público Taylor & Thedy (ver plano de design):
+   carvão/couro (madeira escura), creme (espuma), âmbar (marca), bronze. */
+:root {
+  --carvao: #191410;
+  --couro: #241c15;
+  --couro-claro: #2f261c;
+  --creme: #f3eadb;
+  --creme-suave: #cdbfa8;
+  --ambar: #f59e0b;
+  --ambar-escuro: #c47d08;
+  --bronze: #8a6b45;
+  --verde: #4ade80;
+  --vermelho: #f87171;
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-carvao: var(--carvao);
+  --color-couro: var(--couro);
+  --color-couro-claro: var(--couro-claro);
+  --color-creme: var(--creme);
+  --color-creme-suave: var(--creme-suave);
+  --color-ambar: var(--ambar);
+  --color-ambar-escuro: var(--ambar-escuro);
+  --color-bronze: var(--bronze);
+  --color-verde: var(--verde);
+  --color-vermelho: var(--vermelho);
+  --font-display: var(--font-fraunces);
+  --font-body: var(--font-archivo);
+}
+
+html {
+  background: var(--carvao);
+  color: var(--creme);
+  font-family: var(--font-archivo), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+/* Assinatura: a listra de barbeiro (âmbar/creme sobre carvão).
+   Usada exatamente 3 vezes: topo da página, divisor de seção, passo ativo. */
+.stripe {
+  height: 4px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--ambar) 0 10px,
+    var(--carvao) 10px 14px,
+    var(--creme) 14px 24px,
+    var(--carvao) 24px 28px
+  );
+}
+
+.font-display {
+  font-family: var(--font-fraunces), Georgia, serif;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ambar);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

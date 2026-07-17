@@ -68,6 +68,8 @@ class ContactChannel(str, enum.Enum):
     google = "google"
     indicacao = "indicacao"
     passante = "passante"
+    # Site público de agendamento do cliente final (D-79, migration 0044).
+    site = "site"
 
 
 class AppointmentStatus(str, enum.Enum):

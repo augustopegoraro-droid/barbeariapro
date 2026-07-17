@@ -13,7 +13,7 @@
 > - `CHATWOOT_CLOUD_API_ARQUITETURA.md` + `CHATWOOT_FASE1_FASE4_SPEC.md` — direção da camada de comunicação (D-49): Chatwoot + WhatsApp Cloud API.
 > - `promptseguranca.md` — prompt master da iniciativa de Segurança/Governança (Fases 0-8 prontas, ver §6/D-67…D-74).
 > - `FASE9_REVISAO_FINAL.md` — checkpoint final: checklist V1-V29, matriz papel×permissão, runbook, ADRs, rollout.
-> - `promptsitepublico.md` — prompt master do site público de agendamento do cliente final (ainda não iniciado; requisito central: login persistente, sem senha, no mesmo aparelho). Hosts decididos (D-78): apex = site público; `app.taylorethedy.com` = portal da equipe. Melhorias de 2026-07-16 incorporadas ao próprio arquivo.
+> - `promptsitepublico.md` — prompt master do site público de agendamento do cliente final. Hosts decididos (D-78): apex = site público; `app.taylorethedy.com` = portal da equipe. Melhorias de 2026-07-16 incorporadas ao próprio arquivo. **Fase 0 (auditoria) concluída em 2026-07-17 → `AUDITORIA_SITE_PUBLICO.md`** (nenhum código ainda; aguardando aprovação para a Fase 1/arquitetura). Achado central: a promessa de login persistente só é garantida com PWA instalado (iOS Safari ITP apaga storage de aba solta após 7 dias de inatividade); OTP via WhatsApp segue bloqueado (Evolution API restrita, D-41) — decisão de Cloud API vs. SMS fica para a Fase 1.
 > - `/Users/apleandro/.claude/plans/partitioned-greeting-stearns.md` — auditoria completa + plano de evolução (origem deste arquivo).
 
 ---

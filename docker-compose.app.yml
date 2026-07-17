@@ -96,6 +96,40 @@ services:
       start_period: 15s
 
   # ──────────────────────────────────────────────────────────────
+  # Site público do cliente final (Next 16) :3200 — D-79
+  # Servido no apex taylorethedy.com (server block dedicado no nginx).
+  # Sobe no `up` padrão (é o site do cliente final, não ferramenta interna).
+  # ──────────────────────────────────────────────────────────────
+  public:
+    build:
+      context: ./barbearia-public
+      dockerfile: Dockerfile
+      args:
+        # Inlinadas no bundle do browser em build.
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_TENANT_SLUG: ${PUBLIC_TENANT_SLUG:-taylor}
+        NEXT_PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://taylorethedy.com}
+    image: barbeariapro-public
+    container_name: barbeariapro-app-public
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    environment:
+      # SSR/ISR da home fala com o backend pela rede interna do compose.
+      API_URL_INTERNAL: http://backend:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3200/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ──────────────────────────────────────────────────────────────
   # Superadmin — Painel de Plataforma (Next 16) :3100
   #
   # Repo SEPARADO: augustopegoraro-droid/barbearia-superadmin. Precisa estar
