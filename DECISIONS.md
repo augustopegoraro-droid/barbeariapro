@@ -2188,6 +2188,13 @@ grafite-azulado + prata** da placa (`#262C36`/`#ECEEF1`, substitui o carvão/âm
 **tipografia Tenor Sans** (≈ o traço flareado da placa) + **Quicksand** (≈ o rounded do slogan); ícones do
 PWA/manifest regenerados com o monograma. Validado por screenshot headless (nota: Chrome headless no macOS
 tem largura mínima de janela ~500 — capturas "390" saem cortadas; não é bug do layout, que é fluido).
+> **Correção no mesmo dia (commit `53448cb`, deployada):** o dono apontou que o glifo não batia — recortes
+> ampliados da foto revelaram a estrutura real: ligadura caligráfica **"lt"** ("l" fino separado + "t" de
+> haste larga com cabeça em curl, bandeira em vírgula na baseline do "aylor" e bojo de ponta erguida na
+> altura-x do "hedy"), num painel claro ALTO que atravessa as duas linhas (não um quadrado pequeno). A fonte
+> da placa foi identificada por comparação lado a lado como **Optima** (sem webfont livre; Tenor Sans é o
+> substituto canônico, com `textLength` compensando a largura). Monograma redesenhado em bezier iterando
+> screenshot × foto (7 versões). Se o dono conseguir a arte original do designer da placa, substituir.
 
 **Pendências conhecidas:** validação visual num celular real (extensão Chrome não conectou —
 abrir `https://taylorethedy.com` no aparelho); OTP/verificação (bloqueado pela Cloud API,
