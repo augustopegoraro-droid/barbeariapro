@@ -2180,10 +2180,20 @@ reload + restart do site p/ limpar ISR). **Smoke completo:** apex 200 com servi�
 real em prod** (sessão→slots→agendar→cancelar→logout, cookie de 400 dias confirmado) com limpeza dos dados de
 teste via psql.
 
-**Pendências conhecidas:** validação visual em browser real (extensão Chrome não conectou na sessão do
-deploy — abrir `https://taylorethedy.com` e testar no celular); OTP/verificação (bloqueado pela Cloud API,
-D-49); "meus dispositivos"; fidelidade/assinatura no site (v2); logo real (usa wordmark textual; lê
-`public_info.logo_url` quando existir); regras de cancelamento configuráveis (fixo 2h).
+**Identidade visual da fachada (2026-07-17, mesmo dia — ✅ DEPLOYADA em prod, commit `faa99e1`):** o dono
+enviou foto da placa real → identidade do site refeita a partir dela: **logo recriada em SVG**
+(`barbearia-public/components/logo.tsx` — ligadura dupla de "t" que serve de T para Taylor e Thedy, com a
+inversão grafite/prata no quadrado claro; lockup "aylor/hedy" + slogan "Renove seu Estilo"); **paleta
+grafite-azulado + prata** da placa (`#262C36`/`#ECEEF1`, substitui o carvão/âmbar herdado do painel);
+**tipografia Tenor Sans** (≈ o traço flareado da placa) + **Quicksand** (≈ o rounded do slogan); ícones do
+PWA/manifest regenerados com o monograma. Validado por screenshot headless (nota: Chrome headless no macOS
+tem largura mínima de janela ~500 — capturas "390" saem cortadas; não é bug do layout, que é fluido).
+
+**Pendências conhecidas:** validação visual num celular real (extensão Chrome não conectou —
+abrir `https://taylorethedy.com` no aparelho); OTP/verificação (bloqueado pela Cloud API,
+D-49); "meus dispositivos"; fidelidade/assinatura no site (v2); `public_info.logo_url` continua tendo
+precedência sobre o lockup SVG se um arquivo oficial de logo for fornecido; regras de cancelamento
+configuráveis (fixo 2h).
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 
