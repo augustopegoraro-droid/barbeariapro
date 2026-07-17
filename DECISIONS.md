@@ -2196,6 +2196,16 @@ tem largura mínima de janela ~500 — capturas "390" saem cortadas; não é bug
 > identificada por comparação lado a lado como **Optima** (sem webfont livre; Tenor Sans é o substituto
 > canônico, com `textLength` compensando a largura). Monograma redesenhado em bezier iterando screenshot ×
 > foto (8 versões). Se o dono conseguir a arte original do designer da placa, substituir.
+> **Redesenho do lockup (2026-07-17, working tree — o dono reprovou o "t"/monograma e pediu igual à foto):**
+> abandonados a caixa clara + o "t" caligráfico à mão. Agora é **arte final vetorial extraída via fontTools**
+> (glifos embutidos, sem webfont): layout **horizontal fiel à fachada** — `"Taylor"` + **"T" maiúsculo
+> monumental** + `"hedy"`, lendo *TaylorThedy* (o "T" grande é o de Thedy). As palavras saem da **Optima
+> Regular** (a fonte da placa, escolha do dono: reta > itálica); o **"T" monumental é o "T" do Didot** —
+> serif de alto contraste (barra fina com serifas, pés espalhados), o mais próximo do letreiro entre as
+> serifadas do sistema (comparado lado a lado vs Times/Georgia/Baskerville/Bodoni). Paths em
+> `components/logo-paths.ts` (`TAYLOR_D`/`HEDY_D` Optima em=1000, `TEE_D` Didot em=1000, `SLOGAN_D`);
+> `logo.tsx` compõe com `translate()`+`scale(1,-1)` (Y do em→SVG). Validado por render headless (Chrome)
+> lado a lado com a foto. **Ainda não commitado/deployado.**
 
 **Pendências conhecidas:** validação visual num celular real (extensão Chrome não conectou —
 abrir `https://taylorethedy.com` no aparelho); OTP/verificação (bloqueado pela Cloud API,

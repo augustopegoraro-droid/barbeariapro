@@ -1,90 +1,75 @@
-/* Lockup da marca Taylor & Thedy, recriado da FACHADA real (D-79): um único
-   "t" caligráfico dentro da caixa clara alta — cabeça em curl, bandeira em
-   vírgula (baseline do "aylor") e bojo de ponta erguida (altura-x do
-   "hedy"). O traço fica grafite DENTRO da caixa e prata fora dela, como na
-   placa. Inline SVG: os <text> herdam as webfonts da página (Tenor Sans ≈
-   Optima da placa; Quicksand ≈ o rounded do slogan). */
+/* Lockup da marca Taylor & Thedy, fiel ao letreiro da fachada (D-79): as
+   palavras "Taylor" e "hedy" (Optima) em linha, com o "T" maiúsculo serifado
+   MONUMENTAL do Didot entre elas — lendo TaylorThedy (o "T" grande é o de
+   Thedy). Prata cromada sobre o grafite, como na placa.
 
-const LIG = `
-  M 60 96 C 58 56 78 34 114 28 C 146 23 172 26 194 34
-  C 230 48 248 94 242 150 C 238 196 222 210 206 196
-  C 212 140 198 120 182 112 L 182 428
-  C 182 500 208 532 232 518 C 247 508 252 486 254 450
-  L 264 436 C 265 506 238 570 186 584 C 132 598 108 542 104 458
-  L 98 116 C 80 114 62 108 60 96 Z`;
+   As letras são ARTE FINAL vetorial (outlines em components/logo-paths.ts,
+   extraídos via fontTools): o logo não depende de webfont e é idêntico em
+   qualquer aparelho. */
 
-function Mark({ clipId }: { clipId: string }) {
+import { HEDY_D, HEDY_W, SLOGAN_D, SLOGAN_W, TAYLOR_D, TAYLOR_W, TEE_D } from "@/components/logo-paths";
+
+// Proporções do "T" monumental relativas às palavras (Optima, em=1000).
+const TEE_SCALE = 1.6; // altura ~1.6× a caixa-alta das palavras
+const TEE_GAP_L = 30; // folga "Taylor" → "T"
+const TEE_GAP_R = 30; // folga "T" → "hedy"
+const TEE_DROP = -40; // pé do "T" cai um pouco abaixo da linha de base (como na placa)
+
+// Geometria do lockup (unidades em, baseline y=0, y para cima).
+const TEE_X = TAYLOR_W + TEE_GAP_L;
+const TEE_ADV = 684 * TEE_SCALE; // avanço do glifo Didot (684) escalado
+const HEDY_X = TEE_X + TEE_ADV + TEE_GAP_R;
+const NAME_W = HEDY_X + HEDY_W;
+const CAP_TOP = 712 * TEE_SCALE; // topo do "T" (mais alto que as palavras)
+
+// "T" Didot (em=1000, baseline y=0). Renderizado DENTRO do grupo do lockup, que
+// já aplica scale(1,-1) — por isso o escalonamento aqui é positivo (só amplia).
+function Tee() {
   return (
-    <>
-      <defs>
-        <clipPath id={clipId}>
-          <rect x="18" y="10" width="248" height="558" />
-        </clipPath>
-      </defs>
-      <rect x="18" y="10" width="248" height="558" fill="var(--prata)" />
-      <path d={LIG} fill="var(--prata-suave)" />
-      <path d={LIG} fill="var(--grafite)" clipPath={`url(#${clipId})`} />
-    </>
+    <g transform={`translate(${TEE_X},${TEE_DROP}) scale(${TEE_SCALE},${TEE_SCALE})`}>
+      <path d={TEE_D} fill="var(--prata)" />
+    </g>
   );
 }
 
 export function LogoMark({ size = 72 }: { size?: number }) {
+  // Só o "T" da marca, centrado com folga leve.
   return (
-    <svg
-      width={size}
-      height={(size * 640) / 300}
-      viewBox="0 0 300 640"
-      aria-hidden
-    >
-      <Mark clipId="tt-mark" />
+    <svg width={size} height={size} viewBox="0 -6 684 724" aria-hidden>
+      <g transform="translate(0,712) scale(1,-1)">
+        <path d={TEE_D} fill="var(--prata)" />
+      </g>
     </svg>
   );
 }
 
-export function LogoLockup({ width = 300 }: { width?: number }) {
+export function LogoLockup({ width = 320 }: { width?: number }) {
+  const sloganScale = 3.0;
+  const sloganX = NAME_W / 2 - (SLOGAN_W * sloganScale) / 2;
+  const viewH = CAP_TOP + 600; // caixa-alta + descidas + slogan
   return (
     <svg
       width={width}
-      height={(width * 700) / 1000}
-      viewBox="0 0 1000 700"
+      height={(width * viewH) / NAME_W}
+      viewBox={`0 0 ${NAME_W.toFixed(0)} ${viewH.toFixed(0)}`}
       role="img"
       aria-label="Taylor e Thedy — Renove seu Estilo"
     >
-      <Mark clipId="tt-lockup" />
-      <text
-        x="308"
-        y="205"
-        fontFamily="var(--font-tenor), Georgia, serif"
-        fontSize="250"
-        letterSpacing="4"
-        fill="var(--prata)"
-        textLength="660"
-      >
-        aylor
-      </text>
-      <text
-        x="308"
-        y="540"
-        fontFamily="var(--font-tenor), Georgia, serif"
-        fontSize="250"
-        letterSpacing="4"
-        fill="var(--prata)"
-        textLength="640"
-      >
-        hedy
-      </text>
-      <text
-        x="520"
-        y="672"
-        fontFamily="var(--font-quicksand), system-ui, sans-serif"
-        fontSize="62"
-        fontWeight="700"
-        letterSpacing="2"
-        textAnchor="middle"
+      {/* Palavras + "T" monumental, na mesma linha de base (y=CAP_TOP no SVG) */}
+      <g transform={`translate(0,${CAP_TOP.toFixed(1)}) scale(1,-1)`} fill="var(--prata)">
+        <path d={TAYLOR_D} />
+        <Tee />
+        <g transform={`translate(${HEDY_X.toFixed(1)},0)`}>
+          <path d={HEDY_D} />
+        </g>
+      </g>
+      {/* Arial Rounded MT Bold, centralizado abaixo do nome */}
+      <g
+        transform={`translate(${sloganX.toFixed(1)},${(CAP_TOP + 380).toFixed(1)}) scale(${sloganScale})`}
         fill="var(--prata)"
       >
-        Renove seu Estilo
-      </text>
+        <path d={SLOGAN_D} />
+      </g>
     </svg>
   );
 }
