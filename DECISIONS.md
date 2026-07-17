@@ -2121,6 +2121,69 @@ fidelidade/assinatura no site; SEO no apex (SSR/ISR, `LocalBusiness`, Open Graph
 cancelamento/remarcação configuráveis num lugar definido; Fase 6 estende `reminders.py`, não cria canal paralelo.
 
 **Status:** decisão registrada; nenhuma mudança aplicada (nem DNS/banco/nginx, nem código do site).
+> ✅ **Executado em 2026-07-17 junto com o D-79** (site público v1): `subdomain='app'` no banco, apex → :3200,
+> `taylor.` → 301 `app.`, tudo validado em prod.
+
+---
+
+### D-79 — Site público de agendamento do cliente final v1 (sem OTP) + execução do D-78 — 2026-07-17 (✅ DEPLOYADO em prod)
+
+**Contexto:** `promptsitepublico.md` Fases 0–5 executadas num único ciclo. Fase 0 → `AUDITORIA_SITE_PUBLICO.md`
+(achado central: a promessa "nunca mais loga" só é garantível com PWA instalado — iOS Safari ITP apaga storage
+de aba solta após 7 dias de inatividade, fonte primária WebKit; cookie de servidor dura até 400 dias como
+melhor esforço). Fase 1 → `ARQUITETURA_SITE_PUBLICO.md`. **Decisões do dono:** (a) **lançar sem OTP** — o
+WhatsApp está restrito (D-41) e não entrega mensagens; a estrutura nasce pronta para o OTP entrar depois
+(Cloud API); (b) escopo v1 = agendamento completo; (c) D-78 no pacote.
+
+**Trade-off de segurança central (consciente, documentado):** sem verificação do telefone, a sessão do cliente
+**só enxerga agendamentos criados por ela mesma** (`appointments.created_by_client_session_id`) — nunca o
+histórico do telefone (impede ver dados de terceiros digitando telefone alheio). `client_sessions.verified_at`
+já existe: quando o OTP chegar, sessões verificadas veem tudo e ganham rotação de token (padrão D-68/RFC 9700).
+**Sem rotação nesta v1** — sem identidade verificada, rotação não agrega; entra com o OTP.
+
+**Backend (migration `0044_public_site`, head `0044`):**
+- `client_sessions` (RLS+FORCE, molde 0042; GRANT sem DELETE — sessão se revoga, não se apaga): token opaco
+  256 bits, só hash SHA-256 persiste; cookie `tt_session` HttpOnly+Secure+SameSite=Lax,
+  `Domain=.taylorethedy.com` (`PUBLIC_COOKIE_DOMAIN` no `.env` da VM), Max-Age 400 dias.
+- `appointments.created_by_client_session_id` (FK SET NULL) + `contact_channel` += `'site'`.
+- `app/services/availability.py` (novo, reusável por painel/bot): slots livres = `business_hours` da unidade
+  (fuso local) − agendamentos ativos − `TimeOff`, passo 30min, antecedência mínima 30min.
+- `app/api/public.py` (`/public/{subdomain}/…`): `info` (vitrine 100% gateada pelo
+  `client_visibility_settings`/D-73, cache Redis 60s), `slots`, `auth/session` (merge por `phone_e164` com a
+  base Trinks — nunca duplica; `is_blocked` → 403 genérico), `appointments` (cadeia de validação espelhada da
+  agenda + revalidação de slot + advisory lock; preço sempre do catálogo; Google Calendar sync; lembrete 24h
+  entra de graça), `me/appointments`, `me/appointments/{id}/cancel` (só `agendado` e >2h antes —
+  `PUBLIC_CANCEL_MIN_HOURS`), `auth/logout`. Rate limits por rota; auditoria D-70 com `actor_kind="client"`
+  (`public.session_created/appointment_created/appointment_canceled`).
+- Testes: `tests/test_public_site.py` (13) + `test_authz_coverage` atualizado (`get_client_session` como
+  entrypoint de auth; info/slots/session na allowlist). Suíte **603 pass / 2 ambientais / 0 regressões**.
+
+**Frontend `barbearia-public/` (novo app Next 16, :3200, PASTA no repo do backend — não submódulo; sem
+segredo no código, deploy junto no `git pull`):** home SSR/ISR (JSON-LD `LocalBusiness`, Open Graph),
+`/agendar` (stepper serviço→profissional→dia/horário→identificação+confirmação; nome em localStorage só como
+memória de UX — 401 refaz identificação), `/meus-agendamentos` (cancelar com regra de 2h comunicada), **PWA**
+(manifest+SW mínimo+ícones gerados; banner pós-agendamento incentivando "Adicionar à Tela de Início" com
+instrução específica iOS — é a mitigação do ITP, parte do produto). Design próprio (Fraunces+Archivo, paleta
+carvão/couro/creme/âmbar, listra de barbeiro como assinatura). Sem next-auth; fetch com
+`credentials:'include'`. Tenant fixo por env `NEXT_PUBLIC_TENANT_SLUG` (multi-tenant por host = v2).
+
+**Infra:** serviço `public` no `docker-compose.app.yml` (sem profile — sobe no `up` padrão; build args
+`PUBLIC_API_URL`/`PUBLIC_TENANT_SLUG=app`/`PUBLIC_SITE_URL`); nginx com bloco exato do apex → :3200,
+`taylor.` → 301 `app.`, coringa continua → :3000 (config anterior salva em
+`/etc/nginx/sites-available/barbeariapro.pre-d79.bak`).
+
+**✅ Deploy em prod 2026-07-17** (backend `e2c85ad`, molde D-59/D-63/D-67/D-68): backup
+`~/predeploy_d79_20260717_035406.sql` → migration `0044` (repo do host montado, superuser, RLS+FORCE
+confirmados) → rebuild backend (`/health` 200) → build `public` → **virada D-78** (`subdomain='app'` + nginx
+reload + restart do site p/ limpar ISR). **Smoke completo:** apex 200 com serviços reais renderizados; `app.`
+307→login (painel OK); `taylor.` 301→`app.`; `admin.` intacto; `/auth/tenant?subdomain=app` resolve; **E2E
+real em prod** (sessão→slots→agendar→cancelar→logout, cookie de 400 dias confirmado) com limpeza dos dados de
+teste via psql.
+
+**Pendências conhecidas:** validação visual em browser real (extensão Chrome não conectou na sessão do
+deploy — abrir `https://taylorethedy.com` e testar no celular); OTP/verificação (bloqueado pela Cloud API,
+D-49); "meus dispositivos"; fidelidade/assinatura no site (v2); logo real (usa wordmark textual; lê
+`public_info.logo_url` quando existir); regras de cancelamento configuráveis (fixo 2h).
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 

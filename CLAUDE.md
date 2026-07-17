@@ -13,7 +13,7 @@
 > - `CHATWOOT_CLOUD_API_ARQUITETURA.md` + `CHATWOOT_FASE1_FASE4_SPEC.md` — direção da camada de comunicação (D-49): Chatwoot + WhatsApp Cloud API.
 > - `promptseguranca.md` — prompt master da iniciativa de Segurança/Governança (Fases 0-8 prontas, ver §6/D-67…D-74).
 > - `FASE9_REVISAO_FINAL.md` — checkpoint final: checklist V1-V29, matriz papel×permissão, runbook, ADRs, rollout.
-> - `promptsitepublico.md` — prompt master do site público de agendamento do cliente final. Hosts decididos (D-78): apex = site público; `app.taylorethedy.com` = portal da equipe. Melhorias de 2026-07-16 incorporadas ao próprio arquivo. **Fase 0 (auditoria) concluída em 2026-07-17 → `AUDITORIA_SITE_PUBLICO.md`** (nenhum código ainda; aguardando aprovação para a Fase 1/arquitetura). Achado central: a promessa de login persistente só é garantida com PWA instalado (iOS Safari ITP apaga storage de aba solta após 7 dias de inatividade); OTP via WhatsApp segue bloqueado (Evolution API restrita, D-41) — decisão de Cloud API vs. SMS fica para a Fase 1.
+> - `promptsitepublico.md` — prompt master do site público de agendamento do cliente final. **✅ v1 DEPLOYADA em prod 2026-07-17 (D-79)**: apex `taylorethedy.com` = site público (`barbearia-public/`, :3200); `app.taylorethedy.com` = portal da equipe (D-78 executado; `taylor.` → 301). Fase 0 → `AUDITORIA_SITE_PUBLICO.md`; Fase 1 → `ARQUITETURA_SITE_PUBLICO.md`. v1 SEM OTP (WhatsApp restrito D-41): sessão de cookie 400 dias que só vê o que ela mesma criou; OTP entra com a Cloud API (`verified_at` já existe). Detalhes na D-79.
 > - `/Users/apleandro/.claude/plans/partitioned-greeting-stearns.md` — auditoria completa + plano de evolução (origem deste arquivo).
 
 ---
@@ -117,12 +117,11 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
     server-side no next-auth). Solução: `cors_origin_regex` (`app/core/config.py` → `allow_origin_regex` em
     `app/main.py`), em **OR** com a allowlist. Prod: `CORS_ORIGIN_REGEX=https://([a-z0-9-]+\.)?taylorethedy\.com`
     no `.env` da VM cobre o apex + qualquer subdomínio (`taylor.`/`org.`/`admin.`) **sem redeploy por tenant**.
-  - **Arquitetura de domínios (D-78, 2026-07-16 — substitui a decisão de 2026-07-06):** `taylorethedy.com`
-    (apex) = **site público do cliente final** com a logo da Taylor & Thedy (a fazer — `promptsitepublico.md`);
-    `taylor.taylorethedy.com` será renomeado para **`app.taylorethedy.com`** = portal de login de
-    funcionários/donos/gerentes (não mais `org.`). Execução: `UPDATE organizations SET subdomain='app'` +
-    server block do apex no nginx → futuro serviço público + redirect 301 do `taylor.`. A regex de CORS já
-    cobre tudo — nada a mudar no backend. Detalhe na D-78. **Nada implementado ainda.**
+  - **Arquitetura de domínios (D-78 — ✅ EXECUTADO em prod 2026-07-17, junto com o D-79):**
+    `taylorethedy.com` (apex) = **site público do cliente final** (`barbearia-public/`, serviço `public`
+    :3200); **`app.taylorethedy.com`** = portal de login de funcionários/donos/gerentes (org 1 tem
+    `subdomain='app'` no banco); `taylor.taylorethedy.com` → **301** para `app.`. A regex de CORS já cobria
+    tudo. Config nginx anterior salva na VM (`barbeariapro.pre-d79.bak`). Detalhe na D-78/D-79.
 - Bot: header `X-Bot-Token` validado contra `settings.bot_api_key`. Webhook Evolution:
   `X-Webhook-Secret` (hoje opcional). Comparações de segredo são **tempo-constante** via
   `app.core.security.secrets_match()`.
@@ -536,6 +535,18 @@ com `organization_id`; RLS+FORCE ativos em `appointment_items`/`webhook_events`;
 protegidas (401, não 404/500); `coupons` confirmado com GRANTs intocados (V18b nunca chegou a tocar a tabela).
 Com a iniciativa formalmente fechada, restam só itens de decisão do dono como débito consciente (V22 CORS, V27
 Fernet, V29 histórico git, V18b coupons). Detalhes completos em DECISIONS.md D-75/D-76.
+
+**Site público de agendamento do cliente final (D-79 — ✅ DEPLOYADO em prod 2026-07-17, apex
+`taylorethedy.com`):** app novo **`barbearia-public/`** (Next 16, :3200, PWA instalável, mobile-first, pasta
+no repo do backend — não submódulo) + backend `app/api/public.py` (`/public/{subdomain}/…`: vitrine gateada
+pelo `client_visibility_settings`/D-73 com cache Redis 60s, slots livres via `app/services/availability.py`
+[novo, reusável por painel/bot], sessão de cliente SEM OTP [cookie HttpOnly 400d, `client_sessions`,
+migration `0044`], agendamento com a mesma validação do painel + `booking_channel='site'`, meus
+agendamentos/cancelamento [>2h], logout; auditoria `actor_kind="client"`). **Sessão não verificada só vê o
+que ela mesma criou** (`created_by_client_session_id`); `verified_at` reservado para o OTP futuro (Cloud
+API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs novos na VM: `PUBLIC_COOKIE_DOMAIN`,
+`PUBLIC_API_URL`, `PUBLIC_TENANT_SLUG=app`, `PUBLIC_SITE_URL`. Pendências: validação visual mobile real, OTP,
+"meus dispositivos", fidelidade no site, logo real (lê `public_info.logo_url` quando existir). Ver D-79.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
