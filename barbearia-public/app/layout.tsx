@@ -1,18 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Fraunces } from "next/font/google";
+import { Quicksand, Tenor_Sans } from "next/font/google";
 import "./globals.css";
 import RegisterSW from "@/components/register-sw";
 
-const fraunces = Fraunces({
+/* Tipografia da fachada: Tenor Sans ≈ o traço flareado de alto contraste da
+   placa; Quicksand ≈ o rounded do slogan "Renove seu Estilo". */
+const tenor = Tenor_Sans({
   subsets: ["latin"],
-  variable: "--font-fraunces",
-  weight: ["400", "600", "700"],
-  style: ["normal", "italic"],
+  variable: "--font-tenor",
+  weight: "400",
 });
 
-const archivo = Archivo({
+const quicksand = Quicksand({
   subsets: ["latin"],
-  variable: "--font-archivo",
+  variable: "--font-quicksand",
   weight: ["400", "500", "600", "700"],
 });
 
@@ -42,7 +43,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#191410",
+  themeColor: "#262c36",
   width: "device-width",
   initialScale: 1,
 };
@@ -51,7 +52,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR" className={`${fraunces.variable} ${archivo.variable}`}>
+    <html lang="pt-BR" className={`${tenor.variable} ${quicksand.variable}`}>
       <body>
         <div className="stripe" aria-hidden />
         {children}

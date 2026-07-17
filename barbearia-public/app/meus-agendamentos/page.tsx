@@ -48,20 +48,20 @@ export default function MeusAgendamentosPage() {
   return (
     <main className="mx-auto w-full max-w-md px-6 pb-16">
       <header className="pt-6 pb-4">
-        <Link href="/" className="text-sm text-bronze hover:text-creme-suave">
+        <Link href="/" className="text-sm text-cinza hover:text-prata-suave">
           ← Taylor &amp; Thedy
         </Link>
         <h1 className="mt-4 font-display text-2xl font-semibold">Meus agendamentos</h1>
       </header>
 
       {noSession && (
-        <div className="mt-6 rounded-xl bg-couro p-5 text-center">
-          <p className="text-creme-suave">
+        <div className="mt-6 rounded-xl bg-aco p-5 text-center">
+          <p className="text-prata-suave">
             Você ainda não tem agendamentos neste aparelho.
           </p>
           <Link
             href="/agendar"
-            className="mt-4 inline-block rounded-xl bg-ambar px-6 py-3 font-semibold text-carvao"
+            className="mt-4 inline-block rounded-xl bg-destaque px-6 py-3 font-semibold text-grafite"
           >
             Agendar horário
           </Link>
@@ -71,15 +71,15 @@ export default function MeusAgendamentosPage() {
       {error && <p className="mt-4 text-vermelho">{error}</p>}
 
       {items === null && !noSession && !error && (
-        <p className="mt-6 text-creme-suave">Carregando…</p>
+        <p className="mt-6 text-prata-suave">Carregando…</p>
       )}
 
       {items !== null && items.length === 0 && (
-        <div className="mt-6 rounded-xl bg-couro p-5 text-center">
-          <p className="text-creme-suave">Nenhum agendamento por aqui ainda.</p>
+        <div className="mt-6 rounded-xl bg-aco p-5 text-center">
+          <p className="text-prata-suave">Nenhum agendamento por aqui ainda.</p>
           <Link
             href="/agendar"
-            className="mt-4 inline-block rounded-xl bg-ambar px-6 py-3 font-semibold text-carvao"
+            className="mt-4 inline-block rounded-xl bg-destaque px-6 py-3 font-semibold text-grafite"
           >
             Agendar horário
           </Link>
@@ -88,29 +88,29 @@ export default function MeusAgendamentosPage() {
 
       <ul className="mt-4 space-y-3">
         {items?.map((a) => (
-          <li key={a.public_id} className="rounded-xl bg-couro p-5">
+          <li key={a.public_id} className="rounded-xl bg-aco p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-medium">{a.service_name}</p>
-                <p className="mt-1 text-sm text-creme-suave">
+                <p className="mt-1 text-sm text-prata-suave">
                   {dateLong(a.start_at)} às <span className="tnum">{timeHM(a.start_at)}</span>
                 </p>
-                <p className="text-sm text-creme-suave">com {a.barber_name}</p>
+                <p className="text-sm text-prata-suave">com {a.barber_name}</p>
               </div>
               <span
                 className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                   a.status === "agendado"
-                    ? "bg-ambar/15 text-ambar"
+                    ? "bg-destaque/15 text-destaque"
                     : a.status === "cancelado"
                       ? "bg-vermelho/15 text-vermelho"
-                      : "bg-couro-claro text-creme-suave"
+                      : "bg-aco-claro text-prata-suave"
                 }`}
               >
                 {STATUS_LABEL[a.status] ?? a.status}
               </span>
             </div>
             <div className="mt-3 flex items-center justify-between">
-              <p className="font-display text-lg text-ambar tnum">{money(a.total_amount)}</p>
+              <p className="font-display text-lg text-destaque tnum">{money(a.total_amount)}</p>
               {a.cancelable && (
                 <button
                   onClick={() => void cancel(a.public_id)}
@@ -126,7 +126,7 @@ export default function MeusAgendamentosPage() {
       </ul>
 
       {items !== null && items.length > 0 && (
-        <p className="mt-6 text-center text-xs text-bronze">
+        <p className="mt-6 text-center text-xs text-cinza">
           Cancelamento pelo site até 2h antes do horário. Depois disso, chame a
           gente no WhatsApp.
         </p>

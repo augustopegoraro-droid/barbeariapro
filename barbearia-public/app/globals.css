@@ -1,40 +1,41 @@
 @import "tailwindcss";
 
-/* Tokens — identidade do site público Taylor & Thedy (ver plano de design):
-   carvão/couro (madeira escura), creme (espuma), âmbar (marca), bronze. */
+/* Tokens — identidade recriada da FACHADA real da Taylor & Thedy (D-79):
+   placa grafite-azulada, letras prata 3D, tipografia flareada (Tenor Sans ≈
+   estilo da placa) e slogan rounded ("Renove seu Estilo", Quicksand). */
 :root {
-  --carvao: #191410;
-  --couro: #241c15;
-  --couro-claro: #2f261c;
-  --creme: #f3eadb;
-  --creme-suave: #cdbfa8;
-  --ambar: #f59e0b;
-  --ambar-escuro: #c47d08;
-  --bronze: #8a6b45;
+  --grafite: #262c36;
+  --aco: #323a46;
+  --aco-claro: #3e4754;
+  --prata: #eceef1;
+  --prata-suave: #b4bcc8;
+  --cinza: #8792a1;
+  --destaque: #dfe3e9;
+  --destaque-escuro: #c3cad4;
   --verde: #4ade80;
   --vermelho: #f87171;
   --radius: 0.75rem;
 }
 
 @theme inline {
-  --color-carvao: var(--carvao);
-  --color-couro: var(--couro);
-  --color-couro-claro: var(--couro-claro);
-  --color-creme: var(--creme);
-  --color-creme-suave: var(--creme-suave);
-  --color-ambar: var(--ambar);
-  --color-ambar-escuro: var(--ambar-escuro);
-  --color-bronze: var(--bronze);
+  --color-grafite: var(--grafite);
+  --color-aco: var(--aco);
+  --color-aco-claro: var(--aco-claro);
+  --color-prata: var(--prata);
+  --color-prata-suave: var(--prata-suave);
+  --color-cinza: var(--cinza);
+  --color-destaque: var(--destaque);
+  --color-destaque-escuro: var(--destaque-escuro);
   --color-verde: var(--verde);
   --color-vermelho: var(--vermelho);
-  --font-display: var(--font-fraunces);
-  --font-body: var(--font-archivo);
+  --font-display: var(--font-tenor);
+  --font-body: var(--font-quicksand);
 }
 
 html {
-  background: var(--carvao);
-  color: var(--creme);
-  font-family: var(--font-archivo), system-ui, sans-serif;
+  background: var(--grafite);
+  color: var(--prata);
+  font-family: var(--font-quicksand), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -42,21 +43,21 @@ body {
   min-height: 100dvh;
 }
 
-/* Assinatura: a listra de barbeiro (âmbar/creme sobre carvão).
+/* Assinatura: a listra — agora em prata escovada sobre grafite (a placa).
    Usada exatamente 3 vezes: topo da página, divisor de seção, passo ativo. */
 .stripe {
   height: 4px;
   background: repeating-linear-gradient(
     -45deg,
-    var(--ambar) 0 10px,
-    var(--carvao) 10px 14px,
-    var(--creme) 14px 24px,
-    var(--carvao) 24px 28px
+    var(--prata) 0 10px,
+    var(--grafite) 10px 14px,
+    var(--cinza) 14px 24px,
+    var(--grafite) 24px 28px
   );
 }
 
 .font-display {
-  font-family: var(--font-fraunces), Georgia, serif;
+  font-family: var(--font-tenor), Georgia, serif;
 }
 
 .tnum {
@@ -64,7 +65,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--ambar);
+  outline: 2px solid var(--prata);
   outline-offset: 2px;
 }
 

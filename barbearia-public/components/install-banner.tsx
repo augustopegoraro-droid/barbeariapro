@@ -42,9 +42,9 @@ export default function InstallBanner() {
   if (!visible) return null;
 
   return (
-    <aside className="mt-6 rounded-xl border border-couro-claro bg-couro p-4">
+    <aside className="mt-6 rounded-xl border border-aco-claro bg-aco p-4">
       <p className="font-medium">Adicione à tela de início</p>
-      <p className="mt-1 text-sm text-creme-suave">
+      <p className="mt-1 text-sm text-prata-suave">
         {isIOS
           ? "Toque em Compartilhar e depois em “Adicionar à Tela de Início” — assim você fica sempre conectado e agenda em 2 toques."
           : "Instale o atalho e agende em 2 toques, sem precisar se identificar de novo."}
@@ -52,14 +52,14 @@ export default function InstallBanner() {
       <div className="mt-3 flex gap-3">
         {!isIOS && deferred && (
           <button
-            className="rounded-lg bg-ambar px-4 py-2 text-sm font-semibold text-carvao"
+            className="rounded-lg bg-destaque px-4 py-2 text-sm font-semibold text-grafite"
             onClick={() => void deferred.prompt()}
           >
             Instalar
           </button>
         )}
         <button
-          className="rounded-lg px-4 py-2 text-sm text-bronze underline underline-offset-4"
+          className="rounded-lg px-4 py-2 text-sm text-cinza underline underline-offset-4"
           onClick={() => {
             localStorage.setItem(DISMISSED_KEY, "1");
             setVisible(false);

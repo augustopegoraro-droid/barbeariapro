@@ -1,5 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#191410"/>
-  <rect y="0" width="512" height="20" fill="#F59E0B"/>
-  <text x="256" y="310" font-family="Georgia, 'Times New Roman', serif" font-size="230" font-weight="700" fill="#F3EADB" text-anchor="middle">T<tspan fill="#F59E0B" font-style="italic">&amp;</tspan>T</text>
+  <rect width="512" height="512" rx="96" fill="#262C36"/>
+  <g transform="translate(78,34) scale(1.05)">
+    <rect x="36" y="16" width="180" height="192" fill="#ECEEF1"/>
+    <path id="m" d="M 196 28 Q 138 28 138 92 L 138 116 L 106 116 L 106 148 L 138 148
+      L 138 230 L 106 230 L 106 262 L 138 262 L 138 330 Q 138 396 204 396
+      L 246 396 L 246 362 L 210 362 Q 174 362 174 324 L 174 262 L 250 262
+      L 250 230 L 174 230 L 174 148 L 250 148 L 250 116 L 174 116 L 174 94
+      Q 174 62 200 62 L 216 62 L 216 28 Z" fill="#B4BCC8"/>
+    <clipPath id="b"><rect x="36" y="16" width="180" height="192"/></clipPath>
+    <path d="M 196 28 Q 138 28 138 92 L 138 116 L 106 116 L 106 148 L 138 148
+      L 138 230 L 106 230 L 106 262 L 138 262 L 138 330 Q 138 396 204 396
+      L 246 396 L 246 362 L 210 362 Q 174 362 174 324 L 174 262 L 250 262
+      L 250 230 L 174 230 L 174 148 L 250 148 L 250 116 L 174 116 L 174 94
+      Q 174 62 200 62 L 216 62 L 216 28 Z" fill="#262C36" clip-path="url(#b)"/>
+  </g>
 </svg>

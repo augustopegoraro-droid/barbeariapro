@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="440" viewBox="0 0 400 440">
+  <!-- Monograma Taylor & Thedy: ligadura dupla de "t" (um glifo, dois nomes).
+       Fora do quadrado branco = prata; dentro = grafite (inversão da fachada). -->
+  <defs>
+    <path id="tt" d="
+      M 196 28
+      Q 138 28 138 92
+      L 138 116
+      L 106 116
+      L 106 148
+      L 138 148
+      L 138 230
+      L 106 230
+      L 106 262
+      L 138 262
+      L 138 330
+      Q 138 396 204 396
+      L 246 396
+      L 246 362
+      L 210 362
+      Q 174 362 174 324
+      L 174 262
+      L 250 262
+      L 250 230
+      L 174 230
+      L 174 148
+      L 250 148
+      L 250 116
+      L 174 116
+      L 174 94
+      Q 174 62 200 62
+      L 216 62
+      L 216 28
+      Z"/>
+    <clipPath id="boxclip"><rect x="36" y="16" width="180" height="192"/></clipPath>
+  </defs>
+  <rect x="36" y="16" width="180" height="192" fill="#EDEEF1"/>
+  <use href="#tt" fill="#C9CDD4"/>
+  <use href="#tt" fill="#39414D" clip-path="url(#boxclip)"/>
+</svg>

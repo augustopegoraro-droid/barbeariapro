@@ -38,7 +38,7 @@ const STEP_LABELS = ["Serviço", "Profissional", "Horário", "Confirmar"];
 function StepHeader({ step }: { step: Step }) {
   return (
     <header className="pt-6 pb-4">
-      <Link href="/" className="text-sm text-bronze hover:text-creme-suave">
+      <Link href="/" className="text-sm text-cinza hover:text-prata-suave">
         ← Taylor &amp; Thedy
       </Link>
       <ol className="mt-4 flex gap-1" aria-label="Etapas do agendamento">
@@ -49,13 +49,13 @@ function StepHeader({ step }: { step: Step }) {
               <div className="stripe rounded-full" aria-hidden />
             ) : (
               <div
-                className={`h-1 rounded-full ${i + 1 < step ? "bg-ambar" : "bg-couro-claro"}`}
+                className={`h-1 rounded-full ${i + 1 < step ? "bg-destaque" : "bg-aco-claro"}`}
                 aria-hidden
               />
             )}
             <span
               className={`mt-1 block text-[11px] ${
-                i + 1 === step ? "text-creme" : "text-bronze"
+                i + 1 === step ? "text-prata" : "text-cinza"
               }`}
             >
               {label}
@@ -189,23 +189,23 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
           </p>
           <h1 className="mt-4 font-display text-3xl font-semibold">Horário marcado!</h1>
         </header>
-        <div className="mt-8 rounded-xl bg-couro p-5">
+        <div className="mt-8 rounded-xl bg-aco p-5">
           <p className="font-medium">{done.service_name}</p>
-          <p className="mt-1 text-creme-suave">
+          <p className="mt-1 text-prata-suave">
             {dateLong(done.start_at)} às <span className="tnum">{timeHM(done.start_at)}</span>
           </p>
-          <p className="mt-1 text-creme-suave">com {done.barber_name}</p>
-          <p className="mt-3 font-display text-xl text-ambar">{money(done.total_amount)}</p>
+          <p className="mt-1 text-prata-suave">com {done.barber_name}</p>
+          <p className="mt-3 font-display text-xl text-destaque">{money(done.total_amount)}</p>
         </div>
         <InstallBanner />
         <div className="mt-8 flex flex-col gap-3 text-center">
           <Link
             href="/meus-agendamentos"
-            className="rounded-xl bg-ambar px-6 py-3 font-semibold text-carvao"
+            className="rounded-xl bg-destaque px-6 py-3 font-semibold text-grafite"
           >
             Ver meus agendamentos
           </Link>
-          <Link href="/" className="text-sm text-creme-suave underline underline-offset-4">
+          <Link href="/" className="text-sm text-prata-suave underline underline-offset-4">
             Voltar ao início
           </Link>
         </div>
@@ -229,13 +229,13 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
                     setProfessional(null);
                     setStep(2);
                   }}
-                  className="flex w-full items-baseline justify-between gap-4 rounded-xl bg-couro px-4 py-4 text-left transition-colors hover:bg-couro-claro"
+                  className="flex w-full items-baseline justify-between gap-4 rounded-xl bg-aco px-4 py-4 text-left transition-colors hover:bg-aco-claro"
                 >
                   <span>
                     <span className="block font-medium">{s.name}</span>
-                    <span className="block text-sm text-bronze">{s.duration_min} min</span>
+                    <span className="block text-sm text-cinza">{s.duration_min} min</span>
                   </span>
-                  <span className="font-display text-lg text-ambar tnum">
+                  <span className="font-display text-lg text-destaque tnum">
                     {money(s.price)}
                   </span>
                 </button>
@@ -248,7 +248,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
       {step === 2 && service && (
         <section aria-label="Escolha o profissional">
           <h1 className="font-display text-2xl font-semibold">Quem vai te atender?</h1>
-          <p className="mt-1 text-sm text-creme-suave">{service.name}</p>
+          <p className="mt-1 text-sm text-prata-suave">{service.name}</p>
           <ul className="mt-4 space-y-2">
             {eligiblePros.map((p) => (
               <li key={p.id}>
@@ -257,18 +257,18 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
                     setProfessional(p);
                     setStep(3);
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl bg-couro px-4 py-4 text-left transition-colors hover:bg-couro-claro"
+                  className="flex w-full items-center gap-3 rounded-xl bg-aco px-4 py-4 text-left transition-colors hover:bg-aco-claro"
                 >
                   <span
                     aria-hidden
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-couro-claro font-display font-semibold text-ambar"
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-aco-claro font-display font-semibold text-destaque"
                   >
                     {p.name.charAt(0)}
                   </span>
                   <span>
                     <span className="block font-medium">{p.name}</span>
                     {p.specialty && (
-                      <span className="block text-xs text-bronze">{p.specialty}</span>
+                      <span className="block text-xs text-cinza">{p.specialty}</span>
                     )}
                   </span>
                 </button>
@@ -276,7 +276,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
             ))}
           </ul>
           {eligiblePros.length === 0 && (
-            <p className="mt-4 text-creme-suave">
+            <p className="mt-4 text-prata-suave">
               Nenhum profissional disponível para este serviço agora.
             </p>
           )}
@@ -287,7 +287,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
       {step === 3 && service && professional && (
         <section aria-label="Escolha o horário">
           <h1 className="font-display text-2xl font-semibold">Escolha o horário</h1>
-          <p className="mt-1 text-sm text-creme-suave">
+          <p className="mt-1 text-sm text-prata-suave">
             {service.name} · {professional.name}
           </p>
 
@@ -301,8 +301,8 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
                   onClick={() => setDayOffset(i)}
                   className={`flex min-w-[3.5rem] flex-col items-center rounded-xl px-2 py-2 text-sm transition-colors ${
                     i === dayOffset
-                      ? "bg-ambar font-semibold text-carvao"
-                      : "bg-couro text-creme-suave hover:bg-couro-claro"
+                      ? "bg-destaque font-semibold text-grafite"
+                      : "bg-aco text-prata-suave hover:bg-aco-claro"
                   }`}
                 >
                   <span className="text-[11px] uppercase">{weekdayShort(d)}</span>
@@ -314,7 +314,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
           </div>
 
           {slots === null && !slotsError && (
-            <p className="mt-6 text-creme-suave">Buscando horários…</p>
+            <p className="mt-6 text-prata-suave">Buscando horários…</p>
           )}
           {slotsError && (
             <p className="mt-6 text-vermelho">
@@ -325,7 +325,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
             </p>
           )}
           {slots !== null && slots.length === 0 && (
-            <p className="mt-6 text-creme-suave">
+            <p className="mt-6 text-prata-suave">
               Sem horários livres neste dia. Escolha outro dia acima.
             </p>
           )}
@@ -333,7 +333,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
             Object.entries(groupedSlots).map(([label, list]) =>
               list.length === 0 ? null : (
                 <div key={label} className="mt-5">
-                  <h2 className="text-sm font-medium uppercase tracking-wide text-bronze">
+                  <h2 className="text-sm font-medium uppercase tracking-wide text-cinza">
                     {label}
                   </h2>
                   <div className="mt-2 grid grid-cols-4 gap-2">
@@ -344,7 +344,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
                           setSlot(s);
                           setStep(4);
                         }}
-                        className="rounded-lg bg-couro px-2 py-2.5 text-center font-medium tnum transition-colors hover:bg-ambar hover:text-carvao"
+                        className="rounded-lg bg-aco px-2 py-2.5 text-center font-medium tnum transition-colors hover:bg-destaque hover:text-grafite"
                       >
                         {timeHM(s)}
                       </button>
@@ -360,13 +360,13 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
       {step === 4 && service && professional && slot && (
         <section aria-label="Confirme seu agendamento">
           <h1 className="font-display text-2xl font-semibold">Confirme</h1>
-          <div className="mt-4 rounded-xl bg-couro p-5">
+          <div className="mt-4 rounded-xl bg-aco p-5">
             <p className="font-medium">{service.name}</p>
-            <p className="mt-1 text-creme-suave">
+            <p className="mt-1 text-prata-suave">
               {dateLong(slot)} às <span className="tnum">{timeHM(slot)}</span>
             </p>
-            <p className="mt-1 text-creme-suave">com {professional.name}</p>
-            <p className="mt-3 font-display text-xl text-ambar">{money(service.price)}</p>
+            <p className="mt-1 text-prata-suave">com {professional.name}</p>
+            <p className="mt-3 font-display text-xl text-destaque">{money(service.price)}</p>
           </div>
 
           {needsIdentify ? (
@@ -388,7 +388,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
                   autoComplete="name"
                   required
                   minLength={2}
-                  className="mt-1 w-full rounded-lg border border-couro-claro bg-couro px-3 py-3 text-creme placeholder:text-bronze"
+                  className="mt-1 w-full rounded-lg border border-aco-claro bg-aco px-3 py-3 text-prata placeholder:text-cinza"
                   placeholder="Como podemos te chamar"
                 />
               </div>
@@ -403,10 +403,10 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
                   inputMode="tel"
                   autoComplete="tel-national"
                   required
-                  className="mt-1 w-full rounded-lg border border-couro-claro bg-couro px-3 py-3 text-creme tnum placeholder:text-bronze"
+                  className="mt-1 w-full rounded-lg border border-aco-claro bg-aco px-3 py-3 text-prata tnum placeholder:text-cinza"
                   placeholder="(63) 99999-9999"
                 />
-                <p className="mt-1 text-xs text-bronze">
+                <p className="mt-1 text-xs text-cinza">
                   Usamos seu número para confirmar e lembrar do horário.
                 </p>
               </div>
@@ -414,17 +414,17 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-xl bg-ambar px-6 py-4 text-lg font-semibold text-carvao transition-colors hover:bg-ambar-escuro disabled:opacity-60"
+                className="w-full rounded-xl bg-destaque px-6 py-4 text-lg font-semibold text-grafite transition-colors hover:bg-destaque-escuro disabled:opacity-60"
               >
                 {submitting ? "Agendando…" : "Confirmar agendamento"}
               </button>
             </form>
           ) : (
             <div className="mt-6 space-y-4">
-              <p className="text-creme-suave">
-                Agendando como <span className="font-medium text-creme">{knownName}</span>{" "}
+              <p className="text-prata-suave">
+                Agendando como <span className="font-medium text-prata">{knownName}</span>{" "}
                 <button
-                  className="text-sm text-bronze underline underline-offset-4"
+                  className="text-sm text-cinza underline underline-offset-4"
                   onClick={() => {
                     localStorage.removeItem(KNOWN_NAME_KEY);
                     setKnownName(null);
@@ -438,7 +438,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
               <button
                 onClick={() => void confirm()}
                 disabled={submitting}
-                className="w-full rounded-xl bg-ambar px-6 py-4 text-lg font-semibold text-carvao transition-colors hover:bg-ambar-escuro disabled:opacity-60"
+                className="w-full rounded-xl bg-destaque px-6 py-4 text-lg font-semibold text-grafite transition-colors hover:bg-destaque-escuro disabled:opacity-60"
               >
                 {submitting ? "Agendando…" : "Confirmar agendamento"}
               </button>
@@ -455,7 +455,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="mt-6 text-sm text-bronze underline underline-offset-4 hover:text-creme-suave"
+      className="mt-6 text-sm text-cinza underline underline-offset-4 hover:text-prata-suave"
     >
       ← Voltar
     </button>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { fetchInfo, type PublicInfo } from "@/lib/api";
 import { money, WEEKDAYS_PT } from "@/lib/format";
+import { LogoLockup } from "@/components/logo";
 
 export const revalidate = 300;
 
@@ -43,7 +44,7 @@ export default async function HomePage() {
     return (
       <main className="mx-auto flex min-h-[80dvh] w-full max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
         <h1 className="font-display text-3xl font-semibold">Taylor &amp; Thedy</h1>
-        <p className="text-creme-suave">
+        <p className="text-prata-suave">
           Não foi possível carregar as informações agora. Tente novamente em
           instantes.
         </p>
@@ -62,29 +63,30 @@ export default async function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd(info, siteUrl)) }}
       />
 
-      {/* Hero: o wordmark é a tese — a casa fala primeiro. */}
-      <header className="pt-14 pb-10 text-center">
+      {/* Hero: a marca da fachada fala primeiro (lockup recriado em SVG). */}
+      <header className="pt-12 pb-10 text-center">
         {info.public_info.logo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={info.public_info.logo_url}
             alt={info.name}
-            className="mx-auto mb-4 h-20 w-auto"
+            className="mx-auto mb-4 h-24 w-auto"
           />
-        ) : null}
-        <h1 className="font-display text-[2.75rem] leading-none font-semibold tracking-tight">
-          Taylor <span className="text-ambar italic">&amp;</span> Thedy
-        </h1>
-        <p className="mt-3 text-sm uppercase tracking-[0.25em] text-bronze">
+        ) : (
+          <h1 className="flex justify-center">
+            <LogoLockup width={320} />
+          </h1>
+        )}
+        <p className="mt-4 text-sm uppercase tracking-[0.25em] text-cinza">
           Barbearia · Palmas/TO
         </p>
         <Link
           href="/agendar"
-          className="mt-8 inline-block w-full rounded-xl bg-ambar px-6 py-4 text-center text-lg font-semibold text-carvao transition-colors hover:bg-ambar-escuro"
+          className="mt-8 inline-block w-full rounded-xl bg-destaque px-6 py-4 text-center text-lg font-semibold text-grafite transition-colors hover:bg-destaque-escuro"
         >
           Agendar horário
         </Link>
-        <p className="mt-3 text-sm text-creme-suave">
+        <p className="mt-3 text-sm text-prata-suave">
           <Link href="/meus-agendamentos" className="underline underline-offset-4">
             Ver meus agendamentos
           </Link>
@@ -97,14 +99,14 @@ export default async function HomePage() {
         <h2 id="servicos" className="font-display text-2xl font-semibold">
           Serviços
         </h2>
-        <ul className="mt-4 divide-y divide-couro-claro">
+        <ul className="mt-4 divide-y divide-aco-claro">
           {info.services.map((s) => (
             <li key={s.id} className="flex items-baseline justify-between gap-4 py-3">
               <div>
                 <p className="font-medium">{s.name}</p>
-                <p className="text-sm text-bronze">{s.duration_min} min</p>
+                <p className="text-sm text-cinza">{s.duration_min} min</p>
               </div>
-              <p className="font-display text-lg text-ambar tnum">{money(s.price)}</p>
+              <p className="font-display text-lg text-destaque tnum">{money(s.price)}</p>
             </li>
           ))}
         </ul>
@@ -120,18 +122,18 @@ export default async function HomePage() {
             {info.professionals.map((p) => (
               <li
                 key={p.id}
-                className="flex items-center gap-3 rounded-xl bg-couro px-4 py-3"
+                className="flex items-center gap-3 rounded-xl bg-aco px-4 py-3"
               >
                 <span
                   aria-hidden
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-couro-claro font-display font-semibold text-ambar"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-aco-claro font-display font-semibold text-destaque"
                 >
                   {p.name.charAt(0)}
                 </span>
                 <span>
                   <span className="block font-medium">{p.name}</span>
                   {p.specialty && (
-                    <span className="block text-xs text-bronze">{p.specialty}</span>
+                    <span className="block text-xs text-cinza">{p.specialty}</span>
                   )}
                 </span>
               </li>
@@ -149,8 +151,8 @@ export default async function HomePage() {
           <ul className="mt-4 space-y-1 text-sm">
             {WEEKDAYS_PT.map((label, weekday) => (
               <li key={weekday} className="flex justify-between py-1">
-                <span className={hours.has(weekday) ? "" : "text-bronze"}>{label}</span>
-                <span className="tnum text-creme-suave">
+                <span className={hours.has(weekday) ? "" : "text-cinza"}>{label}</span>
+                <span className="tnum text-prata-suave">
                   {hours.get(weekday)?.join(" · ") ?? "Fechado"}
                 </span>
               </li>
@@ -163,12 +165,12 @@ export default async function HomePage() {
       <footer className="mt-10">
         <div className="stripe mb-6" aria-hidden />
         {info.public_info.address && (
-          <p className="text-sm text-creme-suave">{info.public_info.address}</p>
+          <p className="text-sm text-prata-suave">{info.public_info.address}</p>
         )}
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
           {wa && (
             <a
-              className="rounded-lg bg-couro px-4 py-2 font-medium text-verde"
+              className="rounded-lg bg-aco px-4 py-2 font-medium text-verde"
               href={`https://wa.me/${wa}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -178,7 +180,7 @@ export default async function HomePage() {
           )}
           {info.public_info.instagram && (
             <a
-              className="rounded-lg bg-couro px-4 py-2 font-medium"
+              className="rounded-lg bg-aco px-4 py-2 font-medium"
               href={`https://instagram.com/${info.public_info.instagram.replace("@", "")}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -188,7 +190,7 @@ export default async function HomePage() {
           )}
           {info.public_info.phone && (
             <a
-              className="rounded-lg bg-couro px-4 py-2 font-medium"
+              className="rounded-lg bg-aco px-4 py-2 font-medium"
               href={`tel:${info.public_info.phone.replace(/\D/g, "")}`}
             >
               Ligar
