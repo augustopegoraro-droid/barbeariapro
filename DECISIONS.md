@@ -2213,7 +2213,7 @@ D-49); "meus dispositivos"; fidelidade/assinatura no site (v2); `public_info.log
 precedência sobre o lockup SVG se um arquivo oficial de logo for fornecido; regras de cancelamento
 configuráveis (fixo 2h).
 
-### D-80 — Hero cinematográfico com vídeo de drone na home do site público — 2026-07-17 (implementado, não deployado)
+### D-80 — Hero cinematográfico com vídeo de drone na home do site público — 2026-07-17/18 (✅ DEPLOYADO em prod 2026-07-20)
 
 **Contexto:** a home do site público (D-79) abria com o lockup SVG estático. O dono pediu um **hero
 cinematográfico** com o vídeo de drone da barbearia em tela cheia, estilo site premium 2030 — sem sacrificar
@@ -2270,8 +2270,15 @@ inalterados.
 **Validação:** `tsc --noEmit` limpo, `next build` OK (home estática, revalidate 5m), SSR renderiza o hero +
 `<source src="/hero-drone.mp4">` + poster + `.cta-agendar` + logo, assets servidos (vídeo 2,5 MB / logo webp
 94 KB / poster ~100 KB). Preview visual do hero (logo + botão sobre o frame do vídeo) renderizado por PIL em
-viewport iPhone. **Pendente:** validação visual/scroll num celular real (a extensão do Chrome não conectou nesta
-sessão — abrir a home no aparelho) e **deploy** (rebuild do serviço `public` na VM; sem migration).
+viewport iPhone.
+
+**✅ Deploy em prod 2026-07-20** (commit `e29a9d6`, molde D-79 — `barbearia-public/` é pasta no repo do backend,
+não submódulo): push para o GitHub → na VM `sudo git pull origin main` (o `.git` é do root) → rebuild
+`sudo docker compose -f docker-compose.app.yml up -d --build public` (backend recriado junto e voltou healthy;
+sem migration). **Smoke OK:** container `public` healthy; interno `:3200` home 200 + vídeo 2,6 MB + logo 96 KB;
+**apex `https://taylorethedy.com` 200** servindo `hero-drone.mp4` (`video/mp4`) + `logo-lockup.webp`
+(`image/webp`) + `.cta-agendar` + wrapper de scrub no markup. **Pendente:** só validação visual/scroll num
+celular real (a extensão do Chrome não conectou nesta sessão — abrir a home no aparelho).
 
 ## Dívida técnica conhecida (não resolver sem discussão)
 

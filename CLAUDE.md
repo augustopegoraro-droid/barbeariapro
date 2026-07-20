@@ -547,7 +547,8 @@ que ela mesma criou** (`created_by_client_session_id`); `verified_at` reservado 
 API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs novos na VM: `PUBLIC_COOKIE_DOMAIN`,
 `PUBLIC_API_URL`, `PUBLIC_TENANT_SLUG=app`, `PUBLIC_SITE_URL`. Pendências: validação visual mobile real, OTP,
 "meus dispositivos", fidelidade no site, logo real (lê `public_info.logo_url` quando existir). Ver D-79.
-> **Hero cinematográfico com vídeo de drone (D-80, 2026-07-17/18 — implementado, não deployado):** a home abre
+> **Hero cinematográfico com vídeo de drone (D-80, 2026-07-17/18 — ✅ DEPLOYADO em prod 2026-07-20, apex
+> `taylorethedy.com`, commit `e29a9d6`):** a home abre
 > com `components/hero-cinematic.tsx` (client) — vídeo de drone da barbearia em tela cheia com **scroll-scrubbing**
 > (o vídeo "passa"/avança amarrado ao scroll via `currentTime`; wrapper `h-[200svh]` + camada `sticky h-[100svh]`;
 > rAF sem lib; destrava iOS no 1º toque; respeita `prefers-reduced-motion`), **CTA "Agendar horário" premium**
@@ -559,7 +560,8 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 > (`assets/images/taylor_thedy_logo.png`) por recorte → correção de perspectiva (warp PIL) → remoção do fundo
 > marinho (blue-key) → `public/logo-lockup.webp` (94 KB, transparente, cromado); `hero-cinematic.tsx` usa
 > `<img src={logoUrl || "/logo-lockup.webp"}>` (o SVG `LogoLockup`/Optima do D-79 fica órfão). Tema grafite fixo.
-> Falta deploy (rebuild do serviço `public`, sem migration) + validação visual mobile. Ver D-80.
+> Deployado (rebuild do serviço `public`, sem migration; backend recriado junto e voltou healthy). Falta só
+> validação visual/scroll num celular real. Ver D-80.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
