@@ -547,6 +547,19 @@ que ela mesma criou** (`created_by_client_session_id`); `verified_at` reservado 
 API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs novos na VM: `PUBLIC_COOKIE_DOMAIN`,
 `PUBLIC_API_URL`, `PUBLIC_TENANT_SLUG=app`, `PUBLIC_SITE_URL`. Pendências: validação visual mobile real, OTP,
 "meus dispositivos", fidelidade no site, logo real (lê `public_info.logo_url` quando existir). Ver D-79.
+> **Hero cinematográfico com vídeo de drone (D-80, 2026-07-17/18 — implementado, não deployado):** a home abre
+> com `components/hero-cinematic.tsx` (client) — vídeo de drone da barbearia em tela cheia com **scroll-scrubbing**
+> (o vídeo "passa"/avança amarrado ao scroll via `currentTime`; wrapper `h-[200svh]` + camada `sticky h-[100svh]`;
+> rAF sem lib; destrava iOS no 1º toque; respeita `prefers-reduced-motion`), **CTA "Agendar horário" premium**
+> (`.cta-agendar` no `globals.css`: gradiente metálico prata escovada + glow pulsante + facho de luz + seta) na
+> **faixa do polegar** durante todo o hero (conversão em 1º lugar; Serviços logo abaixo). Vídeo otimizado por
+> ffmpeg do fonte 4K/1,1 GB (`VideoTa&TheDRONE.mp4`, a partir de 2:50, 14s sem áudio, 1280×720, **keyframes
+> densos `-g 12`** p/ scrub fluido) → `public/hero-drone.mp4` **2,5 MB** + `public/hero-poster.jpg` ~100 KB
+> (versionados; fonte cru no `.gitignore`). **Logo do topo = fachada real:** extraída do print oficial
+> (`assets/images/taylor_thedy_logo.png`) por recorte → correção de perspectiva (warp PIL) → remoção do fundo
+> marinho (blue-key) → `public/logo-lockup.webp` (94 KB, transparente, cromado); `hero-cinematic.tsx` usa
+> `<img src={logoUrl || "/logo-lockup.webp"}>` (o SVG `LogoLockup`/Optima do D-79 fica órfão). Tema grafite fixo.
+> Falta deploy (rebuild do serviço `public`, sem migration) + validação visual mobile. Ver D-80.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

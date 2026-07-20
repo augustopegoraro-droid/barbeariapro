@@ -2213,6 +2213,66 @@ D-49); "meus dispositivos"; fidelidade/assinatura no site (v2); `public_info.log
 precedência sobre o lockup SVG se um arquivo oficial de logo for fornecido; regras de cancelamento
 configuráveis (fixo 2h).
 
+### D-80 — Hero cinematográfico com vídeo de drone na home do site público — 2026-07-17 (implementado, não deployado)
+
+**Contexto:** a home do site público (D-79) abria com o lockup SVG estático. O dono pediu um **hero
+cinematográfico** com o vídeo de drone da barbearia em tela cheia, estilo site premium 2030 — sem sacrificar
+a conversão (o CTA "Agendar horário" continua sendo o 1º alvo do polegar no mobile).
+
+**Otimização do vídeo (ffmpeg, instalado via brew):** o fonte `barbearia-public/VideoTa&TheDRONE.mp4` é 4K
+(3840×2160), 30fps, ~4min, 32 Mbps, **1,1 GB**. O dono indicou que o melhor trecho começa em **2:50**. Extraído
+com `-ss 170 -t 14 -an` (14s, **sem áudio**), `scale=1280:-2:flags=lanczos,fps=24`, `libx264 -profile:v main
+-crf 25 -preset slow -pix_fmt yuv420p -movflags +faststart` → **`public/hero-drone.mp4` = 1,4 MB** (~820 kb/s),
+dentro do alvo ~2-3 MB e leve para 4G/WhatsApp. Poster de capa do frame ~2:52 →
+**`public/hero-poster.jpg` = ~100 KB** (`-frames:v 1 -q:v 4`). **`.gitignore` do app** passou a ignorar o
+fonte cru (`VideoTa&TheDRONE.mp4`, `*.source.mp4`, `.DS_Store`); o otimizado + poster **são versionados**
+(vivem em `public/`, deploy junto no `git pull`).
+
+**Componente `components/hero-cinematic.tsx` (client) — SCROLL-SCRUBBING:** o efeito evoluiu do "afundar" para
+**scrubbing** a pedido do dono ("passar o vídeo ao rolar"): o vídeo **não toca sozinho** — o `currentTime` é
+amarrado ao scroll (rAF + listener `passive`, sem lib, sem re-render). Estrutura = wrapper alto (`h-[200svh]`)
+com camada **`sticky top-0 h-[100svh]`**; o excedente de altura é o "trilho" que varre a timeline. `video`
+`muted playsInline preload="auto"` + `poster` (capa antes de carregar), sem `autoplay`/`loop`. **Destrava iOS**
+no 1º toque/scroll (`play()→pause()`, necessário para o seek fluir no Safari). No fim do scrub o véu grafite
+escurece um toque e a dica "Role para ver" some; a marca faz leve parallax. **Respeita `prefers-reduced-motion`**
+(scrub desligado → 1º quadro estático). O app público tem **tema grafite fixo** (não o toggle do admin) — só os
+tokens existentes. **Vídeo reencodado com keyframes densos** (`-g 12 -keyint_min 12 -sc_threshold 0`, crf 26 →
+**2,5 MB**) para o seek ficar fluido; keyframe esparso trava o scrub.
+
+**CTA "Agendar horário" premium (`.cta-agendar` em `globals.css`):** pílula com **gradiente metálico prata
+escovada** (a cara da placa), brilho superior (`inset`), **glow pulsante** (`@keyframes cta-glow`) que chama o
+olhar, **facho de luz** varrendo o botão (`@keyframes cta-sheen`), **seta →** que desliza no `group-hover` e
+micro-interação no toque (`active:scale`). As animações são desligadas por `prefers-reduced-motion` (media query
+global já existente).
+
+**Conversão preservada:** com o `sticky`, o CTA fica na **faixa do polegar durante todo o hero**
+(`pb-[calc(env(safe-area-inset-bottom)+2rem)]`), sempre visível; a seção de Serviços (que inicia o fluxo) vem
+logo abaixo do wrapper.
+
+**Logo fiel à fachada (2026-07-18):** o dono pediu a logo do topo **igual à fachada do vídeo e do print**
+(`assets/images/taylor_thedy_logo.png` — placa marinho com "Taylor" + "T" monumental + "hedy" cromado 3D +
+"RENOVE SEU ESTILO", em **letra caligráfica**, que a versão SVG em Optima [D-79] não reproduzia). Em vez de
+revetorizar à mão (tentado e reprovado no D-79), a logo foi **extraída da própria arte**: recorte do print →
+**correção de perspectiva** (warp 4-pontos via PIL, solver Gaussiano sem numpy) → **remoção do fundo marinho**
+por *blue-key* (`b−(r+g)/2`, letras cromadas são neutras/blue≈0, marinho blue≥21) + despill + curva de alpha →
+**`public/logo-lockup.webp` (94 KB, 1000×472, transparente)**. `hero-cinematic.tsx` usa `<img src={logoUrl ||
+"/logo-lockup.webp"}>` (o `logo_url` do org mantém precedência — regra D-79); `LogoLockup`/`logo-paths.ts` (SVG
+Optima/Didot) ficam órfãos mas preservados. Se o dono conseguir a arte vetorial original do designer, trocar o
+webp por ela.
+
+**`app/page.tsx`:** o hero saiu do container `max-w-md` (agora `<HeroCinematic/>` full-bleed + `<main>` com o
+resto); imports `Link`/`LogoLockup` removidos (migraram para o componente).
+
+**Otimização do vídeo revisada para o scrub:** o alvo subiu para **2,5 MB** (crf 26, `-g 12`) — keyframes densos
+são o que torna o scrubbing fluido (com `-g 6` deu 4,4 MB, além do alvo). Fonte, trecho (2:50) e "sem áudio"
+inalterados.
+
+**Validação:** `tsc --noEmit` limpo, `next build` OK (home estática, revalidate 5m), SSR renderiza o hero +
+`<source src="/hero-drone.mp4">` + poster + `.cta-agendar` + logo, assets servidos (vídeo 2,5 MB / logo webp
+94 KB / poster ~100 KB). Preview visual do hero (logo + botão sobre o frame do vídeo) renderizado por PIL em
+viewport iPhone. **Pendente:** validação visual/scroll num celular real (a extensão do Chrome não conectou nesta
+sessão — abrir a home no aparelho) e **deploy** (rebuild do serviço `public` na VM; sem migration).
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

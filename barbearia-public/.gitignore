@@ -5,3 +5,9 @@ out/
 !.env.example
 *.tsbuildinfo
 next-env.d.ts
+
+# Vídeo-fonte cru do hero (4K, ~1GB) — não versionar. O otimizado (~1,4MB,
+# gerado por ffmpeg) vive em public/hero-drone.mp4 e ESSE sim é commitado.
+VideoTa&TheDRONE.mp4
+*.source.mp4
+.DS_Store

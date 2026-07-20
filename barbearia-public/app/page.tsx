@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { fetchInfo, type PublicInfo } from "@/lib/api";
 import { money, WEEKDAYS_PT } from "@/lib/format";
-import { LogoLockup } from "@/components/logo";
+import { HeroCinematic } from "@/components/hero-cinematic";
 
 export const revalidate = 300;
 
@@ -57,44 +56,18 @@ export default async function HomePage() {
   const wa = info.public_info.whatsapp?.replace(/\D/g, "");
 
   return (
-    <main className="mx-auto w-full max-w-md px-6 pb-16">
+    <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd(info, siteUrl)) }}
       />
 
-      {/* Hero: a marca da fachada fala primeiro (lockup recriado em SVG). */}
-      <header className="pt-12 pb-10 text-center">
-        {info.public_info.logo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={info.public_info.logo_url}
-            alt={info.name}
-            className="mx-auto mb-4 h-24 w-auto"
-          />
-        ) : (
-          <h1 className="flex justify-center">
-            <LogoLockup width={320} />
-          </h1>
-        )}
-        <p className="mt-4 text-sm uppercase tracking-[0.25em] text-cinza">
-          Barbearia · Palmas/TO
-        </p>
-        <Link
-          href="/agendar"
-          className="mt-8 inline-block w-full rounded-xl bg-destaque px-6 py-4 text-center text-lg font-semibold text-grafite transition-colors hover:bg-destaque-escuro"
-        >
-          Agendar horário
-        </Link>
-        <p className="mt-3 text-sm text-prata-suave">
-          <Link href="/meus-agendamentos" className="underline underline-offset-4">
-            Ver meus agendamentos
-          </Link>
-        </p>
-      </header>
+      {/* Hero cinematográfico: vídeo de drone em tela cheia + lockup + CTA. */}
+      <HeroCinematic name={info.name} logoUrl={info.public_info.logo_url} />
 
+      <main className="mx-auto w-full max-w-md px-6 pb-16">
       {/* Serviços */}
-      <section aria-labelledby="servicos">
+      <section aria-labelledby="servicos" className="pt-12">
         <div className="stripe mb-6" aria-hidden />
         <h2 id="servicos" className="font-display text-2xl font-semibold">
           Serviços
@@ -198,6 +171,7 @@ export default async function HomePage() {
           )}
         </div>
       </footer>
-    </main>
+      </main>
+    </>
   );
 }
