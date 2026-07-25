@@ -2370,8 +2370,22 @@ por um ciclo até o service worker trocar (`v4-landing-ouro-2026-07-24`).
 **Contraste medido** (não estimado) em todos os pares de token: marfim 17,2:1 · tinta-suave 9,1:1 ·
 tinta-fraca 6,0:1 · ouro 8,7:1 sobre o fundo; tinta-invertida sobre ouro 8,3:1. Tudo acima de AA; a maioria AAA.
 
-**Pendências:** validação num celular real (headless não substitui o polegar); mais fotos internas; tabs de
-categoria; reagendar com pré-seleção (bloqueado pela API, que devolve nomes e não ids).
+**Botão de Instagram + achado do `public_info` vazio — 2026-07-25:** ao adicionar o Instagram
+(https://www.instagram.com/taylorethedy, pedido do dono) descobriu-se que **`GET /public/app/info` devolve
+`public_info: {}` em produção** — a org 1 nunca preencheu o cadastro em `/admin/empresa`. Efeito: desde o D-79
+o site no ar **não mostrava WhatsApp, telefone nem Instagram** (o bloco "Fale com a gente" renderizava vazio,
+pois cada link era condicional) e o endereço só aparecia por causa da constante local do D-82.
+
+Solução em duas camadas: `lib/contato.ts` centraliza os contatos **verificados** (letreiro da fachada real +
+confirmação do dono) como *fallback*, e a API vence sozinha assim que o gestor preencher o cadastro — sem
+mexer em código. `components/ui/contato-botoes.tsx` (WhatsApp / Instagram / telefone, ícones SVG inline,
+nível 3 do §4: contorno que vira ouro) substitui a lista de links condicionais no card "Fale com a gente";
+o rodapé ganhou Instagram ao lado do WhatsApp. **Ação recomendada ao dono: preencher `/admin/empresa`** para
+o site parar de depender do fallback.
+
+**Pendências:** validação num celular real (headless não substitui o polegar); preencher `public_info` no
+cadastro da empresa; mais fotos internas; tabs de categoria; reagendar com pré-seleção (bloqueado pela API,
+que devolve nomes e não ids).
 
 ---
 

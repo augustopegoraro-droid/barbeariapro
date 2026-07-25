@@ -12,14 +12,11 @@ import { Wordmark } from "@/components/wordmark";
 import { ServiceLinkRow } from "@/components/ui/service-row";
 import { ProfessionalAvatar } from "@/components/ui/professional";
 import { EnderecoLegenda, mapsUrl } from "@/components/ui/endereco";
+import { ContatoBotoes, IconeInstagram } from "@/components/ui/contato-botoes";
+import { resolverContato } from "@/lib/contato";
 import StickyCta from "@/components/sticky-cta";
 
 export const revalidate = 300;
-
-/* Endereço completo da ficha do Google (a API só devolve o que o gestor
-   cadastrou; este é o fallback quando `public_info.address` está vazio). */
-const ENDERECO_GOOGLE =
-  "LO 01 - Q. 103 Sul, Rua SO 11, 60 - Plano Diretor Sul, Palmas - TO, 77015-028";
 
 /* schema.org exige os dias em inglês — mandar "Segunda" faz o Google
    descartar o horário inteiro (era o comportamento até 2026-07-25). */
@@ -152,8 +149,8 @@ export default async function HomePage() {
   const hours = groupedHours(info);
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ?? "https://taylorethedy.com";
-  const endereco = info.public_info.address || ENDERECO_GOOGLE;
-  const wa = info.public_info.whatsapp?.replace(/\D/g, "");
+  const contato = resolverContato(info);
+  const endereco = contato.address;
   const grupos = porCategoria(info.services);
 
   return (
@@ -339,36 +336,7 @@ export default async function HomePage() {
               </a>
 
               <h3 className="rotulo mt-6 text-ouro">Fale com a gente</h3>
-              <div className="mt-3 flex flex-col gap-1 text-sm">
-                {wa && (
-                  <a
-                    href={`https://wa.me/${wa}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
-                  >
-                    WhatsApp {info.public_info.whatsapp} →
-                  </a>
-                )}
-                {info.public_info.phone && (
-                  <a
-                    href={`tel:${info.public_info.phone.replace(/\D/g, "")}`}
-                    className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
-                  >
-                    Fixo {info.public_info.phone} →
-                  </a>
-                )}
-                {info.public_info.instagram && (
-                  <a
-                    href={`https://instagram.com/${info.public_info.instagram.replace("@", "")}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
-                  >
-                    Instagram {info.public_info.instagram} →
-                  </a>
-                )}
-              </div>
+              <ContatoBotoes contato={contato} className="mt-3" />
             </div>
           </div>
         </section>
@@ -417,16 +385,23 @@ export default async function HomePage() {
             >
               Meus agendamentos
             </Link>
-            {wa && (
-              <a
-                href={`https://wa.me/${wa}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
-              >
-                WhatsApp
-              </a>
-            )}
+            <a
+              href={`https://wa.me/${contato.whatsappDigits}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+            >
+              WhatsApp
+            </a>
+            <a
+              href={contato.instagramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center gap-1.5 text-tinta-suave transition-colors hover:text-marfim"
+            >
+              <IconeInstagram />
+              Instagram
+            </a>
           </div>
         </div>
       </footer>
