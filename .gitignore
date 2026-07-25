@@ -66,3 +66,6 @@ backup_*.sql
 # usam $env.BOT_API_KEY). Apenas exports ad-hoc e backups ficam fora do git.
 workflows-*.json
 n8n-export*.json
+
+# artefatos do graphify (gerados localmente)
+graphify-out/
