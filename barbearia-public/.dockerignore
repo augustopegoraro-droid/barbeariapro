@@ -1,0 +1,11 @@
+# Corta o context de build (o COPY . . não deve arrastar 1GB de vídeo cru).
+node_modules
+.next
+out
+.git
+.DS_Store
+*.tsbuildinfo
+VideoTa&TheDRONE.mp4
+*.source.mp4
+.env*
+!.env.example

@@ -558,10 +558,72 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 > densos `-g 12`** p/ scrub fluido) → `public/hero-drone.mp4` **2,5 MB** + `public/hero-poster.jpg` ~100 KB
 > (versionados; fonte cru no `.gitignore`). **Logo do topo = fachada real:** extraída do print oficial
 > (`assets/images/taylor_thedy_logo.png`) por recorte → correção de perspectiva (warp PIL) → remoção do fundo
-> marinho (blue-key) → `public/logo-lockup.webp` (94 KB, transparente, cromado); `hero-cinematic.tsx` usa
+> marinho → `public/logo-lockup.webp` (transparente, cromado); `hero-cinematic.tsx` usa
 > `<img src={logoUrl || "/logo-lockup.webp"}>` (o SVG `LogoLockup`/Optima do D-79 fica órfão). Tema grafite fixo.
+> **Re-extração (2026-07-21):** a 1ª extração deixava halos brancos + risco preto e letras distorcidas ("não
+> está igual à fachada"). Refeita: warp de perspectiva do campo navy (4 cantos → retângulo upright) + matte
+> por **neutralidade (blue-chroma) × brilho** em vez de blue-key simples + despill azul + feather 0.6px +
+> padding de respiro. Resultado limpo/fiel (77 KB, mesmo nome → sem mudança de código).
 > Deployado (rebuild do serviço `public`, sem migration; backend recriado junto e voltou healthy). Falta só
 > validação visual/scroll num celular real. Ver D-80.
+> **⚠️ A "placa do t" NUNCA EXISTIU — premissa falsa, encerrada em 2026-07-24.** Várias sessões (2026-07-21
+> a 24) trabalharam sobre a ideia de que a fachada teria uma *placa prata com um "t" escuro vazado*, e foram
+> empilhando edições raster (aumentar a placa por replicação de borda, carvar um "lóbulo" no t, moldura fina,
+> potrace) que só degradaram o asset — a versão local chegou a ficar com a placa quebrada, o "t" borrado e
+> resíduo prata solto. **Zoom direto no original (`assets/images/taylor_thedy_logo.png`, região x 424-604 /
+> y 250-497) prova que não há placa alguma:** o que foi lido como "caixa prata" é o corpo do **"T" maiúsculo
+> serifado (Didot) de _Thedy_**, cromado e em relevo 3D, aplicado direto sobre o painel navy; o "t escuro"
+> era o próprio painel visto entre a haste e a barra. **Não retomar essa linha.** As edições foram revertidas
+> (`git checkout` do `logo-lockup.webp`) — o lockup vigente volta a ser a extração do D-80 (1000×472) e o
+> `hero-plate.tsx` volta a `width/height = 1000/472`.
+> **Símbolo "T" isolado (2026-07-24, local/não deployado):** com a fachada lida corretamente, o "T" foi
+> extraído de verdade → `barbearia-public/public/symbol-t.webp` (513×600, ~21 KB, alfa). Pipeline:
+> **medição da geometria real** (haste perfeitamente vertical em x≈499-523; horizontais convergindo à
+> ESQUERDA — perspectiva de plano, sem rotação de câmera: topo da barra slope −0,237, base da serifa
+> −0,148) → **homografia** (`Image.QUAD`, supersampling 3×) que aprumia a letra mantendo as verticais →
+> **matte por neutralidade × brilho** (navy tem `b−r` alto, o cromado é neutro) + despill + feather →
+> **isolamento por componente conexa** (BFS a partir da haste) para descartar o "or" e o "he" vizinhos.
+> A extrusão 3D (sombra cinza colada à letra) é preservada de propósito — faz parte do letreiro real.
+> **Ícones PWA regenerados** com esse símbolo (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`:
+> quadrado navy `#1b2029` arredondado + T centralizado a 56%), substituindo a arte antiga que carregava
+> justamente a "placa com t" inexistente. `sw.js` → `SW_VERSION = "v3-simbolo-t-2026-07-24"`.
+> `public/icon.svg` e `public/logo-mark.svg` continuam com a arte antiga, mas **não são referenciados por
+> nada** (o layout só declara `manifest`) — limpar quando conveniente.
+>
+> **Redesign UX/UI do site público (D-81, 2026-07-22 — implementado, NÃO deployado):** rodada por equipe de
+> agentes (UX + UI + Front-end); specs versionadas em **`docs/site-publico/`** (`UX_PLAN.md`, `UI_SPEC.md`,
+> `FRONTEND_AUDIT.md` — fonte de verdade de UX/UI do site daqui em diante). P0 completo: bug do 409 (erro
+> invisível ao voltar ao passo 3) corrigido; serviços da home clicáveis com pré-seleção `?servico=`; barra fixa
+> de conversão pós-hero (`sticky-cta.tsx`); confirmação de cancelamento (bottom sheet) + toast; dias fechados
+> desabilitados na régua via `info.hours`; alvos ≥44px. Fundação: `booking-flow.tsx` decomposto em
+> `components/booking/*` + primitivos `components/ui/*`; tokens novos aditivos no `globals.css`. Débitos: hero
+> `preload="metadata"`, ARIA/foco, tenant slug fallback unificado em `app`, `.dockerignore`, código morto do
+> D-79 removido (`logo.tsx`/`logo-paths.ts`). Hero e `.cta-agendar` intocados; backend intocado. Build+tsc
+> limpos. **Pendente: commit + deploy (rebuild `public`) + validação mobile real.** P1/P2 do UX_PLAN ficam para
+> próxima rodada; "reagendar com pré-seleção" exige backend (API devolve nomes, não ids). Ver D-81.
+> **Fase 3 do D-81 (mesmo dia): pivô do dono — REVOGA o hero de vídeo do D-80 e o tema grafite.** Tema claro
+> "A placa à luz do dia" (`docs/site-publico/UI_SPEC_V2.md`): página clara `#f5f6f8`, navy como tinta/assinatura,
+> logo cromada só na faixa navy do topo (`components/hero-plate.tsx`, server/zero JS, headline "Renove seu
+> estilo."), `.cta-agendar` = bloco navy metálico. `hero-cinematic.tsx` removido, `public/hero-drone.mp4`
+> deletado do repo, `hero-poster.jpg` vira cartão-postal, SW com bump de versão. Fluxos/microcopy intactos.
+> Ícones PWA ainda com arte antiga. Dev na rede local: `DEV_API_PROXY` (rewrite condicional no `next.config.ts`)
+> + `API_URL_INTERNAL` + `NEXT_PUBLIC_API_URL=""` + `NEXT_PUBLIC_TENANT_SLUG=taylor` (dev DB usa `taylor`).
+>
+> **Landing page escura e dourada + a marca REAL da fachada (D-82, 2026-07-24 — implementado, NÃO deployado;
+> REVOGA o tema claro do D-81/Fase 3):** ⚠️ **`assets/images/taylor_thedy_logo.png` é um MOCKUP GERADO POR IA,
+> não é a marca** — ver `assets/images/README.md`. A marca real está em `assets/images/fachada-real.png` (foto do
+> letreiro em Palmas) e a placa marfim com o **"t" vazado** já extraída com alfa em `public/t-fachada.png`
+> (746×1334). O `logo-lockup.webp` que está **em produção** deriva do mockup → o site publicado exibe uma marca
+> que não é a da barbearia; o deploy do D-82 corrige isso. Fonte de verdade visual agora é
+> **`docs/site-publico/UI_SPEC_V3.md`** ("A placa à noite, em ouro"): fundo `#0a0b0d`, marfim `#f2efe9`,
+> **ouro `#c9a86a` como ÚNICA cor de ação**, Cormorant Garamond + Jost. O site inteiro (home, `/agendar`,
+> `/meus-agendamentos`) é uma landing só: header fixo com CTA sempre visível, hero marca→promessa→prova→ação,
+> serviços por categoria que já pré-selecionam, "Nossa casa" com fotos reais, depoimentos **verbatim** do Google
+> (`components/depoimentos.tsx`; 4,8/400 avaliações, fonte `Avaliaçoesgoogle.pdf`), equipe, horários, fechamento.
+> `.cta-agendar` mantém anatomia/timings congelados — só a paleta virou ouro. Ícones PWA/manifest refeitos com a
+> placa real; `sw.js` → `v4-landing-ouro-2026-07-24`. Removidos os assets da linhagem errada (`logo-lockup.webp`,
+> `symbol-t.webp`, `icon.svg`, `logo-mark.svg`) e o código morto (`hero-plate.tsx`, `logo.tsx`, `logo-paths.ts`).
+> `tsc` + `next build` limpos; validado por captura headless a 430×932 (sem transbordo). Ver D-82.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

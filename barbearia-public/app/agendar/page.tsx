@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { fetchInfo } from "@/lib/api";
-import BookingFlow from "@/components/booking-flow";
+import BookingFlow from "@/components/booking/booking-flow";
 
 export const revalidate = 60;
 
@@ -17,12 +17,12 @@ export default async function AgendarPage() {
   if (!info || info.services.length === 0) {
     return (
       <main className="mx-auto flex min-h-[80dvh] w-full max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
-        <h1 className="font-display text-2xl font-semibold">Agendamento indisponível</h1>
-        <p className="text-prata-suave">
+        <h1 className="font-display text-2xl">Agendamento indisponível</h1>
+        <p className="text-tinta-suave">
           Não conseguimos carregar a agenda agora. Tente de novo em instantes ou
           chame a gente no WhatsApp.
         </p>
-        <Link href="/" className="text-destaque underline underline-offset-4">
+        <Link href="/" className="text-ouro underline underline-offset-4">
           Voltar ao início
         </Link>
       </main>

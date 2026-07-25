@@ -38,6 +38,10 @@ export const localDayISO = (d: Date) => {
   return parts; // en-CA já sai YYYY-MM-DD
 };
 
+/** Dia da semana local (America/Sao_Paulo): 0=domingo … 6=sábado (contrato do backend). */
+export const localWeekday = (d: Date) =>
+  new Date(`${localDayISO(d)}T12:00:00`).getDay();
+
 export const WEEKDAYS_PT = [
   "Domingo",
   "Segunda",

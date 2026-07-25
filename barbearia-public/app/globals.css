@@ -1,41 +1,97 @@
 @import "tailwindcss";
 
-/* Tokens — identidade recriada da FACHADA real da Taylor & Thedy (D-79):
-   placa grafite-azulada, letras prata 3D, tipografia flareada (Tenor Sans ≈
-   estilo da placa) e slogan rounded ("Renove seu Estilo", Quicksand). */
+/* Tokens — UI_SPEC_V3 "A placa à noite, em ouro" (2026-07-24).
+   Direção aprovada pelo dono: a página inteira é escura e dourada, no estilo
+   landing page, com o agendamento como ação principal.
+
+   A marca vem da fachada REAL (assets/images/fachada-real.png): painel quase
+   preto, placa marfim com o "t" vazado, palavras em marfim. O ouro é o acento
+   de valor — só ele comanda ação; nenhum outro elemento compete com o CTA. */
 :root {
-  --grafite: #262c36;
-  --aco: #323a46;
-  --aco-claro: #3e4754;
-  --prata: #eceef1;
-  --prata-suave: #b4bcc8;
-  --cinza: #8792a1;
-  --destaque: #dfe3e9;
-  --destaque-escuro: #c3cad4;
+  /* Fundos em camadas — do painel da fachada ao card */
+  --fundo: #0a0b0d;
+  --superficie: #121316;
+  --superficie-2: #1a1c20;
+  --superficie-3: #24262b;
+
+  /* Texto — marfim da placa, em três pesos de presença */
+  --marfim: #f2efe9;
+  --tinta: var(--marfim);
+  --tinta-suave: #b4b0a8;
+  --tinta-fraca: #918d85;
+  /* Tinta escura para usar SOBRE o ouro (contraste AA) */
+  --tinta-invertida: #14120d;
+
+  /* Ouro — o único acento de ação */
+  --ouro: #c9a86a;
+  --ouro-profundo: #a8874a;
+  --ouro-claro: #e2c68f;
+
+  /* Bordas — fios de luz sobre o escuro, nunca linhas sólidas */
+  --borda-sutil: rgba(234, 230, 222, 0.09);
+  --borda: rgba(234, 230, 222, 0.16);
+  --borda-ativa: var(--ouro);
+
+  /* Estados funcionais — pares para fundo escuro */
   --verde: #4ade80;
   --vermelho: #f87171;
+  --ambar: #fbbf24;
+  --verde-tinta: #86efac;
+  --vermelho-tinta: #fca5a5;
+  --ambar-tinta: #fcd34d;
+  --verde-fundo: rgba(74, 222, 128, 0.12);
+  --vermelho-fundo: rgba(248, 113, 113, 0.12);
+  --ambar-fundo: rgba(251, 191, 36, 0.12);
+
+  /* Raios / movimento (congelados desde o v1) */
   --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-lg: 1rem;
+  --dur-rapida: 150ms;
+  --dur-media: 240ms;
+  --dur-lenta: 400ms;
+  --ease-padrao: cubic-bezier(0.2, 0, 0, 1);
+  --ease-saida: cubic-bezier(0, 0, 0.2, 1);
+
+  /* Sombras — no escuro elas afundam; a elevação vem do fio de luz superior */
+  --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.35);
+  --sombra-2: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --sombra-3: 0 18px 56px rgba(0, 0, 0, 0.6);
 }
 
 @theme inline {
-  --color-grafite: var(--grafite);
-  --color-aco: var(--aco);
-  --color-aco-claro: var(--aco-claro);
-  --color-prata: var(--prata);
-  --color-prata-suave: var(--prata-suave);
-  --color-cinza: var(--cinza);
-  --color-destaque: var(--destaque);
-  --color-destaque-escuro: var(--destaque-escuro);
+  --color-fundo: var(--fundo);
+  --color-superficie: var(--superficie);
+  --color-superficie-2: var(--superficie-2);
+  --color-superficie-3: var(--superficie-3);
+  --color-marfim: var(--marfim);
+  --color-tinta: var(--tinta);
+  --color-tinta-suave: var(--tinta-suave);
+  --color-tinta-fraca: var(--tinta-fraca);
+  --color-tinta-invertida: var(--tinta-invertida);
+  --color-ouro: var(--ouro);
+  --color-ouro-profundo: var(--ouro-profundo);
+  --color-ouro-claro: var(--ouro-claro);
+  --color-borda: var(--borda);
+  --color-borda-sutil: var(--borda-sutil);
+  --color-borda-ativa: var(--borda-ativa);
   --color-verde: var(--verde);
   --color-vermelho: var(--vermelho);
-  --font-display: var(--font-tenor);
-  --font-body: var(--font-quicksand);
+  --color-ambar: var(--ambar);
+  --color-verde-tinta: var(--verde-tinta);
+  --color-vermelho-tinta: var(--vermelho-tinta);
+  --color-ambar-tinta: var(--ambar-tinta);
+  --color-verde-fundo: var(--verde-fundo);
+  --color-vermelho-fundo: var(--vermelho-fundo);
+  --color-ambar-fundo: var(--ambar-fundo);
+  --font-display: var(--font-cormorant);
+  --font-body: var(--font-jost);
 }
 
 html {
-  background: var(--grafite);
-  color: var(--prata);
-  font-family: var(--font-quicksand), system-ui, sans-serif;
+  background: var(--fundo);
+  color: var(--tinta);
+  font-family: var(--font-jost), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -43,50 +99,62 @@ body {
   min-height: 100dvh;
 }
 
-/* Assinatura: a listra — agora em prata escovada sobre grafite (a placa).
-   Usada exatamente 3 vezes: topo da página, divisor de seção, passo ativo. */
-.stripe {
-  height: 4px;
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--prata) 0 10px,
-    var(--grafite) 10px 14px,
-    var(--cinza) 14px 24px,
-    var(--grafite) 24px 28px
-  );
-}
-
 .font-display {
-  font-family: var(--font-tenor), Georgia, serif;
+  font-family: var(--font-cormorant), Georgia, serif;
 }
 
 .tnum {
   font-variant-numeric: tabular-nums;
 }
 
-:focus-visible {
-  outline: 2px solid var(--prata);
-  outline-offset: 2px;
+::selection {
+  background: var(--ouro);
+  color: var(--tinta-invertida);
 }
 
-/* CTA "Agendar horário" — prata escovada da placa: gradiente metálico com brilho
-   superior, glow pulsante que chama o olhar e um facho de luz que varre o botão.
-   A conversão é a peça mais importante da home. */
+:focus-visible {
+  outline: 2px solid var(--ouro);
+  outline-offset: 3px;
+}
+
+/* Régua de seção — substitui a listra diagonal do tema claro. Um fio de ouro
+   curto antes do rótulo: a marca da seção, discreta e repetível. */
+.regua-secao {
+  display: inline-block;
+  width: 22px;
+  height: 1px;
+  background: var(--ouro);
+  vertical-align: middle;
+}
+
+/* Rótulo de seção — versalete espaçado, o ritmo tipográfico da landing.
+   Sem `color`: a cor vem da utilitária no call-site (ouro nas categorias de
+   serviço, tinta-suave nos rótulos de seção). Definir cor aqui venceria a
+   utilitária do Tailwind por ordem de cascata. */
+.rotulo {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* CTA "Agendar horário" — nível 1, exclusivo do hero e do fechamento.
+   Ouro sólido com facho e glow (mesma anatomia/timings congelados do v1:
+   180ms / 3,2s / 3,6s); só a paleta mudou de cromo para ouro. */
 .cta-agendar {
   position: relative;
   overflow: hidden;
   isolation: isolate;
   background: linear-gradient(
     180deg,
-    #ffffff 0%,
-    var(--prata) 20%,
-    var(--destaque) 58%,
-    var(--destaque-escuro) 100%
+    var(--ouro-claro) 0%,
+    var(--ouro) 55%,
+    var(--ouro-profundo) 100%
   );
-  color: var(--grafite);
+  color: var(--tinta-invertida);
   box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    0 10px 30px rgba(201, 168, 106, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   animation: cta-glow 3.2s ease-in-out infinite;
   transition:
     transform 0.18s ease,
@@ -94,13 +162,13 @@ body {
     filter 0.18s ease;
 }
 .cta-agendar:hover {
-  filter: brightness(1.04);
+  filter: brightness(1.06);
   transform: translateY(-1px);
 }
 .cta-agendar:active {
   transform: translateY(0) scale(0.985);
 }
-/* Facho de luz diagonal varrendo o botão. */
+/* Facho de luz diagonal — reflexo no metal, não flash. */
 .cta-agendar::after {
   content: "";
   position: absolute;
@@ -109,7 +177,7 @@ body {
   background: linear-gradient(
     75deg,
     transparent 32%,
-    rgba(255, 255, 255, 0.7) 50%,
+    rgba(255, 252, 244, 0.55) 50%,
     transparent 68%
   );
   transform: translateX(-130%);
@@ -121,15 +189,15 @@ body {
   0%,
   100% {
     box-shadow:
-      0 10px 30px rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 rgba(255, 255, 255, 0.8),
-      0 0 0 0 rgba(236, 238, 241, 0);
+      0 10px 30px rgba(201, 168, 106, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      0 0 0 0 rgba(201, 168, 106, 0);
   }
   50% {
     box-shadow:
-      0 12px 34px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      0 0 26px 2px rgba(236, 238, 241, 0.35);
+      0 12px 34px rgba(201, 168, 106, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45),
+      0 0 26px 2px rgba(201, 168, 106, 0.35);
   }
 }
 @keyframes cta-sheen {
@@ -140,6 +208,42 @@ body {
   100% {
     transform: translateX(230%);
   }
+}
+
+/* Entrada padrão de toast/sheet/passo (UI_SPEC §2.10/§4.1): fade + subida leve. */
+@keyframes entrar-de-baixo {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.anim-entrar {
+  animation: entrar-de-baixo var(--dur-media) var(--ease-padrao);
+}
+
+/* Entrada das seções da landing ao rolar (sem JS: só o primeiro paint). */
+@keyframes subir {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Trilho horizontal sem barra de rolagem visível (galeria/abas). */
+.trilho {
+  scrollbar-width: none;
+}
+.trilho::-webkit-scrollbar {
+  height: 0;
+  width: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

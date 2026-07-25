@@ -1,17 +1,39 @@
-import { fetchInfo, type PublicInfo } from "@/lib/api";
-import { money, WEEKDAYS_PT } from "@/lib/format";
-import { HeroCinematic } from "@/components/hero-cinematic";
+import Link from "next/link";
+import { fetchInfo, type PublicInfo, type PublicService } from "@/lib/api";
+import { WEEKDAYS_PT } from "@/lib/format";
+import { SiteHeader } from "@/components/site-header";
+import { Hero } from "@/components/hero";
+import {
+  Depoimentos,
+  NOTA_GOOGLE,
+  TOTAL_AVALIACOES,
+} from "@/components/depoimentos";
+import { Wordmark } from "@/components/wordmark";
+import { ServiceLinkRow } from "@/components/ui/service-row";
+import { ProfessionalAvatar } from "@/components/ui/professional";
+import { EnderecoLegenda, mapsUrl } from "@/components/ui/endereco";
+import StickyCta from "@/components/sticky-cta";
 
 export const revalidate = 300;
 
-function jsonLd(info: PublicInfo, siteUrl: string) {
+/* Endereço completo da ficha do Google (a API só devolve o que o gestor
+   cadastrou; este é o fallback quando `public_info.address` está vazio). */
+const ENDERECO_GOOGLE =
+  "LO 01 - Q. 103 Sul, Rua SO 11, 60 - Plano Diretor Sul, Palmas - TO, 77015-028";
+
+function jsonLd(info: PublicInfo, siteUrl: string, endereco: string) {
   return {
     "@context": "https://schema.org",
-    "@type": "LocalBusiness",
+    "@type": "HairSalon",
     name: info.name,
     url: siteUrl,
-    address: info.public_info.address || undefined,
+    address: endereco,
     telephone: info.public_info.phone || undefined,
+    aggregateRating: {
+      "@type": "AggregateRating",
+      ratingValue: "4.8",
+      reviewCount: TOTAL_AVALIACOES,
+    },
     openingHoursSpecification: info.hours.map((h) => ({
       "@type": "OpeningHoursSpecification",
       dayOfWeek: WEEKDAYS_PT[h.weekday],
@@ -31,6 +53,54 @@ function groupedHours(info: PublicInfo) {
   return byDay;
 }
 
+/** "9h–19h" — a faixa que cobre todos os dias abertos, para a régua do hero. */
+function faixaHorario(info: PublicInfo): string | null {
+  if (info.hours.length === 0) return null;
+  const hhmm = (t: string) => t.slice(0, 5);
+  const abre = info.hours.map((h) => hhmm(h.open_time)).sort()[0];
+  const fecha = info.hours
+    .map((h) => hhmm(h.close_time))
+    .sort()
+    .at(-1)!;
+  const enxuto = (t: string) =>
+    t.endsWith(":00") ? `${Number(t.slice(0, 2))}h` : t;
+  return `${enxuto(abre)}–${enxuto(fecha)}`;
+}
+
+function porCategoria(servicos: PublicService[]) {
+  const grupos = new Map<string, PublicService[]>();
+  for (const s of servicos) {
+    const chave = s.category?.trim() || "Serviços";
+    grupos.set(chave, [...(grupos.get(chave) ?? []), s]);
+  }
+  return [...grupos.entries()];
+}
+
+function TituloSecao({
+  rotulo,
+  titulo,
+  id,
+}: {
+  rotulo: string;
+  titulo: string;
+  id: string;
+}) {
+  return (
+    <>
+      <p className="flex items-center gap-3">
+        <span className="regua-secao" aria-hidden />
+        <span className="rotulo text-tinta-suave">{rotulo}</span>
+      </p>
+      <h2
+        id={id}
+        className="font-display mt-3 text-3xl leading-tight font-light text-marfim sm:text-4xl"
+      >
+        {titulo}
+      </h2>
+    </>
+  );
+}
+
 export default async function HomePage() {
   let info: PublicInfo | null = null;
   try {
@@ -41,137 +111,305 @@ export default async function HomePage() {
 
   if (!info) {
     return (
-      <main className="mx-auto flex min-h-[80dvh] w-full max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
-        <h1 className="font-display text-3xl font-semibold">Taylor &amp; Thedy</h1>
-        <p className="text-prata-suave">
+      <main className="mx-auto flex min-h-[80dvh] w-full max-w-md flex-col items-center justify-center gap-5 px-6 text-center">
+        <Wordmark fontSize={40} />
+        <p className="text-tinta-suave">
           Não foi possível carregar as informações agora. Tente novamente em
           instantes.
         </p>
+        <Link
+          href="/agendar"
+          className="cta-agendar inline-flex min-h-14 items-center justify-center rounded-full px-8 text-lg font-semibold"
+        >
+          Agendar horário
+        </Link>
       </main>
     );
   }
 
   const hours = groupedHours(info);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://taylorethedy.com";
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://taylorethedy.com";
+  const endereco = info.public_info.address || ENDERECO_GOOGLE;
   const wa = info.public_info.whatsapp?.replace(/\D/g, "");
+  const grupos = porCategoria(info.services);
 
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd(info, siteUrl)) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd(info, siteUrl, endereco)),
+        }}
       />
 
-      {/* Hero cinematográfico: vídeo de drone em tela cheia + lockup + CTA. */}
-      <HeroCinematic name={info.name} logoUrl={info.public_info.logo_url} />
+      <SiteHeader />
 
-      <main className="mx-auto w-full max-w-md px-6 pb-16">
-      {/* Serviços */}
-      <section aria-labelledby="servicos" className="pt-12">
-        <div className="stripe mb-6" aria-hidden />
-        <h2 id="servicos" className="font-display text-2xl font-semibold">
-          Serviços
-        </h2>
-        <ul className="mt-4 divide-y divide-aco-claro">
-          {info.services.map((s) => (
-            <li key={s.id} className="flex items-baseline justify-between gap-4 py-3">
-              <div>
-                <p className="font-medium">{s.name}</p>
-                <p className="text-sm text-cinza">{s.duration_min} min</p>
+      <Hero
+        profissionais={info.professionals.length}
+        faixaHorario={faixaHorario(info)}
+        nota={NOTA_GOOGLE}
+        avaliacoes={TOTAL_AVALIACOES}
+        endereco={endereco}
+      />
+      {/* Sentinela: quando o hero sai da viewport, a barra fixa entra (UX A7). */}
+      <div id="fim-do-hero" aria-hidden />
+
+      <main>
+        {/* Serviços — cada linha agenda direto, com o serviço já escolhido (UX A6) */}
+        <section
+          aria-labelledby="servicos"
+          id="servicos"
+          className="mx-auto w-full max-w-5xl scroll-mt-20 px-5 py-16 sm:px-8"
+        >
+          <TituloSecao
+            rotulo="Serviços"
+            titulo="Preço fechado, duração real"
+            id="servicos-titulo"
+          />
+          <p className="mt-3 max-w-[52ch] text-tinta-suave">
+            Toque em um serviço para agendar já com ele selecionado.
+          </p>
+
+          <div className="mt-8 grid gap-x-12 gap-y-10 sm:grid-cols-2">
+            {grupos.map(([categoria, servicos]) => (
+              <div key={categoria}>
+                <h3 className="rotulo text-ouro">{categoria}</h3>
+                <ul className="mt-2 divide-y divide-borda-sutil">
+                  {servicos.map((s) => (
+                    <li key={s.id}>
+                      <ServiceLinkRow service={s} />
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <p className="font-display text-lg text-destaque tnum">{money(s.price)}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
+            ))}
+          </div>
+        </section>
 
-      {/* Profissionais */}
-      {info.professionals.length > 0 && (
-        <section aria-labelledby="equipe" className="mt-10">
-          <h2 id="equipe" className="font-display text-2xl font-semibold">
-            Quem atende
-          </h2>
-          <ul className="mt-4 flex flex-wrap gap-3">
-            {info.professionals.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center gap-3 rounded-xl bg-aco px-4 py-3"
-              >
-                <span
-                  aria-hidden
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-aco-claro font-display font-semibold text-destaque"
+        {/* A casa — fotos reais da fachada e da vista aérea */}
+        <section
+          aria-labelledby="casa"
+          className="mx-auto w-full max-w-5xl px-5 py-16 sm:px-8"
+        >
+          <TituloSecao rotulo="O espaço" titulo="Nossa casa" id="casa" />
+          <div className="mt-8 grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            {/* A fachada já abre o hero no desktop — aqui ela só aparece nas
+                larguras em que o hero não a mostra, para não repetir a foto. */}
+            <figure className="lg:hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/fachada.webp"
+                alt="Fachada da Taylor e Thedy, no Plano Diretor Sul, em Palmas"
+                loading="lazy"
+                className="aspect-[4/3] w-full rounded-2xl border border-borda-sutil object-cover"
+              />
+              <EnderecoLegenda endereco={endereco} />
+            </figure>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/hero-poster.jpg"
+              alt="Vista aérea da Taylor e Thedy"
+              loading="lazy"
+              className="aspect-[4/3] w-full rounded-2xl border border-borda-sutil object-cover"
+            />
+          </div>
+        </section>
+
+        {/* Prova social — avaliações públicas do Google */}
+        <section
+          aria-labelledby="clientes"
+          className="mx-auto w-full max-w-5xl px-5 py-16 sm:px-8"
+        >
+          <TituloSecao
+            rotulo="Clientes"
+            titulo={`${NOTA_GOOGLE} em ${TOTAL_AVALIACOES} avaliações`}
+            id="clientes"
+          />
+          <Depoimentos />
+        </section>
+
+        {/* Equipe */}
+        {info.professionals.length > 0 && (
+          <section
+            aria-labelledby="equipe"
+            id="equipe"
+            className="mx-auto w-full max-w-5xl scroll-mt-20 px-5 py-16 sm:px-8"
+          >
+            <TituloSecao
+              rotulo="Equipe"
+              titulo="Quem atende"
+              id="equipe-titulo"
+            />
+            <ul className="mt-8 grid gap-3 sm:grid-cols-3">
+              {info.professionals.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-3 rounded-2xl border border-borda-sutil bg-superficie px-5 py-4"
+                  style={{ boxShadow: "var(--sombra-1)" }}
                 >
-                  {p.name.charAt(0)}
-                </span>
-                <span>
-                  <span className="block font-medium">{p.name}</span>
-                  {p.specialty && (
-                    <span className="block text-xs text-cinza">{p.specialty}</span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Horários */}
-      {hours.size > 0 && (
-        <section aria-labelledby="horarios" className="mt-10">
-          <h2 id="horarios" className="font-display text-2xl font-semibold">
-            Horário de funcionamento
-          </h2>
-          <ul className="mt-4 space-y-1 text-sm">
-            {WEEKDAYS_PT.map((label, weekday) => (
-              <li key={weekday} className="flex justify-between py-1">
-                <span className={hours.has(weekday) ? "" : "text-cinza"}>{label}</span>
-                <span className="tnum text-prata-suave">
-                  {hours.get(weekday)?.join(" · ") ?? "Fechado"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Contato */}
-      <footer className="mt-10">
-        <div className="stripe mb-6" aria-hidden />
-        {info.public_info.address && (
-          <p className="text-sm text-prata-suave">{info.public_info.address}</p>
+                  <ProfessionalAvatar name={p.name} />
+                  <span>
+                    <span className="block font-medium text-marfim">
+                      {p.name}
+                    </span>
+                    {p.specialty && (
+                      <span className="block text-xs text-tinta-fraca">
+                        {p.specialty}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
-        <div className="mt-4 flex flex-wrap gap-3 text-sm">
-          {wa && (
-            <a
-              className="rounded-lg bg-aco px-4 py-2 font-medium text-verde"
-              href={`https://wa.me/${wa}`}
-              target="_blank"
-              rel="noopener noreferrer"
+
+        {/* Onde e quando */}
+        <section
+          aria-labelledby="visite"
+          id="visite"
+          className="mx-auto w-full max-w-5xl scroll-mt-20 px-5 py-16 sm:px-8"
+        >
+          <TituloSecao
+            rotulo="Visite"
+            titulo="Onde e quando"
+            id="visite-titulo"
+          />
+
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            {hours.size > 0 && (
+              <div
+                className="rounded-2xl border border-borda-sutil bg-superficie p-6"
+                style={{ boxShadow: "var(--sombra-1)" }}
+              >
+                <h3 className="rotulo text-ouro">Horário de funcionamento</h3>
+                <ul className="mt-4 space-y-1 text-sm">
+                  {WEEKDAYS_PT.map((label, weekday) => (
+                    <li key={weekday} className="flex justify-between py-1">
+                      <span
+                        className={hours.has(weekday) ? "" : "text-tinta-fraca"}
+                      >
+                        {label}
+                      </span>
+                      <span className="tnum text-tinta-suave">
+                        {hours.get(weekday)?.join(" · ") ?? "Fechado"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div
+              className="flex flex-col rounded-2xl border border-borda-sutil bg-superficie p-6"
+              style={{ boxShadow: "var(--sombra-1)" }}
             >
-              WhatsApp
-            </a>
-          )}
-          {info.public_info.instagram && (
-            <a
-              className="rounded-lg bg-aco px-4 py-2 font-medium"
-              href={`https://instagram.com/${info.public_info.instagram.replace("@", "")}`}
-              target="_blank"
-              rel="noopener noreferrer"
+              <h3 className="rotulo text-ouro">Endereço</h3>
+              <p className="mt-4 text-sm text-tinta-suave">{endereco}</p>
+              <a
+                href={mapsUrl(endereco)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex min-h-11 items-center text-sm text-ouro transition-colors hover:text-ouro-claro"
+              >
+                Abrir no mapa →
+              </a>
+
+              <h3 className="rotulo mt-6 text-ouro">Fale com a gente</h3>
+              <div className="mt-3 flex flex-col gap-1 text-sm">
+                {wa && (
+                  <a
+                    href={`https://wa.me/${wa}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+                  >
+                    WhatsApp {info.public_info.whatsapp} →
+                  </a>
+                )}
+                {info.public_info.phone && (
+                  <a
+                    href={`tel:${info.public_info.phone.replace(/\D/g, "")}`}
+                    className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+                  >
+                    Fixo {info.public_info.phone} →
+                  </a>
+                )}
+                {info.public_info.instagram && (
+                  <a
+                    href={`https://instagram.com/${info.public_info.instagram.replace("@", "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+                  >
+                    Instagram {info.public_info.instagram} →
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Fechamento — ninguém precisa rolar de volta ao hero para agendar */}
+        <section className="mx-auto w-full max-w-5xl px-5 pb-16 sm:px-8">
+          <div
+            className="rounded-3xl border border-borda-sutil bg-superficie px-6 py-12 text-center"
+            style={{ boxShadow: "var(--sombra-2)" }}
+          >
+            <h2 className="font-display text-3xl leading-tight font-light text-marfim">
+              Renove seu estilo.
+            </h2>
+            <p className="mx-auto mt-3 max-w-[40ch] text-tinta-suave">
+              Escolha o serviço, o profissional e o horário. Leva menos de um
+              minuto.
+            </p>
+            <Link
+              href="/agendar"
+              className="cta-agendar mx-auto mt-8 flex min-h-14 w-full max-w-sm items-center justify-center rounded-full px-8 text-lg font-semibold"
             >
-              Instagram
-            </a>
-          )}
-          {info.public_info.phone && (
-            <a
-              className="rounded-lg bg-aco px-4 py-2 font-medium"
-              href={`tel:${info.public_info.phone.replace(/\D/g, "")}`}
+              Agendar horário
+            </Link>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-borda-sutil">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-5 py-10 pb-40 sm:flex-row sm:items-end sm:justify-between sm:px-8 sm:pb-16">
+          <div>
+            <Wordmark fontSize={22} />
+            <p className="mt-3 text-sm text-tinta-fraca">
+              Renove seu estilo · Palmas, Tocantins
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <Link
+              href="/agendar"
+              className="inline-flex min-h-11 items-center text-ouro transition-colors hover:text-ouro-claro"
             >
-              Ligar
-            </a>
-          )}
+              Agendar
+            </Link>
+            <Link
+              href="/meus-agendamentos"
+              className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+            >
+              Meus agendamentos
+            </Link>
+            {wa && (
+              <a
+                href={`https://wa.me/${wa}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+              >
+                WhatsApp
+              </a>
+            )}
+          </div>
         </div>
       </footer>
-      </main>
+
+      <StickyCta />
     </>
   );
 }

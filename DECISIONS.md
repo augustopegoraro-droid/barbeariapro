@@ -2280,6 +2280,125 @@ sem migration). **Smoke OK:** container `public` healthy; interno `:3200` home 2
 (`image/webp`) + `.cta-agendar` + wrapper de scrub no markup. **Pendente:** só validação visual/scroll num
 celular real (a extensão do Chrome não conectou nesta sessão — abrir a home no aparelho).
 
+### D-82 — Site público vira landing page escura e dourada + a marca REAL da fachada — 2026-07-24 (implementado, NÃO deployado)
+
+**Origem — um erro de premissa que custou 3 rodadas.** O dono trouxe um pacote (`paginamelhorada.zip`) com a
+**foto real da fachada** (`uploads/fachada.png`, hoje `assets/images/fachada-real.png`) e a placa já extraída
+com alfa (`assets/t-fachada.png`). Isso expôs que `assets/images/taylor_thedy_logo.png` — usado como
+"print oficial da fachada" nos **D-79/D-80** — é um **mockup gerado por IA** de uma loja fictícia (prédio de
+tijolos, marca escrita "TaylorThedy" num Didot serifado). Consequências:
+
+- o `logo-lockup.webp` **que está em produção** deriva do mockup → o site publicado exibe uma marca que não é
+  a da barbearia;
+- as sessões de 2026-07-21 a 24 que tentaram "consertar a placa do t" estavam com a premissa CERTA (a placa
+  existe) e execução ruim; e esta sessão chegou a concluir, com base no mockup, que **a placa não existia** —
+  conclusão errada, corrigida quando a foto real apareceu.
+- Mitigação permanente: `assets/images/README.md` marca qual arquivo é a marca e qual é o mockup; memória
+  `logo-fachada-placa-inexistente` reescrita.
+
+**Decisão do dono:** o site público passa a ser **landing page, escura e dourada, no site inteiro**, mantendo
+o **agendamento como ação principal**. Isso **revoga o tema claro do D-81/Fase 3** (`UI_SPEC_V2.md`, "A placa à
+luz do dia", que tinha só 2 dias e nunca foi deployado). Fluxos, microcopy e correções P0 do D-81 permanecem —
+mudou a pele, não a jornada.
+
+**Nova fonte de verdade visual:** `docs/site-publico/UI_SPEC_V3.md` ("A placa à noite, em ouro").
+
+**Implementado:**
+1. **Marca real** — `components/wordmark.tsx`: placa marfim com o "t" VAZADO (`public/t-fachada.png`, 746×1334,
+   alfa real) + "aylor"/"hedy" empilhados em Cormorant Garamond. Placa = 1,86× o font-size, alinhada por
+   `flex-start`. O recorte mostra o fundo → o wordmark exige fundo escuro (é o que o tema novo garante).
+2. **Sistema escuro/dourado** (`app/globals.css`): fundo `#0a0b0d`, marfim `#f2efe9`, **ouro `#c9a86a` como
+   única cor de ação**. `.cta-agendar` mantém anatomia e timings congelados do v1 (180ms / 3,2s / 3,6s) — só a
+   paleta virou ouro. Tipografia: Cormorant Garamond + Jost (saem Tenor Sans + Quicksand).
+3. **Landing** (`app/page.tsx` + `components/{site-header,hero,depoimentos}.tsx`): header fixo com CTA sempre
+   visível; hero marca→promessa→prova→ação com régua de números vinda da API; serviços agrupados por categoria
+   (cada linha já pré-seleciona o serviço); "Nossa casa" com fotos reais; depoimentos **verbatim** do Google;
+   equipe; horários/endereço/contato; fechamento com 2º CTA; rodapé. `HairSalon` + `aggregateRating` no JSON-LD.
+4. **Fluxo de agendamento realinhado** — stepper, régua de dias, grade de horários, toast, bottom sheet, banner
+   de instalação e "meus agendamentos" migrados para o ouro (11 call-sites da antiga cor de ação).
+5. **Correção de UX:** a `StickyCta` aparecia junto com o CTA do hero na 1ª tela (a sentinela intersectava);
+   agora entra só quando o hero sai por cima (`!isIntersecting && top < 0`).
+6. **Bug de cascata:** `.rotulo` definia `color`, vencendo as utilitárias do Tailwind por ordem — as categorias
+   de serviço saíam cinza em vez de ouro. Cor saiu da classe e foi para o call-site.
+7. **PWA/assets:** ícones (192/512/apple-touch) regerados com a placa real sobre `#0a0b0d`; manifest em
+   `background/theme_color: #0a0b0d`; `sw.js` → `v4-landing-ouro-2026-07-24`. Removidos os assets da linhagem
+   errada (`logo-lockup.webp`, `symbol-t.webp`, `icon.svg`, `logo-mark.svg`) e o código morto do D-79
+   (`hero-plate.tsx`, `logo.tsx`, `logo-paths.ts`).
+
+**Prova social — regra:** só entram avaliações públicas e **verbatim** do Google. Fonte: `Avaliaçoesgoogle.pdf`
+(exportado 24/07/2026): 4,8 em 400 avaliações; depoimentos de Augusto Pegoraro e Rafaella Catani. O "há 25 anos"
+que aparecia no protótipo **não entrou** — sem fonte verificável.
+
+**Validação:** `tsc --noEmit` limpo; `next build` limpo (4 rotas estáticas); home/`/agendar`/`/meus-agendamentos`
+200 no dev local; inspeção visual por captura headless a 430×932 (home em 5 alturas, passos 1-3 do fluxo,
+meus-agendamentos) — sem transbordo horizontal (`scrollWidth == clientWidth == 430`).
+
+**Pendências:** commit + deploy (rebuild do serviço `public`, sem migration); validação num celular real;
+confirmar "25 anos" com o dono; mais fotos internas; tabs de categoria; reagendar com pré-seleção (bloqueado
+pela API, que devolve nomes e não ids). O `logo-lockup.webp` sai do repo, então **o deploy troca a marca em
+produção** — é o objetivo, mas é uma mudança visível para o cliente final.
+
+---
+
+### D-81 — Redesign UX/UI do site público por equipe de agentes (UX + UI + Front-end) — 2026-07-22 (implementado, NÃO deployado)
+
+**Contexto:** rodada de evolução do site público (`barbearia-public/`) executada por uma equipe de 3 subagentes
+em paralelo sob supervisão do coordenador: UX Designer, UI Designer e Front-end Developer. Especificações viraram
+docs versionados em **`docs/site-publico/`**: `UX_PLAN.md` (auditoria heurística + jornada-meta + wireframes por
+estado + microcopy pt-BR + priorização P0/P1/P2), `UI_SPEC.md` (design tokens exatos, 12 componentes com estados,
+regras de composição/movimento — "a placa da fachada é o sistema") e `FRONTEND_AUDIT.md` (inventário técnico,
+mapa rota×endpoint, débitos com arquivo:linha).
+
+**Regras da rodada:** hero cinematográfico e `.cta-agendar` (D-80) congelados; backend intocado; sem OTP (D-41);
+conflitos resolvidos por "fluxo = UX manda; aparência = UI manda".
+
+**Implementado (P0 completo):**
+1. **Bug do 409 corrigido:** conflito de horário devolvia o usuário ao passo 3 sem mensagem (o erro só renderizava
+   no passo 4) → banner âmbar visível no passo 3 + slot que falhou marcado indisponível.
+2. Serviços da home clicáveis → `/agendar?servico={id}` com pré-seleção e abertura no passo 2.
+3. Barra fixa de conversão pós-hero (`sticky-cta.tsx`, IntersectionObserver na sentinela `#fim-do-hero`; botão
+   sólido sem glow — glow é exclusivo do CTA do hero) + CTA de fechamento no rodapé.
+4. Cancelamento com bottom sheet de confirmação (focus trap, Esc) + toast com "Agendar novo horário".
+5. Dias fechados desabilitados na régua de 14 dias via `info.hours` (auto-avança ao 1º dia aberto).
+6. Alvos de toque ≥44px (slots, Voltar, Cancelar, chips).
+
+**Fundação:** `booking-flow.tsx` (463 linhas) decomposto em `components/booking/*` (steps + success) +
+primitivos `components/ui/*` (buttons, service-row, professional, appointment-summary, status-badge,
+empty-state, notice, toast, confirm-sheet); tokens novos do UI_SPEC aditivos no `globals.css`
+(`--grafite-profundo`, `--aco-brilho`, `--ambar`, raios/sombras/durações + `@theme`).
+
+**Débitos técnicos fechados de carona:** hero `preload="metadata"` (scrub preservado); ARIA da régua
+(tab/tablist → `aria-pressed`) + `aria-live` nos slots + foco no h1 a cada passo; fallback do tenant slug
+unificado em `app` (`lib/api.ts` + Dockerfile — antes divergia do `.env.example`); `.dockerignore` criado
+(corta o vídeo cru de 1,1 GB do build context); código morto removido (`components/logo.tsx` +
+`logo-paths.ts`, o SVG órfão do D-79); faux-bold removido dos títulos display; legendas essenciais
+`--cinza`→`--prata-suave` (contraste AA 7,5:1).
+
+**Fora de escopo (deliberado):** todos os P1/P2 do UX_PLAN (skeleton, auto-skip do passo 2, "próximo dia com
+vaga", Próximos×Histórico, banner/promos); deep-link `?servico=&profissional=` pós-cancelamento é **impossível
+sem backend** (a API pública devolve nomes, não ids) — candidato a rodada futura com mudança em `public.py`.
+
+**Validação:** `next build` + `tsc --noEmit` limpos (validados pelo agente e re-verificados pelo coordenador);
+graphify atualizado. **Sem commit e sem deploy** — pendente aprovação do dono, commit e rebuild do serviço
+`public` na VM (molde D-79/D-80). Pendência herdada do D-80 permanece: validação visual num celular real.
+
+**Fase 3 — pivô do dono para tema claro, SEM vídeo ("A placa à luz do dia", 2026-07-22):** ao validar no dev
+server, o dono pediu cara nova: **o vídeo de drone sai** e o tema escolhido é claro/moderno — **isto revoga o
+hero cinematográfico do D-80 e o tema grafite**. Spec nova em `docs/site-publico/UI_SPEC_V2.md` (v1 vira
+histórico): página clara (`#f5f6f8` + cards brancos, sombras frias), navy `#262c36` concentrado como tinta e
+assinatura; a logo cromada nunca pousa no claro — vive numa **faixa navy no topo** (webp intocado; sobre claro,
+só o monograma "T"). Implementado: `hero-cinematic.tsx` removido e **`public/hero-drone.mp4` deletado do repo**;
+novo `components/hero-plate.tsx` (server, zero JS: faixa navy + headline "Renove seu estilo." + `.cta-agendar`
+reinterpretado como bloco navy metálico com os mesmos keyframes + `hero-poster.jpg` como cartão-postal);
+`globals.css` reescrito com tokens v2; os 12 componentes + sheet/sticky/install-banner migrados pela tabela
+§1.9 da spec; `LogoMark` (monograma) restaurado para o rodapé; PWA `background_color` claro + bump de
+`SW_VERSION` (força update do service worker em quem já instalou). UX/fluxos/microcopy da fase 2 intactos;
+sentinela `#fim-do-hero` preservada. Build + tsc limpos; smoke no dev server OK (zero refs ao vídeo).
+**Pendente:** aprovação visual do dono no dev (:3200), ícones PWA ainda com a arte antiga (decisão de UI),
+depois commit + deploy.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

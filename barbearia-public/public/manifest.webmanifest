@@ -1,11 +1,11 @@
 {
-  "name": "Taylor & Thedy — Barbearia",
-  "short_name": "Taylor & Thedy",
-  "description": "Agende seu horário na Taylor & Thedy em poucos toques.",
+  "name": "Taylor e Thedy — Salão e Barbearia",
+  "short_name": "Taylor e Thedy",
+  "description": "Agende seu horário na Taylor e Thedy em poucos toques.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#262c36",
-  "theme_color": "#262c36",
+  "background_color": "#0a0b0d",
+  "theme_color": "#0a0b0d",
   "lang": "pt-BR",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },

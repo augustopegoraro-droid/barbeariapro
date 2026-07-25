@@ -10,7 +10,8 @@ const BASE_URL =
     ? process.env.API_URL_INTERNAL ?? PUBLIC_URL
     : PUBLIC_URL;
 
-export const TENANT = process.env.NEXT_PUBLIC_TENANT_SLUG ?? "taylor";
+/* Fallback = "app" (D-79: org 1 tem subdomain='app'; alinhado ao .env.example). */
+export const TENANT = process.env.NEXT_PUBLIC_TENANT_SLUG ?? "app";
 
 const base = () => `${BASE_URL}/public/${TENANT}`;
 

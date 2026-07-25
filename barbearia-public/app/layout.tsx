@@ -1,20 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Quicksand, Tenor_Sans } from "next/font/google";
+import { Cormorant_Garamond, Jost } from "next/font/google";
 import "./globals.css";
 import RegisterSW from "@/components/register-sw";
 
-/* Tipografia da fachada: Tenor Sans ≈ o traço flareado de alto contraste da
-   placa; Quicksand ≈ o rounded do slogan "Renove seu Estilo". */
-const tenor = Tenor_Sans({
+/* Tipografia da landing (UI_SPEC_V3): Cormorant Garamond nas palavras da marca
+   e nos títulos — o serifado de alto contraste do letreiro; Jost no texto e nos
+   versaletes, que é onde mora a informação prática (preço, horário, duração). */
+const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
-  variable: "--font-tenor",
-  weight: "400",
+  variable: "--font-cormorant",
+  weight: ["300", "400", "500", "600"],
 });
 
-const quicksand = Quicksand({
+const jost = Jost({
   subsets: ["latin"],
-  variable: "--font-quicksand",
-  weight: ["400", "500", "600", "700"],
+  variable: "--font-jost",
+  weight: ["300", "400", "500"],
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://taylorethedy.com";
@@ -22,28 +23,28 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://taylorethedy.com";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Taylor & Thedy — Barbearia em Palmas/TO",
-    template: "%s · Taylor & Thedy",
+    default: "Taylor e Thedy — Salão e Barbearia em Palmas/TO",
+    template: "%s · Taylor e Thedy",
   },
   description:
-    "Agende seu horário na Taylor & Thedy em poucos toques: corte, barba e cuidados masculinos em Palmas/TO.",
+    "Corte, barba, coloração e sobrancelha com hora marcada no Plano Diretor Sul, Palmas/TO. 4,8 no Google em 400 avaliações. Agende em poucos toques.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Taylor & Thedy",
+    title: "Taylor e Thedy",
     statusBarStyle: "black-translucent",
   },
   openGraph: {
     type: "website",
     locale: "pt_BR",
-    siteName: "Taylor & Thedy",
-    title: "Taylor & Thedy — Barbearia em Palmas/TO",
+    siteName: "Taylor e Thedy",
+    title: "Taylor e Thedy — Salão e Barbearia em Palmas/TO",
     description: "Agende seu horário em poucos toques.",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#262c36",
+  themeColor: "#0a0b0d",
   width: "device-width",
   initialScale: 1,
 };
@@ -52,9 +53,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR" className={`${tenor.variable} ${quicksand.variable}`}>
+    <html lang="pt-BR" className={`${cormorant.variable} ${jost.variable}`}>
       <body>
-        <div className="stripe" aria-hidden />
         {children}
         <RegisterSW />
       </body>

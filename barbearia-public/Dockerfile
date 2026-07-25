@@ -10,7 +10,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Inlinadas no bundle do browser em build-time.
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ARG NEXT_PUBLIC_TENANT_SLUG=taylor
+ARG NEXT_PUBLIC_TENANT_SLUG=app
 ARG NEXT_PUBLIC_SITE_URL=https://taylorethedy.com
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_TENANT_SLUG=$NEXT_PUBLIC_TENANT_SLUG
