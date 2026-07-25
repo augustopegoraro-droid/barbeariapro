@@ -2349,9 +2349,29 @@ conferida a 1280px.
 de IA, entrou a placa real da fachada. Quem tinha o site aberto ou instalado como PWA pode ver a versão antiga
 por um ciclo até o service worker trocar (`v4-landing-ouro-2026-07-24`).
 
-**Pendências:** validação num celular real (headless não substitui o polegar); confirmar "25 anos" com o dono
-(entra como célula da régua de números do hero); mais fotos internas; tabs de categoria; reagendar com
-pré-seleção (bloqueado pela API, que devolve nomes e não ids).
+**Rodada de correções pós-deploy — 2026-07-25 (auditoria pedida pelo dono):**
+1. **"25 anos" confirmado pelo dono** → entrou na régua do hero ("25 anos / Em Palmas") e na promessa. Constante
+   `ANOS_DE_CASA` em `components/hero.tsx` — único número da régua que não vem da API. A régua virou 2 colunas
+   no mobile e N colunas a partir de `sm`, calculadas pela quantidade de células que sobrevivem aos dados.
+2. **A11y — `aria-labelledby` apontava para a própria `<section>`** em Serviços/Equipe/Visite (o id do wrapper),
+   não para o `<h2>`: o leitor de tela não anunciava o nome da região. Corrigido para os ids dos títulos.
+3. **SEO — JSON-LD com `dayOfWeek` em português** ("Segunda"…): schema.org exige inglês, então o Google
+   **descartava o horário inteiro** desde o D-79. Corrigido com `WEEKDAYS_SCHEMA`. De quebra: `address` virou
+   `PostalAddress` estruturado, mais `image` e `priceRange`.
+4. **Compartilhamento — não havia `og:image`**: o link colado no WhatsApp (canal principal de divulgação do
+   negócio) aparecia sem imagem. Gerado `public/og.jpg` (1200×630, recorte da fachada real centrado no
+   letreiro) + `twitter:card=summary_large_image` + `alternates.canonical`.
+5. **`robots.txt` e `sitemap.xml`** (`app/robots.ts`/`app/sitemap.ts`): não existiam. `/meus-agendamentos` fica
+   fora do índice — é área de sessão do cliente.
+6. **Skip link** como primeiro alvo de tabulação, indo direto para `/agendar` (aparece só ao receber foco).
+7. **Estrelas dos depoimentos** eram `aria-hidden` sem alternativa: a nota não existia para leitor de tela.
+   Agora têm texto `sr-only`.
+
+**Contraste medido** (não estimado) em todos os pares de token: marfim 17,2:1 · tinta-suave 9,1:1 ·
+tinta-fraca 6,0:1 · ouro 8,7:1 sobre o fundo; tinta-invertida sobre ouro 8,3:1. Tudo acima de AA; a maioria AAA.
+
+**Pendências:** validação num celular real (headless não substitui o polegar); mais fotos internas; tabs de
+categoria; reagendar com pré-seleção (bloqueado pela API, que devolve nomes e não ids).
 
 ---
 

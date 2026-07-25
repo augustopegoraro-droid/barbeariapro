@@ -21,14 +21,36 @@ export const revalidate = 300;
 const ENDERECO_GOOGLE =
   "LO 01 - Q. 103 Sul, Rua SO 11, 60 - Plano Diretor Sul, Palmas - TO, 77015-028";
 
+/* schema.org exige os dias em inglês — mandar "Segunda" faz o Google
+   descartar o horário inteiro (era o comportamento até 2026-07-25). */
+const WEEKDAYS_SCHEMA = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
 function jsonLd(info: PublicInfo, siteUrl: string, endereco: string) {
   return {
     "@context": "https://schema.org",
     "@type": "HairSalon",
     name: info.name,
     url: siteUrl,
-    address: endereco,
+    image: `${siteUrl}/fachada.webp`,
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "LO 01 - Q. 103 Sul, Rua SO 11, 60",
+      addressLocality: "Palmas",
+      addressRegion: "TO",
+      postalCode: "77015-028",
+      addressCountry: "BR",
+      name: endereco,
+    },
     telephone: info.public_info.phone || undefined,
+    priceRange: "$$",
     aggregateRating: {
       "@type": "AggregateRating",
       ratingValue: "4.8",
@@ -36,7 +58,7 @@ function jsonLd(info: PublicInfo, siteUrl: string, endereco: string) {
     },
     openingHoursSpecification: info.hours.map((h) => ({
       "@type": "OpeningHoursSpecification",
-      dayOfWeek: WEEKDAYS_PT[h.weekday],
+      dayOfWeek: WEEKDAYS_SCHEMA[h.weekday],
       opens: h.open_time,
       closes: h.close_time,
     })),
@@ -158,7 +180,7 @@ export default async function HomePage() {
       <main>
         {/* Serviços — cada linha agenda direto, com o serviço já escolhido (UX A6) */}
         <section
-          aria-labelledby="servicos"
+          aria-labelledby="servicos-titulo"
           id="servicos"
           className="mx-auto w-full max-w-5xl scroll-mt-20 px-5 py-16 sm:px-8"
         >
@@ -232,7 +254,7 @@ export default async function HomePage() {
         {/* Equipe */}
         {info.professionals.length > 0 && (
           <section
-            aria-labelledby="equipe"
+            aria-labelledby="equipe-titulo"
             id="equipe"
             className="mx-auto w-full max-w-5xl scroll-mt-20 px-5 py-16 sm:px-8"
           >
@@ -267,7 +289,7 @@ export default async function HomePage() {
 
         {/* Onde e quando */}
         <section
-          aria-labelledby="visite"
+          aria-labelledby="visite-titulo"
           id="visite"
           className="mx-auto w-full max-w-5xl scroll-mt-20 px-5 py-16 sm:px-8"
         >

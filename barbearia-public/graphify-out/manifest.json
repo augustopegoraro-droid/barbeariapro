@@ -1,0 +1,3322 @@
+{
+  ".claude/settings.json": {
+    "mtime": 1784168240.8230512,
+    "ast_hash": "1caf20c122b5f08c0ecda073e856eb5b",
+    "semantic_hash": ""
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1784898214.0046034,
+    "ast_hash": "4ed96a42678fd8d49a8fd4c1098aedd7",
+    "semantic_hash": ""
+  },
+  "alembic/env.py": {
+    "mtime": 1780185206.0,
+    "ast_hash": "1bff9623b4951fa05d99825298de8fe8",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0001_initial.py": {
+    "mtime": 1780185206.0,
+    "ast_hash": "0cbd8a2a3ad9034311e552d852d0d453",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0002_client_last_photo.py": {
+    "mtime": 1780694884.8844457,
+    "ast_hash": "1168cc72aafa8263e3357659ac3bb19a",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0002_loyalty.py": {
+    "mtime": 1781055964.3660316,
+    "ast_hash": "1aacf88119b538af59b82912172c2502",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0003_client_photo_description.py": {
+    "mtime": 1780695841.0847976,
+    "ast_hash": "1d0da523e9e41c935dda6ece57d762c8",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0005_barber_services.py": {
+    "mtime": 1781144887.9778557,
+    "ast_hash": "50b0a5fa31ed6996b30226c58fa9890a",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0006_client_blocked.py": {
+    "mtime": 1781222015.0064242,
+    "ast_hash": "ecd8c17d19cf097bdf568141d2cd14c4",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0007_crm_leads.py": {
+    "mtime": 1781601713.5235515,
+    "ast_hash": "63f7e29e0562a018a26ebd247ca77592",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0008_client_bot_paused.py": {
+    "mtime": 1782252454.80185,
+    "ast_hash": "e4e84dcc4d44f83cca08566b95fe3f4a",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0009_conversation_log.py": {
+    "mtime": 1782254899.5648727,
+    "ast_hash": "cdfe7e4773d235b0800e71b0b33ffa5b",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0010_conversations.py": {
+    "mtime": 1782270932.537509,
+    "ast_hash": "57e2f42c2056a64281a28921c8213c9c",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0011_grant_crm_tables.py": {
+    "mtime": 1782307972.7826023,
+    "ast_hash": "ac0c2edbe4f44220d693f747eb6c55ae",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0012_memberships.py": {
+    "mtime": 1782506471.6181717,
+    "ast_hash": "744cd953ae7a3ba4f5e12c04649bbc00",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0013_grant_membership_tables.py": {
+    "mtime": 1782506471.6185226,
+    "ast_hash": "bb602b06531a628edaa991d817ae482c",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0014_organization_profile.py": {
+    "mtime": 1782523813.8382967,
+    "ast_hash": "82b8ffacb3caf53cfaa012dbfa44d342",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0015_client_membership_custom.py": {
+    "mtime": 1782580474.8247242,
+    "ast_hash": "e01a5038be64a538f3d4bbfa1257b323",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0016_loyalty_points.py": {
+    "mtime": 1782658781.7300048,
+    "ast_hash": "80e302a4f5ece4bd4feb64ecd5ac7c3c",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0017_grant_loyalty_points.py": {
+    "mtime": 1782658781.730318,
+    "ast_hash": "2caca35d33d788c93546f2412deb1fad",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0018_membership_corrections.py": {
+    "mtime": 1782744077.761728,
+    "ast_hash": "a6f29036189f5488aa58946c53bd6991",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0019_gestor_fields.py": {
+    "mtime": 1782744077.7620406,
+    "ast_hash": "720a693315951e15de7b09376a11d426",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0020_tenant_resolution.py": {
+    "mtime": 1782773230.351221,
+    "ast_hash": "0e76fe2306d95274482ce7f0179a00e6",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0021_platform_superadmin.py": {
+    "mtime": 1782773230.3517144,
+    "ast_hash": "639269b881831db45f7a3aeb02b67284",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0022_client_trinks_fields.py": {
+    "mtime": 1782936634.3917727,
+    "ast_hash": "86aab3d88dbeb1c3ed9ff557d3aa0c9d",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0023_client_debts.py": {
+    "mtime": 1782969623.235571,
+    "ast_hash": "7f2f89cb4fcf5a727976758b88c85173",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0024_reschedule_requests.py": {
+    "mtime": 1782981716.5567243,
+    "ast_hash": "4ca1a865347a697935dacca122df1e15",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0025_barber_work_model.py": {
+    "mtime": 1782986714.3482006,
+    "ast_hash": "b28c8244b2b80cfd335c64cf1dc243f7",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0026_cash_daily_closings.py": {
+    "mtime": 1783036947.8680394,
+    "ast_hash": "2e74fd124dd57abf674a4fd587f48e8d",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0027_reschedule_and_cost_checks.py": {
+    "mtime": 1783077597.803222,
+    "ast_hash": "13448f145bc15573ce7f6cdeddf87bf0",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0028_platform_metrics.py": {
+    "mtime": 1783088574.8469615,
+    "ast_hash": "8969b77999af2d5ca8f0eb49275f7efc",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0029_platform_org_overview.py": {
+    "mtime": 1783088860.8735273,
+    "ast_hash": "a13913d228f9ad1e5886bca9ed229f38",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0030_platform_org_detail.py": {
+    "mtime": 1783089204.8321726,
+    "ast_hash": "617dc43d78aa1c33de4325f6df50be76",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0031_platform_onboarding.py": {
+    "mtime": 1783092883.3565054,
+    "ast_hash": "4715f0b23feb4dc13353a52472431efc",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0032_billing_domain.py": {
+    "mtime": 1783093492.9498737,
+    "ast_hash": "e711f9540ba4c6dc0dac101a7d2576e1",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0033_platform_billing_view.py": {
+    "mtime": 1783094522.4428735,
+    "ast_hash": "6449feb35e6c37c93c1528ef8f846ffc",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0034_platform_audit_log.py": {
+    "mtime": 1783095032.345309,
+    "ast_hash": "072e6fd8968c04349553a0dac2fa6c5b",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0035_payment_transactions.py": {
+    "mtime": 1783184381.6168945,
+    "ast_hash": "4d02766870180efd5b1f4a084b985178",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0036_dre_monthly_lines.py": {
+    "mtime": 1783350213.941398,
+    "ast_hash": "15b55165df9ae70de8f84366905f33c8",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0037_authz_core.py": {
+    "mtime": 1783393032.2753534,
+    "ast_hash": "c621f9e7a344d93e574096b88fcd88a5",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0038_sessions_hardening.py": {
+    "mtime": 1783470790.103668,
+    "ast_hash": "0b558af7fb4ba35ac1b7c5ef370ec64f",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0039_audit_logs.py": {
+    "mtime": 1783572994.8417819,
+    "ast_hash": "6a6fe9c4f592209b9475f5735987b502",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0040_platform_alert_rules.py": {
+    "mtime": 1783577867.788493,
+    "ast_hash": "b23e7608190dddb2e41c7e57263a1486",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0041_client_visibility_settings.py": {
+    "mtime": 1783603404.6839058,
+    "ast_hash": "847437f91d76123428c0d4d77c41e59a",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0042_consent_records.py": {
+    "mtime": 1783646389.8472214,
+    "ast_hash": "f6c923a9a9ea78160e25a70efca753e9",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0043_rls_hardening_v17_v18.py": {
+    "mtime": 1784082067.4209025,
+    "ast_hash": "d847c956707bea803d3a98fbc61ba871",
+    "semantic_hash": ""
+  },
+  "alembic/versions/0044_public_site.py": {
+    "mtime": 1784258689.5477936,
+    "ast_hash": "01d36d67ae39b016c00ba59b053503e9",
+    "semantic_hash": ""
+  },
+  "app/__init__.py": {
+    "mtime": 1780190505.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/api/__init__.py": {
+    "mtime": 1780190505.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/api/agenda.py": {
+    "mtime": 1784080925.7538204,
+    "ast_hash": "4bf97e6fd5a066956852b4dda1e3fac1",
+    "semantic_hash": ""
+  },
+  "app/api/auth.py": {
+    "mtime": 1783573139.1395333,
+    "ast_hash": "ec731baee7057c530f5769578cd71567",
+    "semantic_hash": ""
+  },
+  "app/api/barbeiro.py": {
+    "mtime": 1783573338.1215408,
+    "ast_hash": "7861408691adcfb662f71fadb8d942ed",
+    "semantic_hash": ""
+  },
+  "app/api/billing.py": {
+    "mtime": 1783093942.5918555,
+    "ast_hash": "9cde78a592aeb3bc6aba2c6eb0d06382",
+    "semantic_hash": ""
+  },
+  "app/api/bot.py": {
+    "mtime": 1784080931.3108003,
+    "ast_hash": "13d466405023a66fbebe7746d3892180",
+    "semantic_hash": ""
+  },
+  "app/api/chatwoot.py": {
+    "mtime": 1784080613.953877,
+    "ast_hash": "4f122476768e2a4c1868e2d1650e0d18",
+    "semantic_hash": ""
+  },
+  "app/api/clientes.py": {
+    "mtime": 1783573247.0377762,
+    "ast_hash": "e0bf85ed7ed7bd4fb6b43251b657b2ea",
+    "semantic_hash": ""
+  },
+  "app/api/conversations.py": {
+    "mtime": 1783471037.1695385,
+    "ast_hash": "8cead1c50cc46c5309595495e41c2bac",
+    "semantic_hash": ""
+  },
+  "app/api/crm.py": {
+    "mtime": 1783441544.8709743,
+    "ast_hash": "2e43a57a335fb641bd912600adc554d6",
+    "semantic_hash": ""
+  },
+  "app/api/dashboard.py": {
+    "mtime": 1783441633.6331985,
+    "ast_hash": "33e95a45ecffadcf2e7b4aeaeafdee54",
+    "semantic_hash": ""
+  },
+  "app/api/debts.py": {
+    "mtime": 1783441357.5948715,
+    "ast_hash": "05d0e10dc048cb9a358eeeecd2ca4de2",
+    "semantic_hash": ""
+  },
+  "app/api/empresa.py": {
+    "mtime": 1783573373.6372437,
+    "ast_hash": "7d3aa19ef12bd4672fcb9c0c6951f454",
+    "semantic_hash": ""
+  },
+  "app/api/equipe.py": {
+    "mtime": 1783441419.43406,
+    "ast_hash": "23d0ca62dbfce321c6fd1ac711d29289",
+    "semantic_hash": ""
+  },
+  "app/api/financeiro.py": {
+    "mtime": 1783573195.816454,
+    "ast_hash": "0f49af19dcf09972e6896b56dbb26559",
+    "semantic_hash": ""
+  },
+  "app/api/gestor.py": {
+    "mtime": 1783441354.0551093,
+    "ast_hash": "c1a4f107f4ad53f6bc340be3c6753b21",
+    "semantic_hash": ""
+  },
+  "app/api/health.py": {
+    "mtime": 1780190547.0,
+    "ast_hash": "cc1792a083ef3cc44af6ae6fc60dd3cd",
+    "semantic_hash": ""
+  },
+  "app/api/imports.py": {
+    "mtime": 1783441360.4356124,
+    "ast_hash": "c3888338fe0cd134c193f005b712188f",
+    "semantic_hash": ""
+  },
+  "app/api/integracoes.py": {
+    "mtime": 1784080489.014603,
+    "ast_hash": "2d98d7f912dcb548ea6f59dcccd2be6b",
+    "semantic_hash": ""
+  },
+  "app/api/kernel_ia.py": {
+    "mtime": 1783037476.7582927,
+    "ast_hash": "5f7e6e97b0c2a9b4a1596876fca409e6",
+    "semantic_hash": ""
+  },
+  "app/api/lgpd.py": {
+    "mtime": 1783646546.4710228,
+    "ast_hash": "e6d7855797b58913e360b2fda4539c5e",
+    "semantic_hash": ""
+  },
+  "app/api/loyalty.py": {
+    "mtime": 1783441559.038354,
+    "ast_hash": "f639e53d8cece0e307cba89f8c687153",
+    "semantic_hash": ""
+  },
+  "app/api/memberships.py": {
+    "mtime": 1783573283.926062,
+    "ast_hash": "55e73601ae0736653d3e3229abcb1015",
+    "semantic_hash": ""
+  },
+  "app/api/platform.py": {
+    "mtime": 1783577943.328795,
+    "ast_hash": "6a3e88d05adad01b985c4841e794197d",
+    "semantic_hash": ""
+  },
+  "app/api/platform_billing.py": {
+    "mtime": 1784082332.4782557,
+    "ast_hash": "4085f7b7be959de637d2d35d8cac16ac",
+    "semantic_hash": ""
+  },
+  "app/api/public.py": {
+    "mtime": 1784258950.1873927,
+    "ast_hash": "aa4198d2b9f868479cf1dc3b9b6b5616",
+    "semantic_hash": ""
+  },
+  "app/api/reminders.py": {
+    "mtime": 1782773230.3537781,
+    "ast_hash": "10827193e926e5542313e10927b7df0a",
+    "semantic_hash": ""
+  },
+  "app/api/reschedule.py": {
+    "mtime": 1783441380.9876468,
+    "ast_hash": "d17fc3cbf496832810a2973b4261daab",
+    "semantic_hash": ""
+  },
+  "app/api/security.py": {
+    "mtime": 1783603555.2436178,
+    "ast_hash": "be5bcc28277e696badfef9c0be4161ae",
+    "semantic_hash": ""
+  },
+  "app/api/servicos.py": {
+    "mtime": 1783441377.990185,
+    "ast_hash": "b6f302ca58c83384c008f9170de80ef2",
+    "semantic_hash": ""
+  },
+  "app/api/wa_webhook.py": {
+    "mtime": 1784080540.0324433,
+    "ast_hash": "cf3f482e04974650a60c67750bb19ed8",
+    "semantic_hash": ""
+  },
+  "app/authz.py": {
+    "mtime": 1783573103.5742574,
+    "ast_hash": "f7d9611ff1ce3be80cfecbf917e7a67b",
+    "semantic_hash": ""
+  },
+  "app/core/__init__.py": {
+    "mtime": 1780190505.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/core/config.py": {
+    "mtime": 1784258747.4475887,
+    "ast_hash": "4373a6af2f5931b8ade4d238fc1f3369",
+    "semantic_hash": ""
+  },
+  "app/core/crypto.py": {
+    "mtime": 1782075436.7582822,
+    "ast_hash": "6bb48d82e502b83b1d48c158cc8fc446",
+    "semantic_hash": ""
+  },
+  "app/core/dates.py": {
+    "mtime": 1781536841.334981,
+    "ast_hash": "69631ed93c74137826cbf3bd28901c53",
+    "semantic_hash": ""
+  },
+  "app/core/entitlements.py": {
+    "mtime": 1783093902.0476615,
+    "ast_hash": "2941dd24602509e4f51c06eaae4e4b55",
+    "semantic_hash": ""
+  },
+  "app/core/permissions.py": {
+    "mtime": 1783441204.1342413,
+    "ast_hash": "ac13f86bb3f0d3eef5ff3d2305254f58",
+    "semantic_hash": ""
+  },
+  "app/core/phone.py": {
+    "mtime": 1784080505.3426619,
+    "ast_hash": "59a4c829f0189717abf6f0acef4830ab",
+    "semantic_hash": ""
+  },
+  "app/core/rate_limit.py": {
+    "mtime": 1783526981.9732008,
+    "ast_hash": "1e59f82e59145379d69b9f2afa8e4e3e",
+    "semantic_hash": ""
+  },
+  "app/core/rbac.py": {
+    "mtime": 1781119633.4471269,
+    "ast_hash": "3a2f4b67cbef9647bd64480e24feef73",
+    "semantic_hash": ""
+  },
+  "app/core/security.py": {
+    "mtime": 1783470813.962443,
+    "ast_hash": "3f0cf939cb6fcfac2fc9dfaa536b050c",
+    "semantic_hash": ""
+  },
+  "app/core/security_headers.py": {
+    "mtime": 1783471082.8210433,
+    "ast_hash": "8f6b492dcff6e79ec5f2cb34cfc5eccb",
+    "semantic_hash": ""
+  },
+  "app/data/__init__.py": {
+    "mtime": 1783037476.758374,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/data/finance_playbook.py": {
+    "mtime": 1783037476.7590272,
+    "ast_hash": "110ea0f8c8eaeb4b8e92cf09f9c0281c",
+    "semantic_hash": ""
+  },
+  "app/db/__init__.py": {
+    "mtime": 1780190505.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/db/redis.py": {
+    "mtime": 1783536881.8580148,
+    "ast_hash": "79dd6aa0e51819b840e1a7ab2027f971",
+    "semantic_hash": ""
+  },
+  "app/db/session.py": {
+    "mtime": 1780190526.0,
+    "ast_hash": "81fba31989373daab81af7ee1c0f9b3d",
+    "semantic_hash": ""
+  },
+  "app/deps.py": {
+    "mtime": 1783470697.5007923,
+    "ast_hash": "212fd5227670f582d4ccfc6ad538c1b2",
+    "semantic_hash": ""
+  },
+  "app/main.py": {
+    "mtime": 1784258965.4199789,
+    "ast_hash": "ce02d8e592a72b915b8aaf8947bf63db",
+    "semantic_hash": ""
+  },
+  "app/schemas/__init__.py": {
+    "mtime": 1780190505.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/schemas/audit.py": {
+    "mtime": 1783573147.480052,
+    "ast_hash": "a2336e60b3ee9d936505e125283cf302",
+    "semantic_hash": ""
+  },
+  "app/schemas/auth.py": {
+    "mtime": 1783566971.1223338,
+    "ast_hash": "3055307e23c92a5d6981035c7e9e3728",
+    "semantic_hash": ""
+  },
+  "app/schemas/lgpd.py": {
+    "mtime": 1783646530.8367357,
+    "ast_hash": "5d91f1b96b420f10303ecaec8e33df8c",
+    "semantic_hash": ""
+  },
+  "app/schemas/security_dashboard.py": {
+    "mtime": 1783577604.0823317,
+    "ast_hash": "3744c4aadf45a49abaa512bc329f2e2f",
+    "semantic_hash": ""
+  },
+  "app/schemas/site_visibility.py": {
+    "mtime": 1783603435.942203,
+    "ast_hash": "cb2e42e3512cf8ec7bbfdf31ffa71236",
+    "semantic_hash": ""
+  },
+  "app/services/__init__.py": {
+    "mtime": 1781051866.0758233,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/services/audit.py": {
+    "mtime": 1783573486.4890416,
+    "ast_hash": "76426a3a31e8333dc5ca7a75e9b27c0b",
+    "semantic_hash": ""
+  },
+  "app/services/authz.py": {
+    "mtime": 1783393138.8973427,
+    "ast_hash": "8979da925bfb97dbdcc6ebf2d1e1c16d",
+    "semantic_hash": ""
+  },
+  "app/services/authz_seed.py": {
+    "mtime": 1783393155.5805547,
+    "ast_hash": "00030b2226eb56ad8660b4fd42326814",
+    "semantic_hash": ""
+  },
+  "app/services/availability.py": {
+    "mtime": 1784258772.5309465,
+    "ast_hash": "2b979683fb4d3d81794c7faf5523e329",
+    "semantic_hash": ""
+  },
+  "app/services/billing/__init__.py": {
+    "mtime": 1783093602.981939,
+    "ast_hash": "fe9704a9f734afe33ee0cb64bc016871",
+    "semantic_hash": ""
+  },
+  "app/services/billing/mock_provider.py": {
+    "mtime": 1783093672.0889308,
+    "ast_hash": "1cc6da0f184562807aa47c6de5bb653e",
+    "semantic_hash": ""
+  },
+  "app/services/billing/provider.py": {
+    "mtime": 1783094474.3938084,
+    "ast_hash": "d7826f4fadcbeaae897129dd309d62a1",
+    "semantic_hash": ""
+  },
+  "app/services/billing/registry.py": {
+    "mtime": 1783093725.6105387,
+    "ast_hash": "5e350b090c0fb8324f3142ac1b6994d8",
+    "semantic_hash": ""
+  },
+  "app/services/billing/service.py": {
+    "mtime": 1783100026.5483975,
+    "ast_hash": "5699a1c7097e93d301b7d00425f1c61f",
+    "semantic_hash": ""
+  },
+  "app/services/billing/stripe_provider.py": {
+    "mtime": 1783099934.3473349,
+    "ast_hash": "d753f2029bf458661c7dbbb0a07ae358",
+    "semantic_hash": ""
+  },
+  "app/services/billing/types.py": {
+    "mtime": 1783093619.9173617,
+    "ast_hash": "86c2ed0167d26f401b804a78579eaa6e",
+    "semantic_hash": ""
+  },
+  "app/services/calendar_sync.py": {
+    "mtime": 1782075436.7588682,
+    "ast_hash": "915491b986cc72b7d5e6e52bfb676694",
+    "semantic_hash": ""
+  },
+  "app/services/consent.py": {
+    "mtime": 1783646458.2122731,
+    "ast_hash": "bae2027981629bc1735994148c338169",
+    "semantic_hash": ""
+  },
+  "app/services/conversation.py": {
+    "mtime": 1782306317.0303032,
+    "ast_hash": "682998283bcc20c9f2e03a5097231b7e",
+    "semantic_hash": ""
+  },
+  "app/services/gestor_notify.py": {
+    "mtime": 1782744077.7645392,
+    "ast_hash": "41969c554d8195664a167f6b2de674b1",
+    "semantic_hash": ""
+  },
+  "app/services/google_calendar.py": {
+    "mtime": 1782075436.7591321,
+    "ast_hash": "307aa0237bb1f17c2b29b8e8266044bd",
+    "semantic_hash": ""
+  },
+  "app/services/health.py": {
+    "mtime": 1783568924.02164,
+    "ast_hash": "208dd6fd079c84bc1841329e3eb66440",
+    "semantic_hash": ""
+  },
+  "app/services/kernel_ia.py": {
+    "mtime": 1784133145.7557726,
+    "ast_hash": "711bddb9221c60c554d22c80699a623c",
+    "semantic_hash": ""
+  },
+  "app/services/kernel_ia_finance.py": {
+    "mtime": 1784133233.9776313,
+    "ast_hash": "63528fefb65746f08208ecbb796d6308",
+    "semantic_hash": ""
+  },
+  "app/services/lead_funnel.py": {
+    "mtime": 1783646490.0796692,
+    "ast_hash": "8bb20b4738d7bfad06b435c1d1af8d0b",
+    "semantic_hash": ""
+  },
+  "app/services/lgpd.py": {
+    "mtime": 1783646525.6114748,
+    "ast_hash": "97f60baf1f89aaad45be206eed9dbc8c",
+    "semantic_hash": ""
+  },
+  "app/services/loyalty.py": {
+    "mtime": 1782744077.7648425,
+    "ast_hash": "1dcd514e8f7a289ca7c576d9fe9e4d7e",
+    "semantic_hash": ""
+  },
+  "app/services/management.py": {
+    "mtime": 1782986829.1145747,
+    "ast_hash": "e7d45157b770568ca07ab8feacf4d9e6",
+    "semantic_hash": ""
+  },
+  "app/services/membership.py": {
+    "mtime": 1784080959.5100253,
+    "ast_hash": "f1c74a1528aab412799a44bf684e3092",
+    "semantic_hash": ""
+  },
+  "app/services/onboarding.py": {
+    "mtime": 1782773230.3572814,
+    "ast_hash": "c2b789b8d93394ba9d91df894fad6fa1",
+    "semantic_hash": ""
+  },
+  "app/services/onboarding_progress.py": {
+    "mtime": 1783092928.5956867,
+    "ast_hash": "766702f32774661b07f60067fd3b165e",
+    "semantic_hash": ""
+  },
+  "app/services/opt_out.py": {
+    "mtime": 1783646468.3119566,
+    "ast_hash": "2613625c2cf26ff8f76e325167849a2a",
+    "semantic_hash": ""
+  },
+  "app/services/platform.py": {
+    "mtime": 1783577887.4319675,
+    "ast_hash": "3fcfcfbd1242d73c5cae010bd3df2db7",
+    "semantic_hash": ""
+  },
+  "app/services/reactivation.py": {
+    "mtime": 1783100281.5184493,
+    "ast_hash": "8371b78c328bc0cf886b682e788b6648",
+    "semantic_hash": ""
+  },
+  "app/services/reminders.py": {
+    "mtime": 1783100281.5188122,
+    "ast_hash": "99aa739cfdf130707d8f7463d32a5f43",
+    "semantic_hash": ""
+  },
+  "app/services/reschedule.py": {
+    "mtime": 1783078250.297276,
+    "ast_hash": "4df3a899a5060681f8724445964c0e17",
+    "semantic_hash": ""
+  },
+  "app/services/scheduling.py": {
+    "mtime": 1781395646.3277576,
+    "ast_hash": "4ff8a381abeca11ded9c01b874d4773d",
+    "semantic_hash": ""
+  },
+  "app/services/security_dashboard.py": {
+    "mtime": 1783577597.068346,
+    "ast_hash": "f1d82c09fd5d4a74e0caf24e79392323",
+    "semantic_hash": ""
+  },
+  "app/services/site_visibility.py": {
+    "mtime": 1783603443.1434531,
+    "ast_hash": "0c93e30ac36ba7112b9a64ef94090a7e",
+    "semantic_hash": ""
+  },
+  "app/services/sse_broker.py": {
+    "mtime": 1782274431.193515,
+    "ast_hash": "742aa67fb1a9fd0eb1de3f98a1a3f047",
+    "semantic_hash": ""
+  },
+  "app/services/tenant.py": {
+    "mtime": 1783470802.502614,
+    "ast_hash": "9af1673c00706e05755295e2edcf7ae0",
+    "semantic_hash": ""
+  },
+  "app/services/trinks_appointments.py": {
+    "mtime": 1784080948.062174,
+    "ast_hash": "c29f7c3646479982900f69ea40fd8810",
+    "semantic_hash": ""
+  },
+  "app/services/trinks_cash_closing.py": {
+    "mtime": 1783036970.6731503,
+    "ast_hash": "2df5d8d88d1a836f34e315f26ebacf23",
+    "semantic_hash": ""
+  },
+  "app/services/trinks_debts.py": {
+    "mtime": 1782969725.1917083,
+    "ast_hash": "8a2267d0998001f4e84a39395e76feb2",
+    "semantic_hash": ""
+  },
+  "app/services/trinks_dre.py": {
+    "mtime": 1783350213.9425056,
+    "ast_hash": "8b09dd2e7b5f7e9d60970a4e9d3a9c64",
+    "semantic_hash": ""
+  },
+  "app/services/trinks_import.py": {
+    "mtime": 1782955919.6768875,
+    "ast_hash": "ab43c0e4aef8790a661cc7af7de9fb8b",
+    "semantic_hash": ""
+  },
+  "app/services/trinks_payments.py": {
+    "mtime": 1783184381.6175098,
+    "ast_hash": "bd46c0bef8d16f9575ab9af7dbb8142e",
+    "semantic_hash": ""
+  },
+  "app/services/trinks_ranking.py": {
+    "mtime": 1783132060.265693,
+    "ast_hash": "325f418ea1cd057df6be95936f30c289",
+    "semantic_hash": ""
+  },
+  "app/services/whatsapp.py": {
+    "mtime": 1784080628.4648762,
+    "ast_hash": "d1af1224ad893962ff7cf6cec0aefee4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/agenda/page.tsx": {
+    "mtime": 1782666451.5249739,
+    "ast_hash": "b1e67840f42c73339a8f3e9bc03c8dd3",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/assinaturas/page.tsx": {
+    "mtime": 1782666451.5252948,
+    "ast_hash": "0fae69d483c876000089fec80d415334",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/campanhas/page.tsx": {
+    "mtime": 1782331490.0714173,
+    "ast_hash": "22f1d5af52ef88b0a89aa11920565644",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/clientes/page.tsx": {
+    "mtime": 1782666451.5256917,
+    "ast_hash": "d13abd548bb3349860f0671c655c99cf",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/configuracoes/page.tsx": {
+    "mtime": 1783364317.0188065,
+    "ast_hash": "9e0899dcb46de46d296aaf8f651caa23",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/conversas/page.tsx": {
+    "mtime": 1782666451.5259101,
+    "ast_hash": "9e691564f5c9e8afeee989f97c095ea4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/crm/page.tsx": {
+    "mtime": 1782666451.5261128,
+    "ast_hash": "cabdc337a1c9a09cfa9670bcebbbfcd7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/dashboard/page.tsx": {
+    "mtime": 1782666451.526315,
+    "ast_hash": "c8bf799858d011a567e17eda7071770d",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/empresa/page.tsx": {
+    "mtime": 1782666451.5267339,
+    "ast_hash": "2e479cfb10048be9cc81c99d1c526287",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/equipe/page.tsx": {
+    "mtime": 1782666451.526979,
+    "ast_hash": "017d49d5ee6e6bd45c45a942aff47edb",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/fidelidade/page.tsx": {
+    "mtime": 1782666451.5275068,
+    "ast_hash": "cd5c3d493c0e02fd13365c170679a4e2",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/financeiro/page.tsx": {
+    "mtime": 1783369030.6913285,
+    "ast_hash": "cd2b992dd5bc3c4a06124ef8a612a1d1",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/gestor/page.tsx": {
+    "mtime": 1783364317.0200825,
+    "ast_hash": "572860cd0e291abf2bc7cd6d0217f4b8",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/integracoes/page.tsx": {
+    "mtime": 1783457866.1729326,
+    "ast_hash": "5f5130649fb68808be9e57ba3871557a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/layout.tsx": {
+    "mtime": 1783364317.0209901,
+    "ast_hash": "f3ffb7c0d3df5f96e7612488e0977e35",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/seguranca/auditoria/page.tsx": {
+    "mtime": 1783574043.0619156,
+    "ast_hash": "34f8ae1dbcc8b4748a243f4caa8a0abc",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/seguranca/page.tsx": {
+    "mtime": 1783577689.219743,
+    "ast_hash": "409408b7b65d44d47050ae73745e2260",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/seguranca/sessoes/page.tsx": {
+    "mtime": 1783567347.5436032,
+    "ast_hash": "7d5620c025645d04b6a1f1b53c1ce6ff",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/seguranca/visibilidade/page.tsx": {
+    "mtime": 1783603649.8384178,
+    "ast_hash": "8793c5b1d12fd926400d1d8831915e7e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/servicos/page.tsx": {
+    "mtime": 1782666451.5281224,
+    "ast_hash": "9c15c38da5a0867de7bd55594b697b90",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/admin/usuarios/page.tsx": {
+    "mtime": 1783567409.4941084,
+    "ast_hash": "ed057a9976c89914a5f785f844df9e0e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/api/auth/[...nextauth]/route.ts": {
+    "mtime": 1781059123.8199997,
+    "ast_hash": "64f6d6799ab87d3850d5c17b77ad8345",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/barbeiro/agenda/page.tsx": {
+    "mtime": 1782666451.5284603,
+    "ast_hash": "d85ccd6521ed7bb9be00ef0f17f49160",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/barbeiro/layout.tsx": {
+    "mtime": 1782330290.0426543,
+    "ast_hash": "d703213a51e63c92320eb30da05e927a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/layout.tsx": {
+    "mtime": 1783364317.0217836,
+    "ast_hash": "160b828bf9b048825639e45f82dcb486",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/login/page.tsx": {
+    "mtime": 1781059063.4183917,
+    "ast_hash": "a0f7dc43e73f41442bd2bd9fc772e0cd",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/page.tsx": {
+    "mtime": 1781059083.186878,
+    "ast_hash": "c6568da095f78e9c922385271ffcbb2c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/app/trocar-senha/page.tsx": {
+    "mtime": 1783537823.049016,
+    "ast_hash": "c651637e82160fad8753b29e6252860f",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/auth.ts": {
+    "mtime": 1781059044.469104,
+    "ast_hash": "78625068bc36702f129739a52afccbbb",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components.json": {
+    "mtime": 1782329943.3681118,
+    "ast_hash": "63b2c4fcf776fec9dbc76e94ea0d70c6",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/agenda-day-summary.tsx": {
+    "mtime": 1782666451.5293565,
+    "ast_hash": "bd7ba24475aab763553b86a48701833d",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/agenda-day-view.tsx": {
+    "mtime": 1782666451.5296736,
+    "ast_hash": "0dd2c33944aca5b426b38a72c58f7247",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/appointment-actions-dialog.tsx": {
+    "mtime": 1782666451.5301378,
+    "ast_hash": "83a23a4d6bd0f509e192573320ca3c27",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/appointment-block.tsx": {
+    "mtime": 1783364317.0225387,
+    "ast_hash": "bb6354e5a29b3696b330fc489af1cdd7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/barber-appt-card.tsx": {
+    "mtime": 1782666451.5306308,
+    "ast_hash": "4ca06aa97910173d812d4c8cddeeb364",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/barber-day-summary.tsx": {
+    "mtime": 1782666451.5309026,
+    "ast_hash": "c3b7ef1b7e42fa10b1f3649698fb160a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/concluir-dialog.tsx": {
+    "mtime": 1782666451.5314333,
+    "ast_hash": "e81a8a3b3bd3a9a64d31bedaea233bb4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/constants.ts": {
+    "mtime": 1783364317.0229416,
+    "ast_hash": "416a922408a5605c60884016d3544f0a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/day-grid-skeleton.tsx": {
+    "mtime": 1782666451.5317888,
+    "ast_hash": "528f76d88adf0bb3c605ac59e8d7130d",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/day-grid.tsx": {
+    "mtime": 1782666451.532109,
+    "ast_hash": "bfd4cbb149966cf12e58bd92865c9617",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/day-toolbar.tsx": {
+    "mtime": 1782666451.5322955,
+    "ast_hash": "022b95383d206b28acc42dd01a8a8c78",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/grid-layout.ts": {
+    "mtime": 1783364317.0233505,
+    "ast_hash": "d6d5e639007dff321cc5cc5d4ddb9200",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/index.ts": {
+    "mtime": 1782666451.532653,
+    "ast_hash": "530b65731bdb755cd168277c897be83b",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/novo-agendamento-dialog.tsx": {
+    "mtime": 1782666451.5330458,
+    "ast_hash": "53723d434ee813ebae634968cc29c5f4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/professional-column.tsx": {
+    "mtime": 1783364317.0239265,
+    "ast_hash": "cdc168df3a8eee88acda1cf1398d1c52",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/agenda/reagendar-dialog.tsx": {
+    "mtime": 1782666451.5336475,
+    "ast_hash": "06150d2bee08120301f74d8280526676",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/assinaturas/constants.ts": {
+    "mtime": 1782666451.5340607,
+    "ast_hash": "68b5e9a424f9197b69d3d6b331f1f9ce",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/assinaturas/index.ts": {
+    "mtime": 1782666451.534311,
+    "ast_hash": "95f0a7d938c49206ebfcb18aa6137d3c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/assinaturas/membership-card.tsx": {
+    "mtime": 1782666451.534588,
+    "ast_hash": "505a43277d93f3429a10ce3e8146429a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/assinaturas/plan-form-dialog.tsx": {
+    "mtime": 1782666451.534876,
+    "ast_hash": "9b3d80aa4c79963b45e963630f2569b5",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/assinaturas/plan-list.tsx": {
+    "mtime": 1782666451.53521,
+    "ast_hash": "fbca5553c49b1abe0c171bae028eb6a2",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/assinaturas/sell-membership-dialog.tsx": {
+    "mtime": 1782666451.5355024,
+    "ast_hash": "2073285529f9d2b7b8b3e9aa63317fea",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/assinaturas/usage-history.tsx": {
+    "mtime": 1782666451.535984,
+    "ast_hash": "8aedc2ef360d5f9b1d5dc3d18036bb5a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/assinaturas/use-package-dialog.tsx": {
+    "mtime": 1782666451.5363379,
+    "ast_hash": "95c5c7d64d4f9331b5a086d24d73bcda",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/anonymize-cliente-dialog.tsx": {
+    "mtime": 1783646677.3807242,
+    "ast_hash": "396f7498639f0b820ac7c0abef038907",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/cliente-badges.tsx": {
+    "mtime": 1782666451.5365303,
+    "ast_hash": "34c680853b94638becce3f7032934704",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/cliente-form-dialog.tsx": {
+    "mtime": 1782666451.5368261,
+    "ast_hash": "bd2d6daa9168bfa3aefd710f2d351e34",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/cliente-row.tsx": {
+    "mtime": 1783646699.4629593,
+    "ast_hash": "aa2f83a10353b323a01e7c59852e66a7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/clientes-filters.tsx": {
+    "mtime": 1782666451.5374088,
+    "ast_hash": "5a71a10d94009ca4120e211e38ec836e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/clientes-summary.tsx": {
+    "mtime": 1782666451.5375957,
+    "ast_hash": "a63a05c8fda9832ef534e5f3cc3ff0a0",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/clientes-table.tsx": {
+    "mtime": 1782666451.5377712,
+    "ast_hash": "65f5c60e7690b34549b2a8acb34935d7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/constants.ts": {
+    "mtime": 1782666451.5379622,
+    "ast_hash": "f79627086c720ea8699c4f01263acdb3",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/delete-cliente-dialog.tsx": {
+    "mtime": 1782666451.5381193,
+    "ast_hash": "eb68d2d44d6f6657049205224adfff3c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/clientes/index.ts": {
+    "mtime": 1782666451.5382667,
+    "ast_hash": "d5a588aeee2e26a96c7ba554d70ce217",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/conversas/constants.ts": {
+    "mtime": 1782666451.5384614,
+    "ast_hash": "92aefa7a5369f94cd57390d6ea08eb93",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/conversas/conversation-list-item.tsx": {
+    "mtime": 1782666451.538617,
+    "ast_hash": "4d2adbc8ffff02b56a0d0644ae2dfbe5",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/conversas/conversation-list.tsx": {
+    "mtime": 1782666451.538902,
+    "ast_hash": "34ae3181f8747a97e4560bc50d23be90",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/conversas/inbox.tsx": {
+    "mtime": 1782666451.5390728,
+    "ast_hash": "7340fd49aee37574de8c305631ca4c0a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/conversas/index.ts": {
+    "mtime": 1782666451.539236,
+    "ast_hash": "f69681facabff2ecf49c2a58d7f7a6a4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/conversas/message-bubble.tsx": {
+    "mtime": 1782666451.5394008,
+    "ast_hash": "43fab5447ef4ce35a7706e55d91b0a0c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/conversas/message-panel.tsx": {
+    "mtime": 1782666451.5398154,
+    "ast_hash": "a69d4cb176eef72497c8b7fbcd8339be",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/crm/constants.ts": {
+    "mtime": 1782666451.5400264,
+    "ast_hash": "38c73d5ce3de4080266ed9ce698d7645",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/crm/conversation-drawer.tsx": {
+    "mtime": 1782666451.5403152,
+    "ast_hash": "4e75fa417c30d05147fee128c49a7de9",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/crm/index.ts": {
+    "mtime": 1782666451.5404506,
+    "ast_hash": "3d88274f993bb0ca8b62449b80cf4b8a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/crm/lead-board.tsx": {
+    "mtime": 1782666451.5407233,
+    "ast_hash": "91a2e2799f71fca9dc1fcdf0d8da90bd",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/crm/lead-card.tsx": {
+    "mtime": 1782666451.540866,
+    "ast_hash": "57b7b11ae80dc723670b4372c35c49a0",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/crm/novo-lead-dialog.tsx": {
+    "mtime": 1782666451.541023,
+    "ast_hash": "953e970eafba83a971c12c221d3de9ea",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/dashboard/charts.tsx": {
+    "mtime": 1782666451.5413458,
+    "ast_hash": "4d522da6624a7433698e3797a629b05e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/dashboard/constants.ts": {
+    "mtime": 1782666451.5414884,
+    "ast_hash": "2e9473521f2a3f9c92bb494aa014dac2",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/dashboard/dashboard-skeleton.tsx": {
+    "mtime": 1782666451.541632,
+    "ast_hash": "169f36430958cbe5006afe3dc3fd17be",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/dashboard/index.ts": {
+    "mtime": 1782666451.5418186,
+    "ast_hash": "66e4152337d4a8d241d7b4e40e6a2abf",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/dashboard/sections.tsx": {
+    "mtime": 1782666451.5419993,
+    "ast_hash": "6cb6694c97b57e6f6aa4d27f30c9ddfb",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/empresa/cadastro-form.tsx": {
+    "mtime": 1782666451.5423014,
+    "ast_hash": "9e13999c1701416b90138439fb265e9b",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/empresa/constants.ts": {
+    "mtime": 1782666451.542587,
+    "ast_hash": "5c95d56949b33d803c722ba5c2a5246b",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/empresa/horarios-editor.tsx": {
+    "mtime": 1782666451.5429213,
+    "ast_hash": "15b028379fdca5342cdcd09b444c58d6",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/empresa/index.ts": {
+    "mtime": 1782666451.5431519,
+    "ast_hash": "55d8ab6a97c342b1f15af376f3878982",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/empresa/plano-card.tsx": {
+    "mtime": 1782666451.5433915,
+    "ast_hash": "c736086dbfd8ffaa4e4a78a9f8dd5aa1",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/empresa/unidade-form.tsx": {
+    "mtime": 1782666451.5436788,
+    "ast_hash": "cb6f471486f6fd5ad086a1cd34899259",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/equipe/archive-barber-dialog.tsx": {
+    "mtime": 1782666451.543883,
+    "ast_hash": "46d75f3b84c0f1d0d3fe591c23c6a1a3",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/equipe/barber-card.tsx": {
+    "mtime": 1782666451.5441837,
+    "ast_hash": "be3ef66f35f2aba45acdceedb81b26af",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/equipe/barber-form-dialog.tsx": {
+    "mtime": 1783364317.0243807,
+    "ast_hash": "493acc6e6fa8dbaa8713e2e2f3e7b96a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/equipe/constants.ts": {
+    "mtime": 1782666451.5446458,
+    "ast_hash": "f862f6b231472b3085af069b4ee69577",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/equipe/equipe-summary.tsx": {
+    "mtime": 1782666451.544796,
+    "ast_hash": "bff2b10ed9f5f3a2833d06ece777ff2a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/equipe/folga-dialog.tsx": {
+    "mtime": 1782666451.5450668,
+    "ast_hash": "d7f7fb2ff8e202ecd2e2cfeb3a3563f9",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/equipe/index.ts": {
+    "mtime": 1782666451.5453212,
+    "ast_hash": "9bdd264af8c0920e14d33be46bb3a034",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/caixa-historico.tsx": {
+    "mtime": 1783364317.0249014,
+    "ast_hash": "7cdbf7b38856129539d6ede1872ab199",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/constants.ts": {
+    "mtime": 1783369017.746567,
+    "ast_hash": "59ae7d6f9939c2c25c6c3013ae228bbc",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/despesa-dialog.tsx": {
+    "mtime": 1782666451.545667,
+    "ast_hash": "4763deb81bc0335a1fe6aa366a46b0f5",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/dia-view.tsx": {
+    "mtime": 1782666451.5458179,
+    "ast_hash": "d6b69ad89d5bcbd124f90a1dc88e5acb",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/dre-view.tsx": {
+    "mtime": 1783369307.689625,
+    "ast_hash": "b8646f8f107a8124d1778a042ef0530d",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/financeiro-skeleton.tsx": {
+    "mtime": 1782666451.545987,
+    "ast_hash": "f415ce927806b42925a2afb5048ef984",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/index.ts": {
+    "mtime": 1783368958.2298489,
+    "ast_hash": "6a0b67280895b2537edcd25b9d59bb62",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/mensal-view.tsx": {
+    "mtime": 1783364317.0271294,
+    "ast_hash": "17238ef917bbd8a02a9e5302f357f82e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/pagamentos-view.tsx": {
+    "mtime": 1783369269.1534576,
+    "ast_hash": "fc54788f93bdbbcdca2874ebfbf3e326",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/financeiro/shared-blocks.tsx": {
+    "mtime": 1782666451.546593,
+    "ast_hash": "9f57cef42bb468b947e4b99de8959a58",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/gestor/buracos-panel.tsx": {
+    "mtime": 1782744102.7023659,
+    "ast_hash": "d50dc48608e8383e6e0ae61b8cfdffb7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/gestor/folha-panel.tsx": {
+    "mtime": 1783364317.0276265,
+    "ast_hash": "6971b38ca53ef0ded39027469025c5f3",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/gestor/inativos-panel.tsx": {
+    "mtime": 1782744102.7026336,
+    "ast_hash": "8ad3c014f18693f5e17537c955c28541",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/gestor/index.ts": {
+    "mtime": 1783364317.0289488,
+    "ast_hash": "328f377a512bfab90a374917a53ce5b1",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/gestor/kpis.tsx": {
+    "mtime": 1782744102.703282,
+    "ast_hash": "2a692bafede3c13c2efce1027645a852",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/gestor/ranking-panel.tsx": {
+    "mtime": 1782744102.7037666,
+    "ast_hash": "7dd04e5b79a7997a91cd6d8f740abdf6",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/kernel-ia-launcher.tsx": {
+    "mtime": 1783364317.0310237,
+    "ast_hash": "0f69479a2cb2b6a6b23fa2aa5a8f4b15",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/layout/AdminHeader.tsx": {
+    "mtime": 1783457866.1732016,
+    "ast_hash": "82698f7c47899d59b19094daf4dd7506",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/layout/AdminShell.tsx": {
+    "mtime": 1783364317.0323865,
+    "ast_hash": "e0a50d3657dcb0658976bbd6726b0147",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/layout/AdminSidebar.tsx": {
+    "mtime": 1783603674.2577202,
+    "ast_hash": "ec150b81bb9a85fdeb08b315ffc0fc09",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/loyalty/adjust-dialog.tsx": {
+    "mtime": 1782666451.550764,
+    "ast_hash": "db4f13cee9dd784b3ca66a2668104172",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/loyalty/cliente-fidelidade-panel.tsx": {
+    "mtime": 1782666451.5513332,
+    "ast_hash": "1bf9ca23f5789ce4dbff83bc5f3b3231",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/loyalty/config-tab.tsx": {
+    "mtime": 1782666451.5516806,
+    "ast_hash": "1c75427613f56252dd0fd7fa53267ffd",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/loyalty/constants.ts": {
+    "mtime": 1782666451.552108,
+    "ast_hash": "de3481fc00682b0b04bd1d75514921df",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/loyalty/redeem-dialog.tsx": {
+    "mtime": 1782666451.5523837,
+    "ast_hash": "e914214a3e0b44a7c05c6ed719b57d7a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/notifications/notification-bell.tsx": {
+    "mtime": 1783364317.033069,
+    "ast_hash": "7c71e61fab64c541b316a9e4baf0d979",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/patterns/async-state.tsx": {
+    "mtime": 1782666451.5527203,
+    "ast_hash": "b67cea789b4f4e32eb8fec4e1a9e5354",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/patterns/empty-state.tsx": {
+    "mtime": 1782666451.5529785,
+    "ast_hash": "b8e1007ac7fb287dc47806fd7235b1cc",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/patterns/error-state.tsx": {
+    "mtime": 1782666451.5531638,
+    "ast_hash": "57a58d79b66e0eb76e3d9ca4361f794e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/patterns/index.ts": {
+    "mtime": 1782666451.5533695,
+    "ast_hash": "53ad4fe45d907a8e80d5b4d4c012fb10",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/patterns/skeleton.tsx": {
+    "mtime": 1782666451.553914,
+    "ast_hash": "d6bf86119a6702cef6913f0ed849e68a",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/patterns/spinner.tsx": {
+    "mtime": 1782666451.5542004,
+    "ast_hash": "29788f07b29e3f745d41c4920ee79204",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/providers.tsx": {
+    "mtime": 1782666451.554389,
+    "ast_hash": "11b5b7c3f3e22c7d82730530dbe00759",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/servicos/constants.ts": {
+    "mtime": 1782666451.554799,
+    "ast_hash": "fa7fd20c9b065dd30c3b6b5c7dab6f55",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/servicos/index.ts": {
+    "mtime": 1782666451.554986,
+    "ast_hash": "7f163f83863f2705c14ce8484ac6777e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/servicos/servico-badges.tsx": {
+    "mtime": 1782666451.5551703,
+    "ast_hash": "3a611c76a86dce5eae312dd865dc0d04",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/servicos/servico-form-dialog.tsx": {
+    "mtime": 1782666451.5556076,
+    "ast_hash": "b98350180e37cca2ba9766bb343caff1",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/servicos/servico-row.tsx": {
+    "mtime": 1782666451.5557904,
+    "ast_hash": "cc39afe5e60cb17be50e327029e97844",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/servicos/servicos-table.tsx": {
+    "mtime": 1782666451.5559642,
+    "ast_hash": "931ea38f46a96914b86fb80a819fbfb4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/avatar.tsx": {
+    "mtime": 1782666451.5561533,
+    "ast_hash": "4f92d02c6e20ac2433a8bbc56bc3594f",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/badge.tsx": {
+    "mtime": 1782329966.325136,
+    "ast_hash": "e4ec840217040d5630ee6ed7213a1d72",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/button.tsx": {
+    "mtime": 1782329953.9900405,
+    "ast_hash": "e04ce5251d6b0dd04020988126c905e9",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/card.tsx": {
+    "mtime": 1782329966.47112,
+    "ast_hash": "bd5f88ad2d983dd6c4561d63824c80ba",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/dialog.tsx": {
+    "mtime": 1782329966.5707912,
+    "ast_hash": "d9618a63d34473ec512321cc12d43692",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/input.tsx": {
+    "mtime": 1782329966.3689952,
+    "ast_hash": "0607b02d99a2e92f9509223f36ccc6ec",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/popover.tsx": {
+    "mtime": 1783364317.0349684,
+    "ast_hash": "22843346fcabd8643442dd116d411e9f",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/section.tsx": {
+    "mtime": 1782666451.5563064,
+    "ast_hash": "4b077233de29cee66d36837377238b23",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/segmented-control.tsx": {
+    "mtime": 1782666451.5564628,
+    "ast_hash": "f8c4be49f3529dbfd25777b5f2630ee9",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/select.tsx": {
+    "mtime": 1782329966.441715,
+    "ast_hash": "ab95f478cb74d1906b07425c15b124cc",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/stat-card.tsx": {
+    "mtime": 1782666451.5566227,
+    "ast_hash": "afc3f1488bb9504292293632a3b50a8d",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/ui/tooltip.tsx": {
+    "mtime": 1782329966.5017006,
+    "ast_hash": "6566a444ce6c0a87d6611903430534fa",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/usuarios/index.ts": {
+    "mtime": 1783567403.5399082,
+    "ast_hash": "e20c9b1d8add3dd947f4ab116538e173",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/usuarios/reset-password-dialog.tsx": {
+    "mtime": 1783567363.406936,
+    "ast_hash": "08e713bb2f0ce1f11cc9cdee03508440",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/usuarios/sessions-dialog.tsx": {
+    "mtime": 1783567372.7862585,
+    "ast_hash": "324dffa0457f22699e233147035b2fce",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/components/usuarios/user-row.tsx": {
+    "mtime": 1783567398.6351304,
+    "ast_hash": "ae418f952e15e511441f4de2a01ff672",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/e2e/01-login.spec.ts": {
+    "mtime": 1781121434.320468,
+    "ast_hash": "a5ca82e34b4bfedf3886b368bae66e4b",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/e2e/02-rbac.spec.ts": {
+    "mtime": 1781396333.786454,
+    "ast_hash": "c917bb1fc58a9094c5d8185530e70630",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/e2e/03-reception-flows.spec.ts": {
+    "mtime": 1781134736.49931,
+    "ast_hash": "dacde58f81affa2fc378beee204b81ea",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/e2e/helpers.ts": {
+    "mtime": 1781396335.2590344,
+    "ast_hash": "522d68cc5b6ca8c08353fd248e8d739e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/eslint.config.mjs": {
+    "mtime": 1781057698.36902,
+    "ast_hash": "dfa1f5f6a7037bf39dc510f30b180002",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-admin-users.ts": {
+    "mtime": 1783567316.9397066,
+    "ast_hash": "f2bde6c3aa939f4bf98625fcc0db8b07",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-agenda-barbeiro.ts": {
+    "mtime": 1782666451.556822,
+    "ast_hash": "385a63d8e00d73745b6e837205ba6f30",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-agenda.ts": {
+    "mtime": 1782666451.557243,
+    "ast_hash": "8b83614fc1e7f8aace06074ab841a5bb",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-assinaturas.ts": {
+    "mtime": 1782666451.5575016,
+    "ast_hash": "d57ed5764f3ca6030f1211b5fac8c28b",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-audit.ts": {
+    "mtime": 1783573987.9659712,
+    "ast_hash": "3d5f8e09895ed4f222abfeb1ef76b379",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-authed-query.ts": {
+    "mtime": 1782666451.5576622,
+    "ast_hash": "b6294b0d09881734245220ffeccf30c6",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-clientes.ts": {
+    "mtime": 1782666451.5578105,
+    "ast_hash": "497cb89c0da6022e429a17b98b29bb17",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-conversas.ts": {
+    "mtime": 1783537881.9064167,
+    "ast_hash": "d4cdf480549cce301dfde75c20d85a03",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-crm.ts": {
+    "mtime": 1782666451.558255,
+    "ast_hash": "e518182180a621d590f1dec75735bf0c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-dashboard.ts": {
+    "mtime": 1782666451.5584059,
+    "ast_hash": "482bf3bce89c700bddd721ee6bb96772",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-empresa.ts": {
+    "mtime": 1782666451.5586665,
+    "ast_hash": "94311d16fb4190bdcabe7922b640fba4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-equipe.ts": {
+    "mtime": 1783364317.0354884,
+    "ast_hash": "7cfe615a70b05e011903ad9781af19be",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-financeiro.ts": {
+    "mtime": 1783369024.505902,
+    "ast_hash": "603ed2b9ef7e3af61dc0d688d3bda08d",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-gestor.ts": {
+    "mtime": 1783364317.0362315,
+    "ast_hash": "f1adc487de5dc9b948a1305c8b727ef0",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-kernel-ia.ts": {
+    "mtime": 1783364317.0369391,
+    "ast_hash": "246e809f7e5108a40ad84815e521db56",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-lgpd.ts": {
+    "mtime": 1783646668.8758543,
+    "ast_hash": "921d04d581d1484b76802efec4432858",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-loyalty.ts": {
+    "mtime": 1782666451.5593371,
+    "ast_hash": "8f27855a04d42d3869a30e2a5ede4734",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-permissions.ts": {
+    "mtime": 1783457866.193654,
+    "ast_hash": "0c7da13dd0c229a7ce71d3de827fcf8d",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-remarcacoes.ts": {
+    "mtime": 1783364317.0374084,
+    "ast_hash": "4eab6e987177d5209fb51623976b327c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-security-dashboard.ts": {
+    "mtime": 1783577663.3526995,
+    "ast_hash": "2c7f2705dc3a9563fadc07a3bc80f8f6",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-servicos.ts": {
+    "mtime": 1782666451.5594895,
+    "ast_hash": "ffb9c6c7ac76f969fd35a546e670b12e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-sessions.ts": {
+    "mtime": 1783567333.3802829,
+    "ast_hash": "bd41a7459c88b831081fb057ca9d500b",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-site-visibility.ts": {
+    "mtime": 1783603623.2798815,
+    "ast_hash": "cee9927cd954e111f988b97487fd54c4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/hooks/use-theme.ts": {
+    "mtime": 1783364317.0411117,
+    "ast_hash": "8a31d988c53b5eff71cee21dd9e36cc7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/lib/api.ts": {
+    "mtime": 1781568405.6893628,
+    "ast_hash": "47d88cd87c351f3a265d791162d75ae5",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/lib/auth.ts": {
+    "mtime": 1783537751.0151958,
+    "ast_hash": "f5a19b6e93b95e128d5fd94b61be8a61",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/lib/queryClient.ts": {
+    "mtime": 1782666451.5596511,
+    "ast_hash": "0298c9587e0c086d47e2e60032737e80",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/lib/roles.ts": {
+    "mtime": 1783567267.436968,
+    "ast_hash": "81fcb68b25e0a50d66eaa4f92bf486b7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/lib/tenant.ts": {
+    "mtime": 1783364317.0451617,
+    "ast_hash": "0a4476f6596949176cf11c457f8fd4f6",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/lib/utils.ts": {
+    "mtime": 1782329954.028387,
+    "ast_hash": "5a6fd53fdcf2be529e9cc0b718fde352",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/next-env.d.ts": {
+    "mtime": 1783538095.334768,
+    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/next.config.ts": {
+    "mtime": 1782080240.19667,
+    "ast_hash": "810dc100fd8802574884a59f2276527b",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/package.json": {
+    "mtime": 1782329953.172912,
+    "ast_hash": "7bf7113bbc6f63b11738ef9b2dbde3a4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright.config.ts": {
+    "mtime": 1781120937.9138954,
+    "ast_hash": "0f50244937507a03a6488814ca70d213",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/postcss.config.mjs": {
+    "mtime": 1781057698.3693733,
+    "ast_hash": "239f3ebf717465dc636818a1a619398d",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/proxy.ts": {
+    "mtime": 1783537776.0193617,
+    "ast_hash": "fc2bd1a4fc0d2f90e072dab79a1a8cb0",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/.last-run.json": {
+    "mtime": 1781235099.6012,
+    "ast_hash": "ba5904f09cc874b292b28d3db94eefac",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/tsconfig.json": {
+    "mtime": 1781057698.3705642,
+    "ast_hash": "02fc19ad21338c2ab820a70136310db4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/types/index.ts": {
+    "mtime": 1783369009.0787854,
+    "ast_hash": "6b6fda8ed321e81b587167e916aaa4f8",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/types/next-auth.d.ts": {
+    "mtime": 1783537728.8398948,
+    "ast_hash": "97a1c0924bd35af12094c24125d07e60",
+    "semantic_hash": ""
+  },
+  "barbearia-public/app/agendar/page.tsx": {
+    "mtime": 1784933226.798075,
+    "ast_hash": "d6b1ff54ef683fed86a399b906fbb3ce",
+    "semantic_hash": ""
+  },
+  "barbearia-public/app/layout.tsx": {
+    "mtime": 1784932872.518872,
+    "ast_hash": "f9f96895e62eccedb479bdf225ffe11c",
+    "semantic_hash": ""
+  },
+  "barbearia-public/app/meus-agendamentos/page.tsx": {
+    "mtime": 1784933627.0431504,
+    "ast_hash": "466f093691286f0699ba4de3a95aa57d",
+    "semantic_hash": ""
+  },
+  "barbearia-public/app/page.tsx": {
+    "mtime": 1784933973.631171,
+    "ast_hash": "6b836dcdfd998023c611f10d1a56a7a9",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/back-button.tsx": {
+    "mtime": 1784766800.3819351,
+    "ast_hash": "057fbfd7918d03ce25d904de22b0e6e1",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/booking-flow.tsx": {
+    "mtime": 1784759460.2468002,
+    "ast_hash": "d9c38bba646b41e84b4f998970bb76c9",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/booking-success.tsx": {
+    "mtime": 1784766905.4838738,
+    "ast_hash": "03c1df325878b7490503c5ed23874c30",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/step-confirm.tsx": {
+    "mtime": 1784766838.8284135,
+    "ast_hash": "90076b5d65e3ce0a65a4ec47436ffa36",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/step-header.tsx": {
+    "mtime": 1784933201.410659,
+    "ast_hash": "d43f1d56546966e316be14f31ed91021",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/step-professional.tsx": {
+    "mtime": 1784766841.7507167,
+    "ast_hash": "5b175e9b260477b368cf05543a742c70",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/step-schedule.tsx": {
+    "mtime": 1784933259.7019243,
+    "ast_hash": "a0f6fef97aa624e19175e83bf4d5a0c4",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/step-service.tsx": {
+    "mtime": 1784759354.388757,
+    "ast_hash": "ce21d201ad345e14e1642c1cb3d7f5f5",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/booking/types.ts": {
+    "mtime": 1784759347.3118849,
+    "ast_hash": "b9c24a1c44ae600241a49ce854aecb8a",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/depoimentos.tsx": {
+    "mtime": 1784933000.437787,
+    "ast_hash": "2da6fc6039e1aa6707d9316963e93878",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/hero.tsx": {
+    "mtime": 1784933973.5967224,
+    "ast_hash": "4222711be35346deaedf3c49895069d0",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/install-banner.tsx": {
+    "mtime": 1784933226.7971709,
+    "ast_hash": "ac22f2193788fbe0583ce9c20a7fe5f9",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/register-sw.tsx": {
+    "mtime": 1784259881.4567187,
+    "ast_hash": "5e14c1e7d666d82087a9191abc16c579",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/site-header.tsx": {
+    "mtime": 1784933586.0696187,
+    "ast_hash": "0c91d4a654fba640f683edcffb810603",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/sticky-cta.tsx": {
+    "mtime": 1784933586.0697756,
+    "ast_hash": "f0f226024ece5d8aefa6197594eed06c",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/appointment-summary.tsx": {
+    "mtime": 1784766700.45272,
+    "ast_hash": "50b0e6cfd6128b9289ab109b7882c577",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/buttons.tsx": {
+    "mtime": 1784933117.5072937,
+    "ast_hash": "a735366fafdfc98cc3007c2834b95edf",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/confirm-sheet.tsx": {
+    "mtime": 1784933414.8745732,
+    "ast_hash": "f608fb29b4840dbd7faaa228b8c36f9d",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/empty-state.tsx": {
+    "mtime": 1784766715.50639,
+    "ast_hash": "324b5050543fcd072f3e1de2629e6b1b",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/notice.tsx": {
+    "mtime": 1784766721.5791266,
+    "ast_hash": "7d2a67d4d66adca222260f687a99c790",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/professional.tsx": {
+    "mtime": 1784766706.7331455,
+    "ast_hash": "2a173843a5099ff31279cb242485b7da",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/service-row.tsx": {
+    "mtime": 1784766712.831665,
+    "ast_hash": "63487a31976406c250e7b1011da8ef03",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/status-badge.tsx": {
+    "mtime": 1784766696.2514343,
+    "ast_hash": "8cb6f84814cefa46bbf1351deacfed7d",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/ui/toast.tsx": {
+    "mtime": 1784933226.7976413,
+    "ast_hash": "54c0d026a48414c48fa2f9d89557d71d",
+    "semantic_hash": ""
+  },
+  "barbearia-public/components/wordmark.tsx": {
+    "mtime": 1784932855.517017,
+    "ast_hash": "254c922eb1aaa1d240513abe879845b9",
+    "semantic_hash": ""
+  },
+  "barbearia-public/lib/api.ts": {
+    "mtime": 1784759209.8940434,
+    "ast_hash": "e956f5ed8a3e48096edf36d9c8d18cfd",
+    "semantic_hash": ""
+  },
+  "barbearia-public/lib/format.ts": {
+    "mtime": 1784759207.4950297,
+    "ast_hash": "2cb10f0190f992b4c7968c74cebc5916",
+    "semantic_hash": ""
+  },
+  "barbearia-public/next-env.d.ts": {
+    "mtime": 1784933392.9213684,
+    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
+    "semantic_hash": ""
+  },
+  "barbearia-public/next.config.ts": {
+    "mtime": 1784760174.2189202,
+    "ast_hash": "5cd1536143dd82eceea74bac544c15b7",
+    "semantic_hash": ""
+  },
+  "barbearia-public/package.json": {
+    "mtime": 1784259640.7195635,
+    "ast_hash": "4498fbbac6d0070f112714ca4eb234e9",
+    "semantic_hash": ""
+  },
+  "barbearia-public/postcss.config.mjs": {
+    "mtime": 1784259663.0559647,
+    "ast_hash": "675899342e765a4d16acd75a53389101",
+    "semantic_hash": ""
+  },
+  "barbearia-public/public/sw.js": {
+    "mtime": 1784933377.7953525,
+    "ast_hash": "1ee6015db2023bd22f3e1d1cf3539593",
+    "semantic_hash": ""
+  },
+  "barbearia-public/tsconfig.json": {
+    "mtime": 1784260004.2504869,
+    "ast_hash": "7831df54b0184c9a88a681bd02b3e9e4",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/api/auth/[...nextauth]/route.ts": {
+    "mtime": 1782914518.015608,
+    "ast_hash": "64f6d6799ab87d3850d5c17b77ad8345",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/assinaturas/page.tsx": {
+    "mtime": 1783097477.2476125,
+    "ast_hash": "7b76976a3cc637ecf5338c5a303111ee",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/configuracoes/page.tsx": {
+    "mtime": 1783097477.247804,
+    "ast_hash": "a1a2703f6e57f8c564c1a730cd84037c",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/dashboard/page.tsx": {
+    "mtime": 1783572308.8863947,
+    "ast_hash": "e4b550174e472914e77dc9fd056675cf",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/financeiro/page.tsx": {
+    "mtime": 1783097477.2486145,
+    "ast_hash": "f59ccd42f5b38d4e780f91c808816f0a",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/layout.tsx": {
+    "mtime": 1783097477.249309,
+    "ast_hash": "0ad1b6dfdbc041929620d41848296f3f",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/login/page.tsx": {
+    "mtime": 1782914518.0161624,
+    "ast_hash": "63862b78b417238712aee05e48ff1c4b",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/logs/page.tsx": {
+    "mtime": 1783097477.2495308,
+    "ast_hash": "6b14f5d62d9af34c138e386bd8495471",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/onboarding/page.tsx": {
+    "mtime": 1783097477.2497458,
+    "ast_hash": "a5ca95f41212ef91b9d4bc2e0eda820e",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/operacoes/page.tsx": {
+    "mtime": 1783602547.9122689,
+    "ast_hash": "702be0a37a06aa16049c87159fa7e77b",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/page.tsx": {
+    "mtime": 1782914518.0162382,
+    "ast_hash": "64bfed769b0e09d3b5089832dce5b39e",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/tenants/[id]/page.tsx": {
+    "mtime": 1783097477.2501853,
+    "ast_hash": "74bafca4efe7867c2549da91e6e20621",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/tenants/new/page.tsx": {
+    "mtime": 1782914518.0164514,
+    "ast_hash": "83e277742f6c84086dd55b790aba0c92",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/app/tenants/page.tsx": {
+    "mtime": 1783572308.8866634,
+    "ast_hash": "bc502a028343fb490243e45a55166006",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/auth.ts": {
+    "mtime": 1782914518.0166566,
+    "ast_hash": "78625068bc36702f129739a52afccbbb",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/charts.tsx": {
+    "mtime": 1783097477.2507255,
+    "ast_hash": "89ab63ecab4a917923fc52321cea69ce",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/command-palette.tsx": {
+    "mtime": 1783097477.250903,
+    "ast_hash": "81d3a87814fa057486847b1ee8489fad",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/impersonate-dialog.tsx": {
+    "mtime": 1783097477.251067,
+    "ast_hash": "06ee94e52473a076e1867906f83e0d31",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/org-edit-dialog.tsx": {
+    "mtime": 1783097477.2512918,
+    "ast_hash": "ff3e54e1f2af29e1fd3b84ed7ae36d4c",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/patterns/async-state.tsx": {
+    "mtime": 1783097477.2514694,
+    "ast_hash": "bb53d79723e8ca9dee2dbc18b9fac34e",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/patterns/empty-state.tsx": {
+    "mtime": 1783097477.2516055,
+    "ast_hash": "bb7a9159c9718dd1e31f58a0490cf011",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/patterns/error-state.tsx": {
+    "mtime": 1783097477.2518556,
+    "ast_hash": "28eb8e693c59f52948e57ce00674cbd4",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/patterns/index.ts": {
+    "mtime": 1783097477.2519844,
+    "ast_hash": "10ac062b8fd77b04db58f11770145a1f",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/patterns/skeleton.tsx": {
+    "mtime": 1783097477.2521088,
+    "ast_hash": "81e1ec9d978ae91f3d8baf581db15289",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/patterns/spinner.tsx": {
+    "mtime": 1783097477.252234,
+    "ast_hash": "c3c108fdd5bdf09ddbc9d924c3538918",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/providers.tsx": {
+    "mtime": 1783097477.2524078,
+    "ast_hash": "d7e5ea296cdab083ae812d3f2eab6105",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/shell.tsx": {
+    "mtime": 1783097477.2526162,
+    "ast_hash": "3dd84a5827ec1c80f1fbdc743d6b5db3",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/avatar.tsx": {
+    "mtime": 1783097477.2527475,
+    "ast_hash": "05d40bac5ea98703bdb8b35d45751556",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/badge.tsx": {
+    "mtime": 1783572308.8870032,
+    "ast_hash": "bd92b4678953f71c3ebbace80eaf81b1",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/button.tsx": {
+    "mtime": 1783097477.2529216,
+    "ast_hash": "c689309987972455e2d41a82da3ae64b",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/card.tsx": {
+    "mtime": 1782914518.0171747,
+    "ast_hash": "72e522280276abdddead7dada1e0450d",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/dialog.tsx": {
+    "mtime": 1783097477.2530608,
+    "ast_hash": "515d244c8cbe6f264495753842a6e3aa",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/input.tsx": {
+    "mtime": 1783097477.253186,
+    "ast_hash": "1a6235e405dd1195e331afde39f078d5",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/section.tsx": {
+    "mtime": 1783097477.25331,
+    "ast_hash": "c1203242a38ed6ffe7f7c03f967d2a7f",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/segmented-control.tsx": {
+    "mtime": 1783097477.2534354,
+    "ast_hash": "50dcd78c58972fbf7e9eb584f26ff895",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/select.tsx": {
+    "mtime": 1783097477.2536032,
+    "ast_hash": "9caf15954171aa506d90896d42d86df0",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/stat-card.tsx": {
+    "mtime": 1782914518.017255,
+    "ast_hash": "92432012f084913c3d14709319ec9e6d",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/components/ui/tooltip.tsx": {
+    "mtime": 1783097477.2538111,
+    "ast_hash": "674e253091c6891e06c61280eb3497cc",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/eslint.config.mjs": {
+    "mtime": 1783097477.253987,
+    "ast_hash": "c68ed74454ffd91b4e99c08235c182c5",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/lib/api.ts": {
+    "mtime": 1782914518.0175574,
+    "ast_hash": "55ce80284bcac83dd9bc5f7a194e489a",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/lib/auth.ts": {
+    "mtime": 1782914518.0176547,
+    "ast_hash": "acffbfb22996d50f83418f24a7a81825",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/lib/platform.ts": {
+    "mtime": 1783602547.9125378,
+    "ast_hash": "a470340c4f07e63e16473a031f95aa5b",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/lib/use-platform.ts": {
+    "mtime": 1782914518.0178306,
+    "ast_hash": "2bef560e0b7733e3f87eaa1e7cedae88",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/lib/utils.ts": {
+    "mtime": 1782914518.0179157,
+    "ast_hash": "5afd0bc9fb24a4f6a40ce9831adcf45a",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/next.config.ts": {
+    "mtime": 1782914518.017997,
+    "ast_hash": "5cafe2b6041b4119cfb490797356a173",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/package.json": {
+    "mtime": 1782914518.0186577,
+    "ast_hash": "14846a82d8356e895d4654b7ebb5772a",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/postcss.config.mjs": {
+    "mtime": 1782914518.018762,
+    "ast_hash": "675899342e765a4d16acd75a53389101",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/proxy.ts": {
+    "mtime": 1782914518.0188706,
+    "ast_hash": "4006edd49f90c1e9c6d5ab501673f898",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/tsconfig.json": {
+    "mtime": 1782914518.01908,
+    "ast_hash": "2e710af958bc275b18051dcc2001a9d7",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/types/next-auth.d.ts": {
+    "mtime": 1782914518.0192056,
+    "ast_hash": "7a6de8a24b5548550c4856c8bacb3b00",
+    "semantic_hash": ""
+  },
+  "deploy/gcp-cloud-run.sh": {
+    "mtime": 1782080227.8983681,
+    "ast_hash": "82ea0875c9cbc6333cc3eff36459c8c6",
+    "semantic_hash": ""
+  },
+  "deploy/gcp-provision.sh": {
+    "mtime": 1782080163.0636377,
+    "ast_hash": "f8ff5d62116d3c2f7a637f689e7d050c",
+    "semantic_hash": ""
+  },
+  "deploy/setup-vm.sh": {
+    "mtime": 1783228543.2501907,
+    "ast_hash": "14e853dfe565e86e62e41fc34d510d34",
+    "semantic_hash": ""
+  },
+  "deploy/update.sh": {
+    "mtime": 1782077531.2983127,
+    "ast_hash": "223a90bd64f04c8705561c0851503c7f",
+    "semantic_hash": ""
+  },
+  "models/__init__.py": {
+    "mtime": 1784258738.3693154,
+    "ast_hash": "cf4f6aeb769ee39ee1decf2f6544b0b0",
+    "semantic_hash": ""
+  },
+  "models/appointment.py": {
+    "mtime": 1784258722.9584897,
+    "ast_hash": "f59ee8ab71ccb2e787a19e2b2fd3c5b2",
+    "semantic_hash": ""
+  },
+  "models/appointment_reschedule.py": {
+    "mtime": 1783077597.8038058,
+    "ast_hash": "9cc34bcdd481079ed400a6eaef53af1a",
+    "semantic_hash": ""
+  },
+  "models/audit.py": {
+    "mtime": 1783573006.7378895,
+    "ast_hash": "a41e4ababb24973ccd45181a7c487018",
+    "semantic_hash": ""
+  },
+  "models/authz.py": {
+    "mtime": 1783392966.5860903,
+    "ast_hash": "9d5974cf210f1590afb53620381c224a",
+    "semantic_hash": ""
+  },
+  "models/barber.py": {
+    "mtime": 1783077597.8041677,
+    "ast_hash": "408dfcfe0e9ded552d600e220bdc0e50",
+    "semantic_hash": ""
+  },
+  "models/base.py": {
+    "mtime": 1780184736.0,
+    "ast_hash": "0faa6bdb9c851f253213f7f1c2bac4d1",
+    "semantic_hash": ""
+  },
+  "models/billing.py": {
+    "mtime": 1783093362.2266943,
+    "ast_hash": "ccb2c6b9b1dbc82b8bf6eb38b1392baf",
+    "semantic_hash": ""
+  },
+  "models/cash_closing.py": {
+    "mtime": 1783036923.2123003,
+    "ast_hash": "d33a7d54d8ffa136f67cd8b497e96009",
+    "semantic_hash": ""
+  },
+  "models/client.py": {
+    "mtime": 1783646410.8279488,
+    "ast_hash": "13e578b24c6c5c801dad18b421456357",
+    "semantic_hash": ""
+  },
+  "models/client_session.py": {
+    "mtime": 1784258703.581457,
+    "ast_hash": "f3f004613148b6968d6a44fca75d94b3",
+    "semantic_hash": ""
+  },
+  "models/client_visibility.py": {
+    "mtime": 1783603302.5427952,
+    "ast_hash": "d5d6594db5abd51c758d4fb1c10cfa86",
+    "semantic_hash": ""
+  },
+  "models/consent.py": {
+    "mtime": 1783646400.0082932,
+    "ast_hash": "79f35ea694517ae793fab097a04ac44c",
+    "semantic_hash": ""
+  },
+  "models/conversation.py": {
+    "mtime": 1782270950.9885423,
+    "ast_hash": "7ddab2a2263814dd8f390917228a0b3b",
+    "semantic_hash": ""
+  },
+  "models/debt.py": {
+    "mtime": 1782969654.0787456,
+    "ast_hash": "83db0a3b11660c39e09ffd7c1c287832",
+    "semantic_hash": ""
+  },
+  "models/dre.py": {
+    "mtime": 1783350213.9440134,
+    "ast_hash": "46bddb2ff4a6c4f0ed148904a4946bed",
+    "semantic_hash": ""
+  },
+  "models/enums.py": {
+    "mtime": 1784258710.8018394,
+    "ast_hash": "aea6c3120154eaeaf86cc33f4d5eeb2e",
+    "semantic_hash": ""
+  },
+  "models/integration.py": {
+    "mtime": 1782254905.7033095,
+    "ast_hash": "7eed7a9eecf15c66c664f301b3fd0d9d",
+    "semantic_hash": ""
+  },
+  "models/lead.py": {
+    "mtime": 1781601675.341308,
+    "ast_hash": "c693a1b9cfad9b2745affde3ee80f5dc",
+    "semantic_hash": ""
+  },
+  "models/loyalty.py": {
+    "mtime": 1782658781.7340765,
+    "ast_hash": "47895050a827c6a4eafa199ef558386b",
+    "semantic_hash": ""
+  },
+  "models/membership.py": {
+    "mtime": 1782744077.7659945,
+    "ast_hash": "668a42969ae51f06acae036c5b9a916f",
+    "semantic_hash": ""
+  },
+  "models/organization.py": {
+    "mtime": 1783573018.3612113,
+    "ast_hash": "81cc0cdbf0812da0d1c310b7d6cec744",
+    "semantic_hash": ""
+  },
+  "models/payment.py": {
+    "mtime": 1780184736.0,
+    "ast_hash": "7024f25100333d7f734731b159732421",
+    "semantic_hash": ""
+  },
+  "models/payment_transaction.py": {
+    "mtime": 1783184381.6182837,
+    "ast_hash": "ea9fe3135042964c1ec25e55401618ab",
+    "semantic_hash": ""
+  },
+  "models/platform_admin.py": {
+    "mtime": 1783577883.0271287,
+    "ast_hash": "9a4aa85dad92c620b6afc8350af7bca1",
+    "semantic_hash": ""
+  },
+  "models/service.py": {
+    "mtime": 1781144939.7074876,
+    "ast_hash": "f30ed5da3327ecffc776d60887a360eb",
+    "semantic_hash": ""
+  },
+  "models/unit.py": {
+    "mtime": 1780184736.0,
+    "ast_hash": "b2caadfe472c877ad032b119234ac707",
+    "semantic_hash": ""
+  },
+  "models/user.py": {
+    "mtime": 1783470625.0221658,
+    "ast_hash": "21d011793f61a795356121caaa780cba",
+    "semantic_hash": ""
+  },
+  "models/user_session.py": {
+    "mtime": 1783470614.927473,
+    "ast_hash": "002660196aae91cb7dea9d15e245b714",
+    "semantic_hash": ""
+  },
+  "schema.sql": {
+    "mtime": 1780172821.361511,
+    "ast_hash": "eaf3049c6c029f894cd02d8f138aac8b",
+    "semantic_hash": ""
+  },
+  "scripts/backfill_loyalty_points.py": {
+    "mtime": 1782658781.734563,
+    "ast_hash": "328b02f6d046a6063ba14e6b47490fe1",
+    "semantic_hash": ""
+  },
+  "scripts/delete_org_debts.py": {
+    "mtime": 1783350213.9443746,
+    "ast_hash": "2972db6dd57c281be11e294095381800",
+    "semantic_hash": ""
+  },
+  "scripts/enrich_trinks_ranking.py": {
+    "mtime": 1782969523.3170283,
+    "ast_hash": "1c22d531aade8340b0170a3fe3277a5b",
+    "semantic_hash": ""
+  },
+  "scripts/fix_tool_schemas.py": {
+    "mtime": 1781395646.3280497,
+    "ast_hash": "939a17d2dae883c3c66b9d71f4e99e4f",
+    "semantic_hash": ""
+  },
+  "scripts/import_trinks.py": {
+    "mtime": 1782936782.3582911,
+    "ast_hash": "9b5518f34705bbbbc57fd4772896b687",
+    "semantic_hash": ""
+  },
+  "scripts/import_trinks_appointments.py": {
+    "mtime": 1782953945.6417677,
+    "ast_hash": "9481cbb1e53fb7c72eb81c2d070f8682",
+    "semantic_hash": ""
+  },
+  "scripts/import_trinks_cash_closing.py": {
+    "mtime": 1783036980.3755639,
+    "ast_hash": "9db4fb07be212cf5684cd959c2ab19f7",
+    "semantic_hash": ""
+  },
+  "scripts/import_trinks_debts.py": {
+    "mtime": 1782969745.450443,
+    "ast_hash": "5b64e58eb6d0a644cacab2b41226f7a2",
+    "semantic_hash": ""
+  },
+  "scripts/import_trinks_dre.py": {
+    "mtime": 1783350213.944582,
+    "ast_hash": "59e06344cbcb2b4538a3a4c15e13c0b8",
+    "semantic_hash": ""
+  },
+  "scripts/import_trinks_loyalty.py": {
+    "mtime": 1783132060.2659478,
+    "ast_hash": "f3de7d1c0b4c4c364c4a59f88fa054c5",
+    "semantic_hash": ""
+  },
+  "scripts/import_trinks_payments.py": {
+    "mtime": 1783184381.618553,
+    "ast_hash": "09963063c929aa4d9f11d119e97d9feb",
+    "semantic_hash": ""
+  },
+  "scripts/patch_typing_simulation.py": {
+    "mtime": 1780691851.519322,
+    "ast_hash": "e2c4b9c80d7452921c3818d30ef2cf76",
+    "semantic_hash": ""
+  },
+  "scripts/patch_workflow.py": {
+    "mtime": 1781395646.328353,
+    "ast_hash": "4109bfb41a533ceaa76bd8435564a3aa",
+    "semantic_hash": ""
+  },
+  "scripts/reset_org.py": {
+    "mtime": 1782941722.9494045,
+    "ast_hash": "a0baf5c97dd3595fe3228a249c2e8030",
+    "semantic_hash": ""
+  },
+  "scripts/seed.py": {
+    "mtime": 1783393702.387512,
+    "ast_hash": "b7a2ba86dd17870778a8a34774bdbfcc",
+    "semantic_hash": ""
+  },
+  "scripts/seed_platform_admin.py": {
+    "mtime": 1782773230.3601246,
+    "ast_hash": "febdf91c9152615be35a118c211cc951",
+    "semantic_hash": ""
+  },
+  "scripts/setup_local.sh": {
+    "mtime": 1784080774.8909397,
+    "ast_hash": "4bad711fb420b91beeb779a9e8c4eb05",
+    "semantic_hash": ""
+  },
+  "scripts/sync_authz_catalog.py": {
+    "mtime": 1783393211.1993918,
+    "ast_hash": "2f41f4aa54b43ddbdb17ccf6ff273be8",
+    "semantic_hash": ""
+  },
+  "scripts/test_t07_t12.py": {
+    "mtime": 1781395646.329105,
+    "ast_hash": "34ce7eace4b221e095f28475e18e377e",
+    "semantic_hash": ""
+  },
+  "tests/__init__.py": {
+    "mtime": 1780598501.1223886,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "tests/conftest.py": {
+    "mtime": 1783601184.9193912,
+    "ast_hash": "369be33277ba12fdfac33de498e8835c",
+    "semantic_hash": ""
+  },
+  "tests/test_audit.py": {
+    "mtime": 1783579259.8992407,
+    "ast_hash": "bbb0dc9c4f3ed747ec6fd29b0e0f5a1f",
+    "semantic_hash": ""
+  },
+  "tests/test_auth_sessions.py": {
+    "mtime": 1783601774.2888367,
+    "ast_hash": "c353aa42e1947cd01a4606a5e5dcfb85",
+    "semantic_hash": ""
+  },
+  "tests/test_authz_coverage.py": {
+    "mtime": 1784259437.04504,
+    "ast_hash": "c8e8ee928bb39c74b78d03f6bc2e7b22",
+    "semantic_hash": ""
+  },
+  "tests/test_authz_integration.py": {
+    "mtime": 1783537250.5640953,
+    "ast_hash": "c069e6ce50be14ff04c9cdfa9e5ac145",
+    "semantic_hash": ""
+  },
+  "tests/test_authz_sweep.py": {
+    "mtime": 1783441700.870953,
+    "ast_hash": "d90b743d89d68953d3b89b58bd58db7c",
+    "semantic_hash": ""
+  },
+  "tests/test_authz_unit.py": {
+    "mtime": 1783393776.396262,
+    "ast_hash": "13ed418a7694b1f683deb1f608972fc9",
+    "semantic_hash": ""
+  },
+  "tests/test_billing_integration.py": {
+    "mtime": 1783601797.7727942,
+    "ast_hash": "d16e7a25be75e257793c8e1cb65eab3b",
+    "semantic_hash": ""
+  },
+  "tests/test_bot_unit.py": {
+    "mtime": 1784081680.6849291,
+    "ast_hash": "6f4e79808aa6b5a50b243cc207093d2b",
+    "semantic_hash": ""
+  },
+  "tests/test_calendar_crypto.py": {
+    "mtime": 1782075436.7596736,
+    "ast_hash": "094378e7f6500f51abd9f87e5eae6b33",
+    "semantic_hash": ""
+  },
+  "tests/test_calendar_sync_worker.py": {
+    "mtime": 1782773230.3607423,
+    "ast_hash": "d0aa90578c469801360e8aea4f0d9b73",
+    "semantic_hash": ""
+  },
+  "tests/test_chatwoot_unit.py": {
+    "mtime": 1782658781.7351687,
+    "ast_hash": "0860f73460b6390b53356f91a5907b51",
+    "semantic_hash": ""
+  },
+  "tests/test_clientes_integration.py": {
+    "mtime": 1782773230.361208,
+    "ast_hash": "5a671e386ac84a6856dec2f4aa5bde05",
+    "semantic_hash": ""
+  },
+  "tests/test_cors_origin.py": {
+    "mtime": 1783375496.9825919,
+    "ast_hash": "aff3be294beea4fce7b593d635b58e25",
+    "semantic_hash": ""
+  },
+  "tests/test_crm_integration.py": {
+    "mtime": 1781602047.5977767,
+    "ast_hash": "3bdc15805953500c10625f4df7624a14",
+    "semantic_hash": ""
+  },
+  "tests/test_dashboard_operacional.py": {
+    "mtime": 1781602466.3489237,
+    "ast_hash": "cba3b25f13c3d33987ac97968b5ffbf9",
+    "semantic_hash": ""
+  },
+  "tests/test_e2e_flow.py": {
+    "mtime": 1782492459.536839,
+    "ast_hash": "93f3369ef8539a16419068bf539fef37",
+    "semantic_hash": ""
+  },
+  "tests/test_empresa_integration.py": {
+    "mtime": 1782773230.361683,
+    "ast_hash": "f40c8395df8e5cca85f285a7ed369a18",
+    "semantic_hash": ""
+  },
+  "tests/test_finance_dates_unit.py": {
+    "mtime": 1781430673.4187267,
+    "ast_hash": "07223d5aad2da0be0c12b68da5ef7943",
+    "semantic_hash": ""
+  },
+  "tests/test_financeiro_caixa.py": {
+    "mtime": 1783039361.4720533,
+    "ast_hash": "d6acdca3b82017094b6351a3f26f855c",
+    "semantic_hash": ""
+  },
+  "tests/test_financeiro_dre_pagamentos.py": {
+    "mtime": 1783375496.983017,
+    "ast_hash": "b12dbcad21c6861774bdd5c878894b54",
+    "semantic_hash": ""
+  },
+  "tests/test_gestao_equipe.py": {
+    "mtime": 1783077597.8045769,
+    "ast_hash": "cd595dcc9d3f7b1ad21fb20a7e69c4d7",
+    "semantic_hash": ""
+  },
+  "tests/test_gestor_integration.py": {
+    "mtime": 1782744077.7670436,
+    "ast_hash": "661de2e3cc838351b0fa6e99129119ca",
+    "semantic_hash": ""
+  },
+  "tests/test_gestor_unit.py": {
+    "mtime": 1782744077.767421,
+    "ast_hash": "6334224b9d5de8e51f0cd29ccc1a678c",
+    "semantic_hash": ""
+  },
+  "tests/test_google_calendar_client.py": {
+    "mtime": 1782075436.7601376,
+    "ast_hash": "a76e2a9873f04a26934e8de8d6999815",
+    "semantic_hash": ""
+  },
+  "tests/test_imports_api.py": {
+    "mtime": 1782969903.9712467,
+    "ast_hash": "8369829e5c450a91ea8167e027d382b1",
+    "semantic_hash": ""
+  },
+  "tests/test_integracoes_oauth.py": {
+    "mtime": 1782773230.362095,
+    "ast_hash": "7ef0f0a79a86b238a3245891935370ea",
+    "semantic_hash": ""
+  },
+  "tests/test_kernel_ia.py": {
+    "mtime": 1784133251.933083,
+    "ast_hash": "12839ad4d90a72716503714b151b9094",
+    "semantic_hash": ""
+  },
+  "tests/test_kernel_ia_finance.py": {
+    "mtime": 1783037476.7607992,
+    "ast_hash": "ef47cc61b5aaf1ea62359989d25ffa5c",
+    "semantic_hash": ""
+  },
+  "tests/test_lgpd.py": {
+    "mtime": 1783646602.8436856,
+    "ast_hash": "23395080572e3ffa081ad0355d1b15fc",
+    "semantic_hash": ""
+  },
+  "tests/test_loyalty_points_integration.py": {
+    "mtime": 1782658781.7354667,
+    "ast_hash": "f2286d7d938ec9fd9fecf00578434f35",
+    "semantic_hash": ""
+  },
+  "tests/test_loyalty_points_unit.py": {
+    "mtime": 1782658781.7357209,
+    "ast_hash": "f61c9d4da72d1d2baf7018f4ae00fd19",
+    "semantic_hash": ""
+  },
+  "tests/test_loyalty_unit.py": {
+    "mtime": 1781430595.3486888,
+    "ast_hash": "5808179ba8bbf887b52e104a312a8859",
+    "semantic_hash": ""
+  },
+  "tests/test_membership_corrections.py": {
+    "mtime": 1782744077.7676644,
+    "ast_hash": "017f080007a726ea4cf09949031db80b",
+    "semantic_hash": ""
+  },
+  "tests/test_membership_integration.py": {
+    "mtime": 1782580936.973724,
+    "ast_hash": "8eccd189094ccf634d50fc04adfcafc9",
+    "semantic_hash": ""
+  },
+  "tests/test_membership_unit.py": {
+    "mtime": 1782580878.160901,
+    "ast_hash": "0082ef64c338be3c253effafd5845280",
+    "semantic_hash": ""
+  },
+  "tests/test_onboarding_progress_unit.py": {
+    "mtime": 1783093006.9576216,
+    "ast_hash": "10682b0803e7981d59daeb00abd9b162",
+    "semantic_hash": ""
+  },
+  "tests/test_opt_out_unit.py": {
+    "mtime": 1783100281.5198941,
+    "ast_hash": "667f3f52b76b0d90e5ffdac8eafb0438",
+    "semantic_hash": ""
+  },
+  "tests/test_platform.py": {
+    "mtime": 1783601784.441869,
+    "ast_hash": "a53fac9b35636b6e1c67f48aa49618c5",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_alert_rules.py": {
+    "mtime": 1783578029.2734895,
+    "ast_hash": "020d82908463e02e1f537ff8f7a6c9d4",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_alerts_audit.py": {
+    "mtime": 1783095143.101655,
+    "ast_hash": "8eff997d165ffc471c99f2b2aa7e0aca",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_billing.py": {
+    "mtime": 1783095642.5710752,
+    "ast_hash": "275178f69bb626c18919cfc1f8908964",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_health.py": {
+    "mtime": 1783569044.7229652,
+    "ast_hash": "2e7ce4fa91005331aa6eca0c825c814c",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_impersonation.py": {
+    "mtime": 1783095324.036742,
+    "ast_hash": "a953fa4991e0a7fa57faca49367a837c",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_metrics.py": {
+    "mtime": 1783088620.815243,
+    "ast_hash": "cfcf0d1df8e1d04cb191d14322ebcdb3",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_onboarding.py": {
+    "mtime": 1783093024.5020058,
+    "ast_hash": "f819b9b765bec54ba6056524daf93d42",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_org_detail.py": {
+    "mtime": 1783089346.9936793,
+    "ast_hash": "5b89cef5329ac037b7103339e350f5f5",
+    "semantic_hash": ""
+  },
+  "tests/test_platform_org_overview.py": {
+    "mtime": 1783088943.7569582,
+    "ast_hash": "b2c95123e7322ecb199cbb021d718ff0",
+    "semantic_hash": ""
+  },
+  "tests/test_public_site.py": {
+    "mtime": 1784259291.4138005,
+    "ast_hash": "e13cecabb4e37f4bb6f4dae6a2a36faa",
+    "semantic_hash": ""
+  },
+  "tests/test_reactivation_unit.py": {
+    "mtime": 1783100281.5202894,
+    "ast_hash": "7e6fbd0fdbb872b082045fc1e6fdc658",
+    "semantic_hash": ""
+  },
+  "tests/test_reminders_unit.py": {
+    "mtime": 1783100281.5205636,
+    "ast_hash": "dd6a84f448d0a46af608cca848e9250b",
+    "semantic_hash": ""
+  },
+  "tests/test_reschedule_integration.py": {
+    "mtime": 1784133294.772456,
+    "ast_hash": "c608e07dd139e7cb2e77d247983de402",
+    "semantic_hash": ""
+  },
+  "tests/test_scenarios.py": {
+    "mtime": 1781119880.9581568,
+    "ast_hash": "1e080fed2c92b8526bd79ad11bd845e2",
+    "semantic_hash": ""
+  },
+  "tests/test_screens_smoke.py": {
+    "mtime": 1781536734.2326407,
+    "ast_hash": "7b949b0c6a2c33eff293b668f2d4a4da",
+    "semantic_hash": ""
+  },
+  "tests/test_security_dashboard.py": {
+    "mtime": 1783577766.955543,
+    "ast_hash": "4a82ddcf7c15e9703cb33f8fc58567ab",
+    "semantic_hash": ""
+  },
+  "tests/test_site_visibility.py": {
+    "mtime": 1783603502.923464,
+    "ast_hash": "38496e5e05ab8edc96fa73868d79f809",
+    "semantic_hash": ""
+  },
+  "tests/test_tenant_resolution.py": {
+    "mtime": 1782773230.3629458,
+    "ast_hash": "41acb2ceea20dc0c8808b66ad678721c",
+    "semantic_hash": ""
+  },
+  "tests/test_trinks_appointments.py": {
+    "mtime": 1782954013.488442,
+    "ast_hash": "4ae9b28b84e7d4907997e1e29a129760",
+    "semantic_hash": ""
+  },
+  "tests/test_trinks_debts_ranking.py": {
+    "mtime": 1783037025.6435506,
+    "ast_hash": "b578c7eff26256da5c6689d2ce54e429",
+    "semantic_hash": ""
+  },
+  "tests/test_trinks_dre.py": {
+    "mtime": 1783350213.9452102,
+    "ast_hash": "374683398543be9a3f6d4397203d643b",
+    "semantic_hash": ""
+  },
+  "tests/test_trinks_import.py": {
+    "mtime": 1782936856.3483665,
+    "ast_hash": "5a170c490c898a3e8e616c1b9445f7ce",
+    "semantic_hash": ""
+  },
+  "tests/test_trinks_loyalty.py": {
+    "mtime": 1783132060.2663538,
+    "ast_hash": "3b3d8b2d91a01c8d6fe115ec21d874bb",
+    "semantic_hash": ""
+  },
+  "tests/test_trinks_payments.py": {
+    "mtime": 1783184381.6190784,
+    "ast_hash": "9e2aa56c3dea3b8bc222a6f87ac47429",
+    "semantic_hash": ""
+  },
+  "workflows.json": {
+    "mtime": 1782257012.7745924,
+    "ast_hash": "9c4cc0fe1faa40bf8e7cf86915198842",
+    "semantic_hash": ""
+  },
+  "ARQUITETURA_ALVO.md": {
+    "mtime": 1783392057.953455,
+    "ast_hash": "c2a118028dcd072c032b1f4ddd183b05",
+    "semantic_hash": ""
+  },
+  "ARQUITETURA_CRM_ATUAL.md": {
+    "mtime": 1782269255.5161352,
+    "ast_hash": "fb87ec62e34ce409430129b16c8cb9fa",
+    "semantic_hash": ""
+  },
+  "ARQUITETURA_CRM_DEFINITIVA.md": {
+    "mtime": 1782269918.7877574,
+    "ast_hash": "fcc7f4f0a5d8883310b34b8fc4dad1bc",
+    "semantic_hash": ""
+  },
+  "ARQUITETURA_SITE_PUBLICO.md": {
+    "mtime": 1784258607.2031558,
+    "ast_hash": "91c849b9cb4f89f91fec7f998d525efa",
+    "semantic_hash": ""
+  },
+  "AUDITORIA_SEGURANCA.md": {
+    "mtime": 1783391562.8510182,
+    "ast_hash": "4890285c73b2e19d3e7335adbe196bec",
+    "semantic_hash": ""
+  },
+  "AUDITORIA_SITE_PUBLICO.md": {
+    "mtime": 1784257323.813819,
+    "ast_hash": "990b6bce7b591d4799c064175f11ccbe",
+    "semantic_hash": ""
+  },
+  "CHATWOOT_CLOUD_API_ARQUITETURA.md": {
+    "mtime": 1782658781.7274086,
+    "ast_hash": "c9837b108e4c33137cc4c9c451968349",
+    "semantic_hash": ""
+  },
+  "CHATWOOT_FASE0_META_CHECKLIST.md": {
+    "mtime": 1782658781.727821,
+    "ast_hash": "fd7db8d8e4d4d95792619790452f9790",
+    "semantic_hash": ""
+  },
+  "CHATWOOT_FASE1_FASE4_SPEC.md": {
+    "mtime": 1782658781.7282379,
+    "ast_hash": "c00f024a980901e2e4f17046eaad3e04",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1784933822.1311634,
+    "ast_hash": "e91560fdb587fce650e2538ab7858bbd",
+    "semantic_hash": ""
+  },
+  "CRM_FASE2_IMPLEMENTACAO.md": {
+    "mtime": 1782270642.1028132,
+    "ast_hash": "3036195a829472c221e06b00eb4dd4d7",
+    "semantic_hash": ""
+  },
+  "CRM_WHATSAPP_EVOLUCAO_ROADMAP.md": {
+    "mtime": 1782270295.0505395,
+    "ast_hash": "7ef02abd6f6bea5c81c71b0eceb4a5f9",
+    "semantic_hash": ""
+  },
+  "CURRENT_SPRINT.md": {
+    "mtime": 1782748470.0191963,
+    "ast_hash": "85941f0df47b66c599a09820cdbc683b",
+    "semantic_hash": ""
+  },
+  "DECISIONS.md": {
+    "mtime": 1784933795.146265,
+    "ast_hash": "64f298a3283b0968dddd5ad278c70c56",
+    "semantic_hash": ""
+  },
+  "FASE9_REVISAO_FINAL.md": {
+    "mtime": 1784083472.6625648,
+    "ast_hash": "b0bcdbe56aa27c44549c6f257f88aec9",
+    "semantic_hash": ""
+  },
+  "INSTALACAO-TECNICA.md": {
+    "mtime": 1781579608.9770477,
+    "ast_hash": "9f77f87651cff018a1d66fcd2d571b4d",
+    "semantic_hash": ""
+  },
+  "MANUAL-OPERACIONAL.md": {
+    "mtime": 1781615782.4353702,
+    "ast_hash": "14067e851df88349adfe565868f6395e",
+    "semantic_hash": ""
+  },
+  "MANUAL-RECEPCAO.md": {
+    "mtime": 1781579736.394817,
+    "ast_hash": "2ce7957b1b404ba6c5a7a621c3453f49",
+    "semantic_hash": ""
+  },
+  "N8N_ACCESS_RECOVERY.md": {
+    "mtime": 1781237782.960354,
+    "ast_hash": "e1a3ba92dac18f0a222b6b332b42a929",
+    "semantic_hash": ""
+  },
+  "PROJECT_CONTEXT.md": {
+    "mtime": 1783083635.6338694,
+    "ast_hash": "ad39934b8b1d67a05d32af44d93f22ae",
+    "semantic_hash": ""
+  },
+  "ROADMAP_IMPLEMENTACAO.md": {
+    "mtime": 1781231364.680389,
+    "ast_hash": "b5dc45728d22b764248a3b9d85ea35a0",
+    "semantic_hash": ""
+  },
+  "Relatorio_Funcionalidades_Trinks.md": {
+    "mtime": 1782923429.233587,
+    "ast_hash": "796d21a3a58264c45076e3ba9d872c43",
+    "semantic_hash": ""
+  },
+  "WORKLOG.md": {
+    "mtime": 1781430673.418567,
+    "ast_hash": "0c71126f1c5121f6a18726e80740d563",
+    "semantic_hash": ""
+  },
+  "assets/images/README.md": {
+    "mtime": 1784933751.3332798,
+    "ast_hash": "2dedb63d5d564d2f04b235d7ef7caf22",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/AGENTS.md": {
+    "mtime": 1783457866.1726706,
+    "ast_hash": "8aa26a19cd6c74003e306b994cd3bb4e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/CLAUDE.md": {
+    "mtime": 1781057799.3874528,
+    "ast_hash": "5c27369b226fcf2be8a6cfe52224e767",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/README.md": {
+    "mtime": 1781057698.36902,
+    "ast_hash": "f15aaa42d5d299d091b1171097ea56ad",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/145427d7b42c35a75cc27aa03eae3c3202547a24.md": {
+    "mtime": 1781235099.5843084,
+    "ast_hash": "100130f6c782e5aa990c2fe6663190b7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/2b807b20a322a2623e1aa5071b2603453d1b46cd.md": {
+    "mtime": 1781235099.5806944,
+    "ast_hash": "f7818b173e32bc55f6b8e9a8c90781c4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/4749b12509f80bdb81242b811486d359d014c52f.md": {
+    "mtime": 1781235099.5769463,
+    "ast_hash": "44bb9141ea802033a46d602c22b63eda",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/740b56b7ebf7df874ba3c7e9d0ac6ebc314bf727.md": {
+    "mtime": 1781235099.5878453,
+    "ast_hash": "59e51bff5de5ae74b1d062ce6d6866db",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/8d4958c8114495a42e1f077ed6d75daf22730efe.md": {
+    "mtime": 1781235099.5893629,
+    "ast_hash": "841afada8d653fccd53c65dd27e6ee59",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/9ab40415e523833db48e47199add6839a023d6ae.md": {
+    "mtime": 1781235099.5861251,
+    "ast_hash": "1f3cfcf4bd328a332a9ed1a113478293",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/ba6059f8ede65f760eba4324344880409d7589f1.md": {
+    "mtime": 1781235099.5823143,
+    "ast_hash": "444d62d23cbd7bb7e5e6e7e4bbab706c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/cfa017219f0325767499aebc62c930115c828186.md": {
+    "mtime": 1781235099.579367,
+    "ast_hash": "86620ebe7bd71665e9a290573ff2dbb9",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/index.html": {
+    "mtime": 1781235099.600943,
+    "ast_hash": "4790146408b6fdbfd8a4244d14bb1639",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/projetopagina.html": {
+    "mtime": 1783457866.1950085,
+    "ast_hash": "a91fee59b2f9a4c67c25683cf9079810",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/01-login-Login-por-role-Ba-b03ce--e-vai-para-barbeiro-agenda-chromium-retry1/error-context.md": {
+    "mtime": 1781235019.2522016,
+    "ast_hash": "44bb9141ea802033a46d602c22b63eda",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/01-login-Login-por-role-Ba-b03ce--e-vai-para-barbeiro-agenda-chromium/error-context.md": {
+    "mtime": 1781235003.533259,
+    "ast_hash": "44bb9141ea802033a46d602c22b63eda",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-3a486-N\u00c3O-acessa-admin-financeiro-chromium-retry1/error-context.md": {
+    "mtime": 1781235087.7721422,
+    "ast_hash": "444d62d23cbd7bb7e5e6e7e4bbab706c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-3a486-N\u00c3O-acessa-admin-financeiro-chromium/error-context.md": {
+    "mtime": 1781235072.0874996,
+    "ast_hash": "444d62d23cbd7bb7e5e6e7e4bbab706c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-865c5-eciona-para-barbeiro-agenda-chromium-retry1/error-context.md": {
+    "mtime": 1781235056.3843083,
+    "ast_hash": "f7818b173e32bc55f6b8e9a8c90781c4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-865c5-eciona-para-barbeiro-agenda-chromium/error-context.md": {
+    "mtime": 1781235040.6979802,
+    "ast_hash": "f7818b173e32bc55f6b8e9a8c90781c4",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-9e2d2-rber-acessa-barbeiro-agenda-chromium-retry1/error-context.md": {
+    "mtime": 1781235025.021456,
+    "ast_hash": "86620ebe7bd71665e9a290573ff2dbb9",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-9e2d2-rber-acessa-barbeiro-agenda-chromium/error-context.md": {
+    "mtime": 1781235009.3275764,
+    "ast_hash": "86620ebe7bd71665e9a290573ff2dbb9",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-33a14--novo-agendamento-via-modal-chromium-retry1/error-context.md": {
+    "mtime": 1781235064.3563995,
+    "ast_hash": "100130f6c782e5aa990c2fe6663190b7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-33a14--novo-agendamento-via-modal-chromium/error-context.md": {
+    "mtime": 1781235023.6732726,
+    "ast_hash": "100130f6c782e5aa990c2fe6663190b7",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-7a7c1-genda-agendamento-existente-chromium-retry1/error-context.md": {
+    "mtime": 1781235090.341065,
+    "ast_hash": "1f3cfcf4bd328a332a9ed1a113478293",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-7a7c1-genda-agendamento-existente-chromium/error-context.md": {
+    "mtime": 1781235077.3463457,
+    "ast_hash": "1f3cfcf4bd328a332a9ed1a113478293",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-9d777-agendamento-com-confirma\u00e7\u00e3o-chromium-retry1/error-context.md": {
+    "mtime": 1781235094.9581723,
+    "ast_hash": "59e51bff5de5ae74b1d062ce6d6866db",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-9d777-agendamento-com-confirma\u00e7\u00e3o-chromium/error-context.md": {
+    "mtime": 1781235092.6631336,
+    "ast_hash": "59e51bff5de5ae74b1d062ce6d6866db",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-f2184-ndamento-permanece-agendado-chromium-retry1/error-context.md": {
+    "mtime": 1781235099.50673,
+    "ast_hash": "841afada8d653fccd53c65dd27e6ee59",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-f2184-ndamento-permanece-agendado-chromium/error-context.md": {
+    "mtime": 1781235097.2238529,
+    "ast_hash": "841afada8d653fccd53c65dd27e6ee59",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/AGENTS.md": {
+    "mtime": 1783097477.2473903,
+    "ast_hash": "abb2e4c2a3925a71dc438b02f4e10405",
+    "semantic_hash": ""
+  },
+  "barbearia-superadmin/README.md": {
+    "mtime": 1782914518.0153255,
+    "ast_hash": "c32e25b6c0898f1436f3a10dadd6e4af",
+    "semantic_hash": ""
+  },
+  "docker-compose.app.yml": {
+    "mtime": 1784260034.9005902,
+    "ast_hash": "35d3c4588a3b52b2175eb46fcfa1a4d6",
+    "semantic_hash": ""
+  },
+  "docker-compose.yml": {
+    "mtime": 1783470558.0256498,
+    "ast_hash": "f301dc0ce83474547447d09a4766778e",
+    "semantic_hash": ""
+  },
+  "docs/ANALISE_TRINKS_DASHBOARD.md": {
+    "mtime": 1783351009.7347608,
+    "ast_hash": "a89c53ef908368fd9c670cda5798ae80",
+    "semantic_hash": ""
+  },
+  "docs/GESTOR_CRON_N8N.md": {
+    "mtime": 1782744077.7657058,
+    "ast_hash": "360225310450faad493db631f81341db",
+    "semantic_hash": ""
+  },
+  "docs/LOCAL_SETUP.md": {
+    "mtime": 1782974482.876602,
+    "ast_hash": "884e6fcb2713b34497ee9e310e9ea322",
+    "semantic_hash": ""
+  },
+  "docs/TRINKS_IMPORT.md": {
+    "mtime": 1783350213.9432595,
+    "ast_hash": "d843d4f416f3f50cc8b4ac04ae50e1ec",
+    "semantic_hash": ""
+  },
+  "docs/site-publico/FRONTEND_AUDIT.md": {
+    "mtime": 1784758924.3648272,
+    "ast_hash": "a484c7c4ca083d5667d0e92f527e0766",
+    "semantic_hash": ""
+  },
+  "docs/site-publico/UI_SPEC.md": {
+    "mtime": 1784758987.449737,
+    "ast_hash": "7de71b946b1d18821cefc385a3dcac01",
+    "semantic_hash": ""
+  },
+  "docs/site-publico/UI_SPEC_V2.md": {
+    "mtime": 1784766274.269262,
+    "ast_hash": "ca430210c00f0740eee429248468bcb8",
+    "semantic_hash": ""
+  },
+  "docs/site-publico/UI_SPEC_V3.md": {
+    "mtime": 1784933737.6722078,
+    "ast_hash": "389cf129c5790dedf9724029a0b3de9a",
+    "semantic_hash": ""
+  },
+  "docs/site-publico/UX_PLAN.md": {
+    "mtime": 1784758955.0801592,
+    "ast_hash": "c298b3eb463fa55214ee5d59ed75142d",
+    "semantic_hash": ""
+  },
+  "docs/superadmin/api.md": {
+    "mtime": 1783095921.7243392,
+    "ast_hash": "7149e1e3f5348df5ab1dd51e6f0f89ee",
+    "semantic_hash": ""
+  },
+  "docs/superadmin/architecture.md": {
+    "mtime": 1783087996.732466,
+    "ast_hash": "962c05a3c2b4a055e0812b5ccc7d9131",
+    "semantic_hash": ""
+  },
+  "docs/superadmin/blockers.md": {
+    "mtime": 1783100306.0955637,
+    "ast_hash": "7b48f830162f698d21a046b8252a9b79",
+    "semantic_hash": ""
+  },
+  "docs/superadmin/bugs.md": {
+    "mtime": 1783087906.7469103,
+    "ast_hash": "8711a2a3207c7db506fe9f6639e1d511",
+    "semantic_hash": ""
+  },
+  "docs/superadmin/decisions.md": {
+    "mtime": 1783094957.6446235,
+    "ast_hash": "ce225c91ca0140ab2c27eb515ee18f82",
+    "semantic_hash": ""
+  },
+  "docs/superadmin/progress.md": {
+    "mtime": 1783100306.096041,
+    "ast_hash": "4038dea4f86cce5b3f8de60cf185a0db",
+    "semantic_hash": ""
+  },
+  "docs/superadmin/roadmap.md": {
+    "mtime": 1783095824.8636072,
+    "ast_hash": "e124fc4fc088a839ba5922348c8401b2",
+    "semantic_hash": ""
+  },
+  "docs/superadmin/todo.md": {
+    "mtime": 1783094372.693131,
+    "ast_hash": "9ad4a54c57f13693586e8750e1c4df2b",
+    "semantic_hash": ""
+  },
+  "estrutura.txt": {
+    "mtime": 1780598501.1212337,
+    "ast_hash": "989f499414aeae66a8f4a7b7df94a0c1",
+    "semantic_hash": ""
+  },
+  "gestaointeligente/Estrategia_Transicao_Receita_Recorrente_BarbeariaPro.md": {
+    "mtime": 1782985406.3695705,
+    "ast_hash": "89111631abca0c51f37634f9a0ad08ce",
+    "semantic_hash": ""
+  },
+  "promptseguranca.md": {
+    "mtime": 1783387462.3010068,
+    "ast_hash": "b3f1e583c69df4b2579a757f55eef5c9",
+    "semantic_hash": ""
+  },
+  "promptsitepublico.md": {
+    "mtime": 1784215347.1141696,
+    "ast_hash": "50540600bdc9b1802829a42fa534aa28",
+    "semantic_hash": ""
+  },
+  "requirements.txt": {
+    "mtime": 1784133214.6058576,
+    "ast_hash": "50920acada7ed00ac43e3ce035e3ff28",
+    "semantic_hash": ""
+  },
+  "Avaliac\u0327oesgoogle.pdf": {
+    "mtime": 1784923756.4940937,
+    "ast_hash": "6e7d7a8447b0d91a948f814b5e891ae6",
+    "semantic_hash": ""
+  },
+  "MANUAL-RECEPCAO.pdf": {
+    "mtime": 1781580164.4691823,
+    "ast_hash": "a7e0855473d496ca7721176d2eabbc34",
+    "semantic_hash": ""
+  },
+  "assets/images/fachada-real.png": {
+    "mtime": 1784932785.498726,
+    "ast_hash": "dc4e2576e6f12bb1f52920fa2be03d60",
+    "semantic_hash": ""
+  },
+  "assets/images/taylor_thedy_logo.png": {
+    "mtime": 1784296285.0922225,
+    "ast_hash": "95624fd881c7ee568bc2920e6ed5afcd",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/1b1bc49cb04325de85bee259bfecbe437f022758.png": {
+    "mtime": 1781235099.589245,
+    "ast_hash": "2f57679f098022ec0b504a4a61d5d62c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/72a43084b55b2b855f9ec13e5c968b6b3ac0459d.png": {
+    "mtime": 1781235099.5820932,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/85ce5a2fad1e5b31868c4fdceaa21897bb9876b8.png": {
+    "mtime": 1781235099.5840843,
+    "ast_hash": "24e582ecb4f1dd2d7a0e0f11610633ca",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/playwright-report/data/e601d5ced14dd8a083813116c48223a18deb45cb.png": {
+    "mtime": 1781235099.5858529,
+    "ast_hash": "74eb1ef9b0b8593cd4e52d0f915fae84",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/public/file.svg": {
+    "mtime": 1781057698.3698506,
+    "ast_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/public/globe.svg": {
+    "mtime": 1781057698.3689833,
+    "ast_hash": "2aaafa6a49b6563925fe440891e32717",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/public/next.svg": {
+    "mtime": 1781057698.3697364,
+    "ast_hash": "8e061864f388b47f33a1c3780831193e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/public/vercel.svg": {
+    "mtime": 1781057698.3698707,
+    "ast_hash": "c0af2f507b369b085b35ef4bbe3bcf1e",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/public/window.svg": {
+    "mtime": 1781057698.3696725,
+    "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/01-login-Login-por-role-Ba-b03ce--e-vai-para-barbeiro-agenda-chromium-retry1/test-failed-1.png": {
+    "mtime": 1781235019.2441642,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/01-login-Login-por-role-Ba-b03ce--e-vai-para-barbeiro-agenda-chromium/test-failed-1.png": {
+    "mtime": 1781235003.5270507,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-3a486-N\u00c3O-acessa-admin-financeiro-chromium-retry1/test-failed-1.png": {
+    "mtime": 1781235087.764528,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-3a486-N\u00c3O-acessa-admin-financeiro-chromium/test-failed-1.png": {
+    "mtime": 1781235072.078423,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-865c5-eciona-para-barbeiro-agenda-chromium-retry1/test-failed-1.png": {
+    "mtime": 1781235056.376233,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-865c5-eciona-para-barbeiro-agenda-chromium/test-failed-1.png": {
+    "mtime": 1781235040.6891022,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-9e2d2-rber-acessa-barbeiro-agenda-chromium-retry1/test-failed-1.png": {
+    "mtime": 1781235025.0143726,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/02-rbac-RBAC-\u2014-Barber-aces-9e2d2-rber-acessa-barbeiro-agenda-chromium/test-failed-1.png": {
+    "mtime": 1781235009.321127,
+    "ast_hash": "8770beee20340367a7d2dc074757c970",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-33a14--novo-agendamento-via-modal-chromium-retry1/test-failed-1.png": {
+    "mtime": 1781235064.3429737,
+    "ast_hash": "24e582ecb4f1dd2d7a0e0f11610633ca",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-33a14--novo-agendamento-via-modal-chromium/test-failed-1.png": {
+    "mtime": 1781235023.659587,
+    "ast_hash": "24e582ecb4f1dd2d7a0e0f11610633ca",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-7a7c1-genda-agendamento-existente-chromium-retry1/test-failed-1.png": {
+    "mtime": 1781235090.3315814,
+    "ast_hash": "74eb1ef9b0b8593cd4e52d0f915fae84",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-7a7c1-genda-agendamento-existente-chromium/test-failed-1.png": {
+    "mtime": 1781235077.3384912,
+    "ast_hash": "74eb1ef9b0b8593cd4e52d0f915fae84",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-9d777-agendamento-com-confirma\u00e7\u00e3o-chromium-retry1/test-failed-1.png": {
+    "mtime": 1781235094.9445238,
+    "ast_hash": "2f57679f098022ec0b504a4a61d5d62c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-9d777-agendamento-com-confirma\u00e7\u00e3o-chromium/test-failed-1.png": {
+    "mtime": 1781235092.6502726,
+    "ast_hash": "2f57679f098022ec0b504a4a61d5d62c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-f2184-ndamento-permanece-agendado-chromium-retry1/test-failed-1.png": {
+    "mtime": 1781235099.49385,
+    "ast_hash": "2f57679f098022ec0b504a4a61d5d62c",
+    "semantic_hash": ""
+  },
+  "barbearia-frontend/test-results/03-reception-flows-Recepti-f2184-ndamento-permanece-agendado-chromium/test-failed-1.png": {
+    "mtime": 1781235097.2114196,
+    "ast_hash": "2f57679f098022ec0b504a4a61d5d62c",
+    "semantic_hash": ""
+  },
+  "barbearia-public/public/apple-touch-icon.png": {
+    "mtime": 1784933275.7476118,
+    "ast_hash": "cf633458b075175a420117c8e3e12297",
+    "semantic_hash": ""
+  },
+  "barbearia-public/public/fachada.webp": {
+    "mtime": 1784932895.59267,
+    "ast_hash": "f61b2ac881f48f9a798fd1f56cf3049a",
+    "semantic_hash": ""
+  },
+  "barbearia-public/public/hero-poster.jpg": {
+    "mtime": 1784932921.254672,
+    "ast_hash": "9fd3964270ab9e85bb1fb96c5dc640f6",
+    "semantic_hash": ""
+  },
+  "barbearia-public/public/icon-192.png": {
+    "mtime": 1784933275.7433743,
+    "ast_hash": "94d540ff30b7de5e87dab2e96e5453a9",
+    "semantic_hash": ""
+  },
+  "barbearia-public/public/icon-512.png": {
+    "mtime": 1784933275.7387655,
+    "ast_hash": "03e40fd49318fd212c2f93dbcce39565",
+    "semantic_hash": ""
+  },
+  "barbearia-public/public/t-fachada.png": {
+    "mtime": 1784932785.492794,
+    "ast_hash": "10e88046a8c19bfa8a0bf63d28af2b17",
+    "semantic_hash": ""
+  },
+  "barbearia-public/VideoTa&TheDRONE.mp4": {
+    "mtime": 1784303391.0118682,
+    "ast_hash": "0e9f54a8f60b56624c2497ce05e1f5e6",
+    "semantic_hash": ""
+  }
+}

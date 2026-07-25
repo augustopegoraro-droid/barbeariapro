@@ -81,6 +81,18 @@ versaletes, dados). Variáveis `--font-cormorant` / `--font-jost`.
 | 3 | Alternativas | contorno; hover vira ouro |
 | 4 | Navegação | texto em `--tinta-suave`, hover marfim |
 
+## 4.1 Obrigatórios de página (auditados em 2026-07-25)
+
+- `aria-labelledby` de cada `<section>` aponta para o **id do `<h2>`**, nunca
+  para a própria section.
+- JSON-LD `HairSalon`: `dayOfWeek` em **inglês** (`WEEKDAYS_SCHEMA`) — em
+  português o Google descarta o horário; `address` como `PostalAddress`.
+- `og:image` = `public/og.jpg` (1200×630). Sem ele o link no WhatsApp, que é
+  como o negócio divulga, sai sem imagem.
+- `app/robots.ts` + `app/sitemap.ts`; `/meus-agendamentos` fora do índice.
+- Skip link para `/agendar` como primeiro alvo de tabulação.
+- Contraste verificado por cálculo, não a olho: mínimo do sistema é 5,2:1.
+
 ## 5. Prova social
 
 `components/depoimentos.tsx` guarda a nota, o total e os textos. Só entram
@@ -92,8 +104,6 @@ inventado. Se um depoimento sair do ar, sai daqui também.
 
 - **Validação num celular real** — o que foi ao ar passou só por captura
   headless (430×932 e 1280) e smoke HTTP.
-- **"25 anos" não entrou** — não há fonte verificável; se o dono confirmar,
-  vira mais uma célula da régua de números do hero.
 - Galeria interna (cadeiras, equipe trabalhando) — só existem duas fotos hoje.
 - Tabs de categoria em vez de lista agrupada (exigiria client component).
 - Reagendar com pré-seleção continua bloqueado pela API (devolve nomes, não ids).

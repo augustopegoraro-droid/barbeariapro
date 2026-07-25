@@ -30,8 +30,9 @@ export function Depoimentos() {
           className="rounded-2xl border border-borda-sutil bg-superficie p-6"
           style={{ boxShadow: "var(--sombra-1)" }}
         >
-          <p aria-hidden className="text-ouro">
-            ★★★★★
+          <p className="text-ouro">
+            <span aria-hidden>★★★★★</span>
+            <span className="sr-only">Avaliação 5 de 5 estrelas</span>
           </p>
           <blockquote className="font-display mt-3 text-xl leading-snug font-light text-marfim">
             “{d.texto}”

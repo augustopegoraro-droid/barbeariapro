@@ -11,6 +11,10 @@ import Link from "next/link";
 import { Wordmark } from "@/components/wordmark";
 import { EnderecoLegenda } from "@/components/ui/endereco";
 
+/* Tempo de casa — confirmado pelo dono em 2026-07-25. É o único número da
+   régua que não vem da API; se mudar, muda aqui. */
+export const ANOS_DE_CASA = "25 anos";
+
 export function Hero({
   profissionais,
   faixaHorario,
@@ -25,12 +29,20 @@ export function Hero({
   endereco: string;
 }) {
   const numeros = [
+    { valor: ANOS_DE_CASA, rotulo: "Em Palmas" },
     { valor: nota, rotulo: `${avaliacoes} avaliações · Google` },
     profissionais > 0
       ? { valor: String(profissionais), rotulo: "Profissionais" }
       : null,
     faixaHorario ? { valor: faixaHorario, rotulo: "Funcionamento" } : null,
   ].filter((n): n is { valor: string; rotulo: string } => n !== null);
+
+  /* No mobile a régua quebra em 2 colunas; a partir de sm cada número ganha a
+     sua, seja qual for a quantidade que sobreviveu aos dados da API. */
+  const colunas =
+    { 2: "sm:grid-cols-2", 3: "sm:grid-cols-3", 4: "sm:grid-cols-4" }[
+      numeros.length
+    ] ?? "sm:grid-cols-4";
 
   return (
     <section className="relative overflow-hidden">
@@ -55,8 +67,9 @@ export function Hero({
           </h1>
 
           <p className="mt-4 max-w-[46ch] text-tinta-suave">
-            Salão e barbearia no Plano Diretor Sul, em Palmas. Corte, barba,
-            coloração e sobrancelha com hora marcada — sem fila de espera.
+            Salão e barbearia no Plano Diretor Sul há {ANOS_DE_CASA}. Corte,
+            barba, coloração e sobrancelha com hora marcada — sem fila de
+            espera.
           </p>
 
           <p className="mt-5 flex items-center gap-2 text-sm text-tinta-suave">
@@ -95,7 +108,9 @@ export function Hero({
           </div>
 
           {numeros.length > 0 && (
-            <dl className="mt-12 grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-borda-sutil bg-borda-sutil">
+            <dl
+              className={`mt-12 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-borda-sutil bg-borda-sutil ${colunas}`}
+            >
               {numeros.map((n) => (
                 <div key={n.rotulo} className="bg-fundo px-4 py-5 text-center">
                   <dt className="font-display tnum text-2xl text-ouro">
