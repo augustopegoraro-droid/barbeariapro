@@ -4,6 +4,7 @@
 
 import Link from "next/link";
 import { Wordmark } from "@/components/wordmark";
+import { IconeInstagram } from "@/components/ui/contato-botoes";
 
 const SECOES = [
   { href: "#servicos", label: "Serviços" },
@@ -11,7 +12,7 @@ const SECOES = [
   { href: "#visite", label: "Horários" },
 ];
 
-export function SiteHeader() {
+export function SiteHeader({ instagramUrl }: { instagramUrl: string }) {
   return (
     <header className="sticky top-0 z-40 border-b border-borda-sutil bg-fundo/85 backdrop-blur-lg">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-6 px-5 py-3 sm:px-8">
@@ -31,12 +32,25 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <Link
-          href="/agendar"
-          className="inline-flex min-h-11 items-center rounded-full border border-ouro px-5 text-xs font-medium tracking-[0.16em] text-ouro uppercase transition-colors hover:bg-ouro hover:text-tinta-invertida"
-        >
-          Agendar
-        </Link>
+        <div className="flex items-center gap-1">
+          {/* Só ícone, sem preenchimento: o topo tem um único botão de verdade,
+              que é "Agendar". O Instagram é atalho, não concorrente. */}
+          <a
+            href={instagramUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Instagram da Taylor e Thedy (abre em nova aba)"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-tinta-suave transition-colors hover:text-ouro"
+          >
+            <IconeInstagram />
+          </a>
+          <Link
+            href="/agendar"
+            className="inline-flex min-h-11 items-center rounded-full border border-ouro px-5 text-xs font-medium tracking-[0.16em] text-ouro uppercase transition-colors hover:bg-ouro hover:text-tinta-invertida"
+          >
+            Agendar
+          </Link>
+        </div>
       </div>
     </header>
   );

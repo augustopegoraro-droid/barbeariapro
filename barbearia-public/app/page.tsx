@@ -162,7 +162,7 @@ export default async function HomePage() {
         }}
       />
 
-      <SiteHeader />
+      <SiteHeader instagramUrl={contato.instagramUrl} />
 
       <Hero
         profissionais={info.professionals.length}
