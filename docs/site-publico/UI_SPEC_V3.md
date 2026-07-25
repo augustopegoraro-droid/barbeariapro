@@ -1,6 +1,7 @@
 # UI_SPEC_V3 — Site público "A placa à noite, em ouro"
 
 > **Fonte de verdade visual do site público a partir de 2026-07-24.**
+> **✅ EM PRODUÇÃO** desde 2026-07-24 no apex `taylorethedy.com` (D-82, commit `455842d`).
 > Substitui a `UI_SPEC_V2.md` ("A placa à luz do dia", tema claro, 2026-07-22),
 > que fica no repo apenas como registro histórico. As regras de UX de fluxo do
 > `UX_PLAN.md` continuam valendo — só a pele mudou.
@@ -89,6 +90,8 @@ inventado. Se um depoimento sair do ar, sai daqui também.
 
 ## 6. Pendências conhecidas
 
+- **Validação num celular real** — o que foi ao ar passou só por captura
+  headless (430×932 e 1280) e smoke HTTP.
 - **"25 anos" não entrou** — não há fonte verificável; se o dono confirmar,
   vira mais uma célula da régua de números do hero.
 - Galeria interna (cadeiras, equipe trabalhando) — só existem duas fotos hoje.

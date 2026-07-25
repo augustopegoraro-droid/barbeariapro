@@ -590,7 +590,7 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 > `public/icon.svg` e `public/logo-mark.svg` continuam com a arte antiga, mas **não são referenciados por
 > nada** (o layout só declara `manifest`) — limpar quando conveniente.
 >
-> **Redesign UX/UI do site público (D-81, 2026-07-22 — implementado, NÃO deployado):** rodada por equipe de
+> **Redesign UX/UI do site público (D-81, 2026-07-22 — ✅ DEPLOYADO em prod 2026-07-24, junto com o D-82):** rodada por equipe de
 > agentes (UX + UI + Front-end); specs versionadas em **`docs/site-publico/`** (`UX_PLAN.md`, `UI_SPEC.md`,
 > `FRONTEND_AUDIT.md` — fonte de verdade de UX/UI do site daqui em diante). P0 completo: bug do 409 (erro
 > invisível ao voltar ao passo 3) corrigido; serviços da home clicáveis com pré-seleção `?servico=`; barra fixa
@@ -599,7 +599,7 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 > `components/booking/*` + primitivos `components/ui/*`; tokens novos aditivos no `globals.css`. Débitos: hero
 > `preload="metadata"`, ARIA/foco, tenant slug fallback unificado em `app`, `.dockerignore`, código morto do
 > D-79 removido (`logo.tsx`/`logo-paths.ts`). Hero e `.cta-agendar` intocados; backend intocado. Build+tsc
-> limpos. **Pendente: commit + deploy (rebuild `public`) + validação mobile real.** P1/P2 do UX_PLAN ficam para
+> limpos. **Deployado junto com o D-82 (commit `455842d`).** P1/P2 do UX_PLAN ficam para
 > próxima rodada; "reagendar com pré-seleção" exige backend (API devolve nomes, não ids). Ver D-81.
 > **Fase 3 do D-81 (mesmo dia): pivô do dono — REVOGA o hero de vídeo do D-80 e o tema grafite.** Tema claro
 > "A placa à luz do dia" (`docs/site-publico/UI_SPEC_V2.md`): página clara `#f5f6f8`, navy como tinta/assinatura,
@@ -609,12 +609,14 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 > Ícones PWA ainda com arte antiga. Dev na rede local: `DEV_API_PROXY` (rewrite condicional no `next.config.ts`)
 > + `API_URL_INTERNAL` + `NEXT_PUBLIC_API_URL=""` + `NEXT_PUBLIC_TENANT_SLUG=taylor` (dev DB usa `taylor`).
 >
-> **Landing page escura e dourada + a marca REAL da fachada (D-82, 2026-07-24 — implementado, NÃO deployado;
-> REVOGA o tema claro do D-81/Fase 3):** ⚠️ **`assets/images/taylor_thedy_logo.png` é um MOCKUP GERADO POR IA,
+> **Landing page escura e dourada + a marca REAL da fachada (D-82, 2026-07-24 — ✅ DEPLOYADO em prod
+> 2026-07-24, apex `taylorethedy.com`, commit `455842d`; REVOGA o tema claro do D-81/Fase 3):**
+> ⚠️ **`assets/images/taylor_thedy_logo.png` é um MOCKUP GERADO POR IA,
 > não é a marca** — ver `assets/images/README.md`. A marca real está em `assets/images/fachada-real.png` (foto do
 > letreiro em Palmas) e a placa marfim com o **"t" vazado** já extraída com alfa em `public/t-fachada.png`
-> (746×1334). O `logo-lockup.webp` que está **em produção** deriva do mockup → o site publicado exibe uma marca
-> que não é a da barbearia; o deploy do D-82 corrige isso. Fonte de verdade visual agora é
+> (746×1334). O `logo-lockup.webp` que esteve **em produção até 2026-07-24** derivava do mockup → o site
+> publicado exibia uma marca que não era a da barbearia; **o deploy do D-82 corrigiu isso** (o arquivo saiu do
+> repo e responde 404). Fonte de verdade visual agora é
 > **`docs/site-publico/UI_SPEC_V3.md`** ("A placa à noite, em ouro"): fundo `#0a0b0d`, marfim `#f2efe9`,
 > **ouro `#c9a86a` como ÚNICA cor de ação**, Cormorant Garamond + Jost. O site inteiro (home, `/agendar`,
 > `/meus-agendamentos`) é uma landing só: header fixo com CTA sempre visível, hero marca→promessa→prova→ação,
@@ -623,7 +625,10 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 > `.cta-agendar` mantém anatomia/timings congelados — só a paleta virou ouro. Ícones PWA/manifest refeitos com a
 > placa real; `sw.js` → `v4-landing-ouro-2026-07-24`. Removidos os assets da linhagem errada (`logo-lockup.webp`,
 > `symbol-t.webp`, `icon.svg`, `logo-mark.svg`) e o código morto (`hero-plate.tsx`, `logo.tsx`, `logo-paths.ts`).
-> `tsc` + `next build` limpos; validado por captura headless a 430×932 (sem transbordo). Ver D-82.
+> Deploy no molde D-79/D-80 (`git pull` na VM + rebuild do serviço `public`, **sem migration**; backend recriado
+> junto e voltou healthy). Smoke OK: apex + `/agendar` + `/meus-agendamentos` 200, assets novos 200,
+> `logo-lockup.webp` 404, `app.`/`api.` intactos. **Falta só validação num celular real** e confirmar o
+> "25 anos" com o dono (não entrou por falta de fonte). Ver D-82.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

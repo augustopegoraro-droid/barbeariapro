@@ -2280,7 +2280,7 @@ sem migration). **Smoke OK:** container `public` healthy; interno `:3200` home 2
 (`image/webp`) + `.cta-agendar` + wrapper de scrub no markup. **Pendente:** só validação visual/scroll num
 celular real (a extensão do Chrome não conectou nesta sessão — abrir a home no aparelho).
 
-### D-82 — Site público vira landing page escura e dourada + a marca REAL da fachada — 2026-07-24 (implementado, NÃO deployado)
+### D-82 — Site público vira landing page escura e dourada + a marca REAL da fachada — 2026-07-24 (✅ DEPLOYADO em prod 2026-07-24)
 
 **Origem — um erro de premissa que custou 3 rodadas.** O dono trouxe um pacote (`paginamelhorada.zip`) com a
 **foto real da fachada** (`uploads/fachada.png`, hoje `assets/images/fachada-real.png`) e a placa já extraída
@@ -2333,14 +2333,29 @@ que aparecia no protótipo **não entrou** — sem fonte verificável.
 200 no dev local; inspeção visual por captura headless a 430×932 (home em 5 alturas, passos 1-3 do fluxo,
 meus-agendamentos) — sem transbordo horizontal (`scrollWidth == clientWidth == 430`).
 
-**Pendências:** commit + deploy (rebuild do serviço `public`, sem migration); validação num celular real;
-confirmar "25 anos" com o dono; mais fotos internas; tabs de categoria; reagendar com pré-seleção (bloqueado
-pela API, que devolve nomes e não ids). O `logo-lockup.webp` sai do repo, então **o deploy troca a marca em
-produção** — é o objetivo, mas é uma mudança visível para o cliente final.
+**✅ DEPLOYADO em prod 2026-07-24** (commit `455842d`, molde D-79/D-80 — `barbearia-public/` é pasta no repo do
+backend, não submódulo; **sem migration**): push para o GitHub → na VM `sudo git pull origin main` → rebuild
+`sudo docker compose -f docker-compose.app.yml up -d --build public`. O backend foi recriado junto e voltou
+healthy; `frontend` (portal da equipe) intocado. O commit inclui o **D-81**, que estava pendente de commit.
+
+**Smoke OK:** containers `public`/`backend` healthy; `https://taylorethedy.com` + `/agendar` +
+`/meus-agendamentos` → 200; assets novos (`t-fachada.png`, `fachada.webp`, `icon-512.png`,
+`manifest.webmanifest`) → 200; **`logo-lockup.webp` → 404** (asset da linhagem errada saiu do repo, como
+esperado); `app.taylorethedy.com` → 307 (login) e `api.taylorethedy.com/health` → 200 (vizinhos intactos);
+HTML servido confere (marca nova, "Abrir no Google Maps", 4,8/400, `#0a0b0d`); captura headless da produção
+conferida a 1280px.
+
+**Efeito visível para o cliente final:** a marca em produção mudou — saiu o lockup cromado derivado do mockup
+de IA, entrou a placa real da fachada. Quem tinha o site aberto ou instalado como PWA pode ver a versão antiga
+por um ciclo até o service worker trocar (`v4-landing-ouro-2026-07-24`).
+
+**Pendências:** validação num celular real (headless não substitui o polegar); confirmar "25 anos" com o dono
+(entra como célula da régua de números do hero); mais fotos internas; tabs de categoria; reagendar com
+pré-seleção (bloqueado pela API, que devolve nomes e não ids).
 
 ---
 
-### D-81 — Redesign UX/UI do site público por equipe de agentes (UX + UI + Front-end) — 2026-07-22 (implementado, NÃO deployado)
+### D-81 — Redesign UX/UI do site público por equipe de agentes (UX + UI + Front-end) — 2026-07-22 (✅ DEPLOYADO em prod 2026-07-24, junto com o D-82)
 
 **Contexto:** rodada de evolução do site público (`barbearia-public/`) executada por uma equipe de 3 subagentes
 em paralelo sob supervisão do coordenador: UX Designer, UI Designer e Front-end Developer. Especificações viraram
