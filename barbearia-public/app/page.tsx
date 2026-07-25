@@ -12,7 +12,11 @@ import { Wordmark } from "@/components/wordmark";
 import { ServiceLinkRow } from "@/components/ui/service-row";
 import { ProfessionalAvatar } from "@/components/ui/professional";
 import { EnderecoLegenda, mapsUrl } from "@/components/ui/endereco";
-import { ContatoBotoes, IconeInstagram } from "@/components/ui/contato-botoes";
+import {
+  ContatoBotoes,
+  IconeFacebook,
+  IconeInstagram,
+} from "@/components/ui/contato-botoes";
 import { resolverContato } from "@/lib/contato";
 import StickyCta from "@/components/sticky-cta";
 
@@ -162,7 +166,10 @@ export default async function HomePage() {
         }}
       />
 
-      <SiteHeader instagramUrl={contato.instagramUrl} />
+      <SiteHeader
+        instagramUrl={contato.instagramUrl}
+        facebookUrl={contato.facebookUrl}
+      />
 
       <Hero
         profissionais={info.professionals.length}
@@ -401,6 +408,15 @@ export default async function HomePage() {
             >
               <IconeInstagram />
               Instagram
+            </a>
+            <a
+              href={contato.facebookUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center gap-1.5 text-tinta-suave transition-colors hover:text-marfim"
+            >
+              <IconeFacebook />
+              Facebook
             </a>
           </div>
         </div>

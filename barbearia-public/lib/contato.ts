@@ -15,6 +15,9 @@ const VERIFICADO = {
   whatsapp: "(63) 98456-6175",
   phone: "(63) 3215-2164",
   instagram: "taylorethedy",
+  /* Perfil do Facebook — informado pelo dono em 2026-07-25. A API pública não
+     tem campo para redes além do Instagram, então este vive só aqui. */
+  facebook: "taylor.thedy",
   address:
     "LO 01 - Q. 103 Sul, Rua SO 11, 60 - Plano Diretor Sul, Palmas - TO, 77015-028",
 } as const;
@@ -25,9 +28,11 @@ export type Contato = {
   whatsapp: string;
   /** Sem "@" — os componentes montam a URL e o rótulo. */
   instagram: string;
+  facebook: string;
   whatsappDigits: string;
   phoneDigits: string;
   instagramUrl: string;
+  facebookUrl: string;
 };
 
 export function resolverContato(info: PublicInfo): Contato {
@@ -41,8 +46,10 @@ export function resolverContato(info: PublicInfo): Contato {
     phone,
     whatsapp,
     instagram,
+    facebook: VERIFICADO.facebook,
     whatsappDigits: `55${whatsapp.replace(/\D/g, "")}`,
     phoneDigits: phone.replace(/\D/g, ""),
     instagramUrl: `https://www.instagram.com/${instagram}`,
+    facebookUrl: `https://www.facebook.com/${VERIFICADO.facebook}`,
   };
 }

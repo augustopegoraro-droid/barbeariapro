@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { Wordmark } from "@/components/wordmark";
-import { IconeInstagram } from "@/components/ui/contato-botoes";
+import { IconeFacebook, IconeInstagram } from "@/components/ui/contato-botoes";
 
 const SECOES = [
   { href: "#servicos", label: "Serviços" },
@@ -12,11 +12,21 @@ const SECOES = [
   { href: "#visite", label: "Horários" },
 ];
 
-export function SiteHeader({ instagramUrl }: { instagramUrl: string }) {
+export function SiteHeader({
+  instagramUrl,
+  facebookUrl,
+}: {
+  instagramUrl: string;
+  facebookUrl: string;
+}) {
   return (
     <header className="sticky top-0 z-40 border-b border-borda-sutil bg-fundo/85 backdrop-blur-lg">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-6 px-5 py-3 sm:px-8">
-        <Link href="/" aria-label="Taylor e Thedy — início" className="text-marfim">
+        <Link
+          href="/"
+          aria-label="Taylor e Thedy — início"
+          className="text-marfim"
+        >
           <Wordmark fontSize={19} />
         </Link>
 
@@ -43,6 +53,15 @@ export function SiteHeader({ instagramUrl }: { instagramUrl: string }) {
             className="flex h-11 w-11 items-center justify-center rounded-full text-tinta-suave transition-colors hover:text-ouro"
           >
             <IconeInstagram />
+          </a>
+          <a
+            href={facebookUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Facebook da Taylor e Thedy (abre em nova aba)"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-tinta-suave transition-colors hover:text-ouro"
+          >
+            <IconeFacebook />
           </a>
           <Link
             href="/agendar"
