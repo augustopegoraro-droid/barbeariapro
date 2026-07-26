@@ -237,7 +237,11 @@ export default async function HomePage() {
                 fundo. O `hero-poster.jpg` que estava aqui era outro quadro do
                 mesmo drone, quase idêntico à foto de cima — no celular, onde
                 as duas empilham, virava a mesma imagem repetida. */}
-            <figure>
+            {/* Ponto de referência que o cliente de Palmas reconhece — e a
+                Don Pneus aparece na própria foto, à esquerda da barbearia.
+                A legenda vira etiqueta sobre a imagem, com véu escuro por
+                baixo para o texto não brigar com a foto. */}
+            <figure className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/vista-aerea.webp"
@@ -247,9 +251,28 @@ export default async function HomePage() {
                 height={1050}
                 className="aspect-[4/3] w-full rounded-2xl border border-borda-sutil object-cover"
               />
-              {/* Ponto de referência que o cliente de Palmas reconhece — a
-                  Don Pneus aparece na própria foto, à esquerda. */}
-              <figcaption className="mt-3 text-sm text-tinta-suave">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 rounded-b-2xl"
+                style={{
+                  background:
+                    "linear-gradient(to top, rgba(10,11,13,0.92) 0%, rgba(10,11,13,0.6) 45%, transparent 100%)",
+                }}
+              />
+              <figcaption className="absolute inset-x-0 bottom-0 flex items-center gap-2 px-5 pb-5 text-lg font-medium text-marfim">
+                <svg
+                  className="h-5 w-5 flex-none text-ouro"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1 1 16 0Z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
                 Ao lado da Don Pneus
               </figcaption>
             </figure>
