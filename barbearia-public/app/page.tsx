@@ -232,11 +232,18 @@ export default async function HomePage() {
               />
               <EnderecoLegenda endereco={endereco} />
             </figure>
+            {/* Enquadramento deliberadamente diferente do da fachada: aérea
+                com a loja no contexto da avenida e a skyline de Palmas ao
+                fundo. O `hero-poster.jpg` que estava aqui era outro quadro do
+                mesmo drone, quase idêntico à foto de cima — no celular, onde
+                as duas empilham, virava a mesma imagem repetida. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/hero-poster.jpg"
-              alt="Vista aérea da Taylor e Thedy"
+              src="/vista-aerea.webp"
+              alt="Vista aérea da Taylor e Thedy na avenida, com a skyline de Palmas ao fundo"
               loading="lazy"
+              width={1400}
+              height={1050}
               className="aspect-[4/3] w-full rounded-2xl border border-borda-sutil object-cover"
             />
           </div>
