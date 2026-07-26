@@ -237,15 +237,22 @@ export default async function HomePage() {
                 fundo. O `hero-poster.jpg` que estava aqui era outro quadro do
                 mesmo drone, quase idêntico à foto de cima — no celular, onde
                 as duas empilham, virava a mesma imagem repetida. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/vista-aerea.webp"
-              alt="Vista aérea da Taylor e Thedy na avenida, com a skyline de Palmas ao fundo"
-              loading="lazy"
-              width={1400}
-              height={1050}
-              className="aspect-[4/3] w-full rounded-2xl border border-borda-sutil object-cover"
-            />
+            <figure>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/vista-aerea.webp"
+                alt="Vista aérea da Taylor e Thedy na avenida, com a skyline de Palmas ao fundo"
+                loading="lazy"
+                width={1400}
+                height={1050}
+                className="aspect-[4/3] w-full rounded-2xl border border-borda-sutil object-cover"
+              />
+              {/* Ponto de referência que o cliente de Palmas reconhece — a
+                  Don Pneus aparece na própria foto, à esquerda. */}
+              <figcaption className="mt-3 text-sm text-tinta-suave">
+                Ao lado da Don Pneus
+              </figcaption>
+            </figure>
           </div>
         </section>
 
