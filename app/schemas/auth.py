@@ -100,6 +100,17 @@ class AdminUserCreateIn(BaseModel):
     unit_id: Optional[int] = Field(default=None, gt=0)
 
 
+class AdminUserUpdateIn(BaseModel):
+    """Edição de um usuário existente (`PATCH /admin/security/users/{id}`).
+
+    Só o e-mail (a credencial de login) — papel, senha e sessões têm rotas
+    próprias. Não mexe em `must_change_password` nem revoga sessões: o vínculo
+    da sessão é por `user_id`, não pelo e-mail.
+    """
+
+    email: EmailStr
+
+
 class AdminUserCreatedOut(BaseModel):
     """Usuário criado + senha inicial (exibida UMA ÚNICA VEZ, como no reset)."""
 

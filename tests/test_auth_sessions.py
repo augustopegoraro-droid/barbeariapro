@@ -458,6 +458,113 @@ async def test_admin_create_user_requires_permission(client, barber_headers):
     assert r.status_code == 403
 
 
+# ─── Edição de e-mail de usuário existente ──────────────────────────────────
+@pytest.mark.asyncio
+async def test_admin_update_user_email_changes_login(client, auth_headers):
+    if not ADMIN_URL:
+        pytest.skip("ADMIN_DATABASE_URL ausente.")
+    email = "editar-email-d83@example.com"
+    novo_email = "editado-email-d83@example.com"
+    await _delete_user(email)
+    await _delete_user(novo_email)
+    try:
+        created = (
+            await client.post(
+                "/admin/security/users",
+                headers=auth_headers,
+                json={"email": email, "role": "reception", "password": "senha-inicial-123"},
+            )
+        ).json()
+        user_id = created["user"]["id"]
+
+        r = await client.patch(
+            f"/admin/security/users/{user_id}",
+            headers=auth_headers,
+            json={"email": novo_email},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["email"] == novo_email
+
+        # o login passa a ser pelo e-mail novo; o antigo deixa de existir.
+        r_novo = await client.post(
+            "/auth/login",
+            json={
+                "email": novo_email,
+                "password": "senha-inicial-123",
+                "organization_id": SEED_ORG_ID,
+            },
+        )
+        assert r_novo.status_code == 200, r_novo.text
+        r_antigo = await client.post(
+            "/auth/login",
+            json={
+                "email": email,
+                "password": "senha-inicial-123",
+                "organization_id": SEED_ORG_ID,
+            },
+        )
+        assert r_antigo.status_code == 401
+    finally:
+        await _delete_user(email)
+        await _delete_user(novo_email)
+
+
+@pytest.mark.asyncio
+async def test_admin_update_user_email_duplicate_409(client, auth_headers):
+    if not ADMIN_URL:
+        pytest.skip("ADMIN_DATABASE_URL ausente.")
+    email = "duplicar-email-d83@example.com"
+    await _delete_user(email)
+    try:
+        created = (
+            await client.post(
+                "/admin/security/users",
+                headers=auth_headers,
+                json={"email": email, "role": "reception"},
+            )
+        ).json()
+        r = await client.patch(
+            f"/admin/security/users/{created['user']['id']}",
+            headers=auth_headers,
+            json={"email": SEED_OWNER_EMAIL},
+        )
+        assert r.status_code == 409, r.text
+    finally:
+        await _delete_user(email)
+
+
+@pytest.mark.asyncio
+async def test_admin_update_user_not_found_404(client, auth_headers):
+    r = await client.patch(
+        "/admin/security/users/99999999",
+        headers=auth_headers,
+        json={"email": "inexistente-d83@example.com"},
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_update_user_invalid_email_422(client, auth_headers):
+    users = (await client.get("/admin/security/users", headers=auth_headers)).json()
+    owner_id = next(u["id"] for u in users if u["email"] == SEED_OWNER_EMAIL)
+    r = await client.patch(
+        f"/admin/security/users/{owner_id}",
+        headers=auth_headers,
+        json={"email": "nao-e-email"},
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_update_user_requires_permission(client, barber_headers):
+    r = await client.patch(
+        "/admin/security/users/1",
+        headers=barber_headers,
+        json={"email": "barbeiro-edita-d83@example.com"},
+    )
+    assert r.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_admin_list_users_requires_permission(client, barber_headers):
     r = await client.get("/admin/security/users", headers=barber_headers)

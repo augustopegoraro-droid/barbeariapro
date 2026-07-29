@@ -635,7 +635,10 @@ gated por `security.users.manage` (sem migration, sem permissão nova) — cria 
 `user_units.role` (só `owner|manager|reception|barber`), opcionalmente vincula um `barber_id` (papel Barbeiro) e
 devolve a senha inicial **uma única vez** (definida pelo gestor ou gerada), sempre com `must_change_password=True`.
 Só o proprietário cria outro proprietário (403 — anti-escalada). Auditado (`security.users.create`). Frontend:
-botão "Novo usuário" + `components/usuarios/create-user-dialog.tsx` em `/admin/usuarios`. Suíte 609 pass.
+botão "Novo usuário" + `components/usuarios/create-user-dialog.tsx` em `/admin/usuarios`.
+**+ `PATCH /admin/security/users/{id}`** troca o **e-mail** (credencial de login) de quem já existe — 409 em
+duplicado, mesma regra anti-escalada para editar um `owner`, sem revogar sessões nem forçar troca de senha;
+auditoria `security.users.update`. Frontend: botão "E-mail" na linha + `edit-email-dialog.tsx`. Suíte 614 pass.
 > **Armadilha (corrigida em prod, frontend `e0dca66`):** `signOut({ callbackUrl })` do Auth.js atrás do nginx
 > monta a URL absoluta a partir do request **interno** do container → mandava o usuário para
 > `https://localhost:3000/login` ao fim da troca obrigatória de senha (bug pré-existente do D-68). Passar

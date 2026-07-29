@@ -33,6 +33,7 @@ from app.schemas.auth import (
     AdminUserCreatedOut,
     AdminUserCreateIn,
     AdminUserOut,
+    AdminUserUpdateIn,
     SessionOut,
 )
 from app.schemas.security_dashboard import SecurityDashboardOut
@@ -185,6 +186,81 @@ async def create_org_user(
             created_at=new_user.created_at,
         ),
         temporary_password=password,
+    )
+
+
+@router.patch("/users/{user_id}", response_model=AdminUserOut)
+async def update_org_user(
+    user_id: int,
+    payload: AdminUserUpdateIn,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> AdminUserOut:
+    """Troca o e-mail (credencial de login) de um usuário da org.
+
+    Mesma regra anti-escalada da criação: mexer num Proprietário exige ser
+    Proprietário — senão um gestor poderia apontar o login do dono para um
+    e-mail próprio e, com o reset de senha, assumi-lo. As sessões ativas do
+    alvo seguem válidas (o vínculo é por `user_id`), mas o login passa a ser
+    pelo e-mail novo.
+    """
+    await require_permission(db, current_user, "security.users.manage")
+
+    target = (
+        await db.execute(
+            select(User).where(User.id == user_id, User.deleted_at.is_(None))
+        )
+    ).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado"
+        )
+
+    target_role = await resolve_current_role(db, target)
+    if target_role == "owner" and await resolve_current_role(db, current_user) != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas o proprietário pode editar outro proprietário.",
+        )
+
+    email = payload.email.strip().lower()
+    previous_email = target.email
+    if email != previous_email:
+        clash = (
+            await db.execute(
+                select(User.id).where(
+                    func.lower(User.email) == email, User.id != target.id
+                )
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Já existe um usuário com esse e-mail nesta organização.",
+            )
+        target.email = email
+        await db.flush()
+
+        record_event(
+            organization_id=current_user.organization_id,
+            actor_user_id=current_user.id,
+            action="security.users.update",
+            resource_type="user",
+            resource_id=target.id,
+            before={"email": previous_email},
+            after={"email": email},
+            ip=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+
+    return AdminUserOut(
+        id=target.id,
+        email=target.email,
+        role=target_role,
+        is_active=target.is_active,
+        must_change_password=target.must_change_password,
+        created_at=target.created_at,
     )
 
 

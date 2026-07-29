@@ -2489,6 +2489,18 @@ healthy. **Efeito colateral esperado:** o pull do submódulo trouxe junto o comm
 exportar/anonimizar dados do titular na ficha do cliente), que estava commitado mas ainda não tinha ido à VM;
 entrou neste mesmo rebuild.
 
+**Complemento — troca de e-mail de usuários existentes (2026-07-29):** `PATCH /admin/security/users/{id}`
+(mesma permissão `security.users.manage`, sem migration). Só o **e-mail**, que é a credencial de login — papel,
+senha e sessões têm rotas próprias. Regras: 404 se não existir/`deleted_at`; 409 se o e-mail já for de outro
+usuário da org; **mesma regra anti-escalada** da criação (editar alguém com papel `owner` exige ser `owner` —
+senão um gestor apontaria o login do dono para um e-mail próprio e, com o reset de senha, o assumiria); no-op
+silencioso quando o e-mail não muda (não audita nem toca a linha). **Não** revoga sessões nem liga
+`must_change_password`: o vínculo da sessão é por `user_id`, e a senha continua a mesma. Auditoria
+`security.users.update` com `before`/`after` do e-mail. Frontend: botão **"E-mail"** em cada linha de
+`/admin/usuarios` + `components/usuarios/edit-email-dialog.tsx` (`useAdminUpdateUserEmail`), com o botão
+Salvar desabilitado enquanto o valor não muda. +5 testes (troca move o login para o e-mail novo e invalida o
+antigo; 409 duplicado; 404; 422 e-mail inválido; 403 sem permissão) → suíte **614 pass / 2 ambientais**.
+
 **Bug encontrado na validação (mesmo dia, ✅ CORRIGIDO em prod — frontend `e0dca66`):** ao concluir a troca
 obrigatória de senha do primeiro login, o usuário caía em **`https://localhost:3000/login`**. Causa: em
 `app/trocar-senha/page.tsx` o `signOut({ callbackUrl: "/login" })` deixa o **Auth.js** montar a URL absoluta,
