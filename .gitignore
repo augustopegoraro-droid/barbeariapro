@@ -69,3 +69,7 @@ n8n-export*.json
 
 # artefatos do graphify (gerados localmente)
 graphify-out/
+
+# Mídia enviada pelo painel (D-85): fotos de profissionais. Arquivo de usuário
+# (PII — rosto de pessoa) e artefato de runtime: nunca versionar.
+uploads/

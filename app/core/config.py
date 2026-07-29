@@ -119,6 +119,13 @@ class Settings(BaseSettings):
     public_site_internal_url: str = ""
     public_revalidate_secret: str = ""
 
+    # Storage de mídia (D-85 — foto do profissional). `media_root` é o diretório
+    # dentro do container (volume do host em prod); `media_public_base` é o
+    # prefixo de URL que o browser abre — precisa ser ABSOLUTO em produção, pois
+    # o site público (apex) e o painel (app.) consomem a foto servida pela API.
+    media_root: str = "/app/uploads"
+    media_public_base: str = "/media"
+
     # Reativação de clientes
     reactivation_trigger_days: int = 60
     reactivation_cooldown_days: int = 60

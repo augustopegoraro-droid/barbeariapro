@@ -6,7 +6,16 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, status as http_status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Path,
+    UploadFile,
+    status as http_status,
+)
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +24,8 @@ from app.core.entitlements import check_limit
 from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services import media
+from app.services.audit import record_event
 from app.services.public_cache import invalidate_public_info
 from app.services.site_visibility import ensure_visible
 from models import (
@@ -58,6 +69,7 @@ class BarberOut(BaseModel):
     id: int
     name: str
     specialty: Optional[str]
+    photo_url: Optional[str] = None
     commission_pct: float
     work_model: Optional[str] = None
     monthly_cost: float = 0.0
@@ -189,6 +201,7 @@ async def get_equipe(
                 id=b.id,
                 name=b.name,
                 specialty=b.specialty,
+                photo_url=media.public_url(b.photo_path),
                 commission_pct=float(b.commission_pct),
                 work_model=b.work_model,
                 monthly_cost=float(b.monthly_cost or 0),
@@ -251,6 +264,7 @@ class BarberSimpleOut(BaseModel):
     id: int
     name: str
     specialty: Optional[str]
+    photo_url: Optional[str] = None
     commission_pct: float
     work_model: Optional[str] = None
     monthly_cost: float = 0.0
@@ -280,6 +294,7 @@ async def _load_barber(db: AsyncSession, barber_id: int) -> Barber:
 def _barber_out(b: Barber) -> BarberSimpleOut:
     return BarberSimpleOut(
         id=b.id, name=b.name, specialty=b.specialty,
+        photo_url=media.public_url(b.photo_path),
         commission_pct=float(b.commission_pct),
         work_model=b.work_model,
         monthly_cost=float(b.monthly_cost or 0),
@@ -399,6 +414,73 @@ async def arquivar_barbeiro(
 
     barber.deleted_at = datetime.now(timezone.utc)
     await db.flush()
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
+    return _barber_out(barber)
+
+
+# ─── escrita: foto do profissional (D-85) ─────────────────────────────────────
+
+@router.put("/barbeiros/{barber_id}/foto", response_model=BarberSimpleOut)
+async def enviar_foto_barbeiro(
+    background_tasks: BackgroundTasks,
+    barber_id: Annotated[int, Path(gt=0)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    file: Annotated[UploadFile, File(description="JPG, PNG, WebP ou HEIC (máx. 8 MB)")],
+) -> BarberSimpleOut:
+    """Substitui a foto do profissional (PUT: um profissional tem no máximo uma).
+
+    O arquivo é sempre re-encodado em WebP quadrado 800px pelo `media` — o que
+    chegou não vai para o disco como veio (ver o módulo para o porquê).
+    """
+    await _require_manager(db, current_user)
+    barber = await _load_barber(db, barber_id)
+
+    raw = await file.read()
+    try:
+        barber.photo_path = media.save_barber_photo(
+            current_user.organization_id, barber.id, raw, file.content_type
+        )
+    except media.MediaError as exc:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await db.flush()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="team.barber.photo.update",
+        resource_type="barber",
+        resource_id=barber.id,
+    )
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
+    return _barber_out(barber)
+
+
+@router.delete("/barbeiros/{barber_id}/foto", response_model=BarberSimpleOut)
+async def remover_foto_barbeiro(
+    background_tasks: BackgroundTasks,
+    barber_id: Annotated[int, Path(gt=0)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> BarberSimpleOut:
+    """Volta o profissional para a inicial do nome. Idempotente."""
+    await _require_manager(db, current_user)
+    barber = await _load_barber(db, barber_id)
+
+    barber.photo_path = None
+    await db.flush()
+    # Só apaga o arquivo depois de o campo sair do banco: se o disco falhar,
+    # sobra um órfão invisível — nunca uma linha apontando para o vazio.
+    media.delete_barber_photo(current_user.organization_id, barber.id)
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="team.barber.photo.delete",
+        resource_type="barber",
+        resource_id=barber.id,
+    )
     background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return _barber_out(barber)
 

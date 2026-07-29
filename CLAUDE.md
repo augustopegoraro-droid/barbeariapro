@@ -666,6 +666,22 @@ duas pontas); vazias = só o Redis é invalidado. Suíte 619 pass (+5 em `tests/
 org 1 **não tem linha** em `client_visibility_settings` (tudo visível, `ensure_visible` é no-op) — a whitelist só
 morde se o dono escolher `custom` na tela. Ver D-84.
 
+**Foto do profissional + primeiro storage de mídia (D-85, 2026-07-29 — ⏳ pendente deploy, migration `0045`):**
+`barbers.photo_path` guarda o **caminho relativo** (`org1/barber-7.webp?v=<mtime_ns>`), nunca a URL — a URL
+pública é montada na leitura com `MEDIA_PUBLIC_BASE`, então trocar de domínio/storage não invalida o banco.
+`app/services/media.py` é o storage (decisão do dono: **volume na VM**, não GCS nem campo de URL): descarta o
+nome enviado (path traversal) e **sempre re-encoda em WebP quadrado 800px** — barra não-imagem, **apaga o EXIF**
+(geolocalização, LGPD) e derruba 4 MB para ~60 KB; um diretório por org; escrita `.tmp`+`replace`; HEIC via
+`pillow-heif` (foto de iPhone). Rotas `PUT|DELETE /equipe/barbeiros/{id}/foto` (`team.manage`, auditadas,
+invalidam a vitrine do D-84). `/media` é servido pela **própria API** (`StaticFiles` em `app/main.py`) porque é
+o único host que apex e `app.` alcançam em comum — no nginx só entra um `location /media/` com `expires 30d`
+(seguro: a troca de foto muda o `?v=`). Frontend: `components/equipe/barber-photo.tsx` (painel: card + campo no
+diálogo de edição, **só na edição** — o upload precisa do id) e `ProfessionalAvatar` do site público com
+fallback de inicial (avatar cresce a 64px quando há foto). Infra: bind mount `./uploads:/app/uploads`,
+`uploads/` no `.gitignore` (**PII**) e `.dockerignore`; **o container roda como não-root, então o diretório do
+host precisa de `chown` para o uid do usuário `app`** — senão o upload falha. Suíte 633 pass (+14 em
+`tests/test_barber_photo.py`). Ver D-85.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

@@ -2600,6 +2600,84 @@ só passaria a morder quando o dono abrisse `/admin/seguranca/visibilidade` e es
 
 ---
 
+### D-85 — Foto do profissional + primeiro storage de mídia do produto — 2026-07-29 (⏳ pendente deploy)
+
+**Pedido.** "Deve ser possível adicionar foto para cada profissional" — a foto aparece no painel (card da
+equipe) e, principalmente, no **site público**: quem agenda escolhe uma pessoa, não um nome.
+
+**Decisão de arquitetura (do dono, entre 3 opções apresentadas): volume na VM + upload real.** O produto não
+tinha storage de arquivo nenhum — só campos de URL de terceiros (`attachments.url` aponta para a Evolution;
+`public_info.logo_url` é colado à mão) — então essa escolha era o gargalo do trabalho, não um detalhe. As
+alternativas eram bucket GCS (escala melhor, mas exige bucket + service account + custo) e só-campo-de-URL
+(zero infra, mas exige hospedar a foto fora do sistema, então ficaria sem uso).
+
+**Backend.**
+- Migration **0045** (aditiva, reversível): `barbers.photo_path`. Guarda o **caminho relativo**
+  (`org1/barber-7.webp?v=<mtime_ns>`), **não** a URL — a URL pública é montada na leitura com
+  `MEDIA_PUBLIC_BASE`, então trocar de domínio ou de storage não invalida dado gravado. Sem RLS/GRANT novo
+  (a coluna entra numa tabela que já tem os dois).
+- `app/services/media.py` (novo) é o storage. Decisões que valem registro:
+  - **O nome enviado pelo cliente é descartado**; o arquivo é `org{org}/barber-{id}.webp`, derivado só de ids
+    numéricos. É a defesa contra path traversal e contra `.php`/`.svg` disfarçado de foto.
+  - **Nunca grava os bytes originais** — sempre re-encoda em WebP quadrado 800px pelo Pillow. Isso (a) barra
+    arquivo que não é imagem (se o Pillow não decodifica, é 422, e nada chega ao disco); (b) **apaga o EXIF**,
+    que em foto de celular carrega geolocalização (LGPD); (c) derruba ~4 MB de câmera para ~60 KB, o que
+    importa no 4G do cliente final. Um diretório por org (`org{id}/`) — nada cruza tenant.
+  - Escreve em `.tmp` + `replace()`: upload concorrente ou erro no meio da escrita nunca deixa foto meio
+    gravada sendo servida.
+  - `?v=` usa **mtime em nanossegundos**: o nome do arquivo é estável, e com segundos inteiros duas trocas no
+    mesmo segundo não furariam o cache do browser/nginx.
+  - **HEIC é suportado de propósito** (`pillow-heif`): foto de iPhone é HEIC e o Pillow não decodifica sozinho
+    — sem isso, o Mac do dono daria erro. O registro é opcional: sem o pacote, HEIC sai da lista de aceitos e
+    a mensagem de erro se ajusta sozinha, em vez de mentir sobre o formato.
+- Rotas em `equipe.py` (gated por `team.manage`, já no catálogo do D-67): `PUT /equipe/barbeiros/{id}/foto`
+  (multipart; **PUT** porque um profissional tem no máximo uma foto) e `DELETE .../foto` (idempotente; apaga o
+  arquivo **depois** de limpar o campo — se o disco falhar sobra um órfão invisível, nunca uma linha apontando
+  para o vazio). Ambas auditadas (`team.barber.photo.update|delete`) e ambas invalidam a vitrine (D-84), então
+  a foto aparece no site na hora. `photo_url` entrou em `BarberOut`/`BarberSimpleOut` e em
+  `PublicProfessionalOut`.
+- `app/main.py` monta `/media` via `StaticFiles`. **Por que a própria API serve:** é o único host que o site
+  público (apex) e o painel (`app.`) alcançam em comum, e o nginx de `api.` já proxya tudo — não há server
+  block novo, só um `location /media/` com `expires 30d` (cache longo é seguro porque a troca de foto muda o
+  `?v=`). Conteúdo público por natureza (aparece na vitrine), logo sem auth. Se o volume faltar, a API sobe
+  sem mídia e loga — o resto do produto não depende disto.
+
+**Frontend.** Painel: `components/equipe/barber-photo.tsx` (novo) com `BarberAvatar` (foto ou iniciais) e
+`BarberPhotoField` (preview local via `URL.createObjectURL` + revoke, escolher/trocar/remover, limite de 8 MB
+espelhado do backend para não subir 20 MB no 4G da recepção e só então receber 422). A foto entra no card da
+equipe e no diálogo de edição; **só na edição**, porque o upload precisa do id, que só nasce ao criar. Site
+público: `ProfessionalAvatar` ganhou `photoUrl` (fallback = inicial, pois a barbearia pode ter só parte da
+equipe fotografada) e na home o avatar **cresce para 64px quando há foto** — rosto em 40px não se lê. `<img>`
+cru em vez de `next/image`: o backend já entrega WebP 800px e `next/image` exigiria liberar o host remoto.
+
+**Infra.** Bind mount `./uploads:/app/uploads` no serviço `backend`; `uploads/` no `.gitignore` (é **PII** —
+rosto de pessoa) e no `.dockerignore`. `MEDIA_ROOT`/`MEDIA_PUBLIC_BASE` nas settings e nos `.env*.example`.
+**Pegadinha registrada:** o container roda como usuário não-root (`app`), então o bind mount criado pelo Docker
+nasce de root e o upload falharia — o Dockerfile cria `/app/uploads` com owner `app` (resolve volume nomeado)
+e o **deploy precisa dar `chown` do diretório do host para o uid do usuário `app`**.
+
+**Validação.** `tests/test_barber_photo.py` (14): normalização para WebP quadrado, orgs não colidem, `?v=`
+muda ao substituir, **HEIC de iPhone aceito**, **EXIF não sobrevive**, não-imagem/SVG recusado sem tocar o
+disco, limite de tamanho, `public_url`, delete idempotente, upload+listagem+remoção pela API, 422, 404, **403
+para barbeiro** e foto aparecendo na vitrine pública. Suíte **633 pass / 2 ambientais / 1 skip**. Typecheck
+limpo nos dois frontends. **Fluxo real exercitado em dev** (backend + painel + site local): upload de um JPG
+1600×900 → gravado como WebP **800×800 de 5 KB** → servido em `GET /media/...` com `content-type: image/webp`
+→ `photo_url` na vitrine → **`<img alt="Foto de Marciana">` renderizada no HTML da home** (avatar 64px) e
+referenciada em `/agendar` → `DELETE` limpou campo, arquivo e vitrine. **Achado do teste local:** a home
+apareceu primeiro com a inicial, não com a foto — era o **fetch-cache do Next** guardando a resposta antiga
+(300s) de um `next start` anterior desta mesma sessão; limpar `.next/cache` confirmou o diagnóstico. É
+exatamente o caso que o D-84 cobre em produção (a revalidação por tag), e em dev não há segredo configurado,
+então o TTL manda. **Validação visual na UI do painel ficou pendente** — a extensão do Chrome não estava
+conectada; o upload foi exercitado por HTTP, não clicando no botão.
+
+**Deploy (pendente).** Migration + deps novas, então: backup do banco → `git pull` → **criar
+`/opt/barbeariapro/uploads` com `chown` para o uid do usuário `app` do container** → `MEDIA_ROOT` e
+`MEDIA_PUBLIC_BASE=https://api.taylorethedy.com/media` no `.env` → aplicar `0045` → **rebuild do backend
+(deps novas: pillow, pillow-heif, python-multipart)** e do site público + submódulo do painel → `location
+/media/` no nginx da VM → smoke: upload real, `GET /media/...` 200, foto na vitrine.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

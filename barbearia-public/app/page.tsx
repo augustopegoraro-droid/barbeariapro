@@ -308,10 +308,15 @@ export default async function HomePage() {
               {info.professionals.map((p) => (
                 <li
                   key={p.id}
-                  className="flex items-center gap-3 rounded-2xl border border-borda-sutil bg-superficie px-5 py-4"
+                  className="flex items-center gap-4 rounded-2xl border border-borda-sutil bg-superficie px-5 py-4"
                   style={{ boxShadow: "var(--sombra-1)" }}
                 >
-                  <ProfessionalAvatar name={p.name} />
+                  {/* Com foto (D-85) o avatar cresce: rosto de 40px não se lê. */}
+                  <ProfessionalAvatar
+                    name={p.name}
+                    photoUrl={p.photo_url}
+                    size={p.photo_url ? 16 : 10}
+                  />
                   <span>
                     <span className="block font-medium text-marfim">
                       {p.name}

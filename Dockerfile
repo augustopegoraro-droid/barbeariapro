@@ -36,6 +36,11 @@ COPY --from=build /install /usr/local
 COPY --chown=app:app app/ ./app/
 COPY --chown=app:app models/ ./models/
 
+# Mídia enviada pelo painel (D-85). O diretório existe na imagem com owner `app`
+# para que um volume nomeado herde a permissão certa; com bind mount, o dono é o
+# do host — o deploy precisa dar `chown` para o uid do usuário `app` (ver D-85).
+RUN mkdir -p /app/uploads && chown app:app /app/uploads
+
 USER app
 
 EXPOSE 8000

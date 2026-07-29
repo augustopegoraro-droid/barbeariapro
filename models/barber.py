@@ -69,6 +69,10 @@ class Barber(Base):
     chair_rent: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, server_default=text("0")
     )
+    # Foto do profissional (migration 0045, D-85): caminho RELATIVO no storage
+    # de mídia (ex.: "org1/barber-7.webp?v=1769..."). A URL pública é montada na
+    # leitura com MEDIA_PUBLIC_BASE — trocar de domínio não invalida o banco.
+    photo_path: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

@@ -40,3 +40,6 @@ scripts/
 *.txt
 !requirements.txt
 *.md
+
+# Mídia de runtime (D-85) — não vai para o contexto de build
+uploads/

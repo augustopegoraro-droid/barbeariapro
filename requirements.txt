@@ -15,3 +15,8 @@ stripe>=13
 redis>=5.0
 slowapi>=0.1.9
 user-agents>=2.2
+# Foto do profissional (D-85): normalização da imagem + upload multipart.
+# pillow-heif porque foto de iPhone é HEIC e o Pillow não decodifica sozinho.
+pillow>=10.3
+pillow-heif>=0.16
+python-multipart>=0.0.9

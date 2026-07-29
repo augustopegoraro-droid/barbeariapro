@@ -38,6 +38,7 @@ from app.db.redis import get_redis
 from app.db.session import get_db, set_current_org
 from app.services.audit import record_event
 from app.services.availability import free_slots
+from app.services import media
 from app.services.calendar_sync import push_appointment
 from app.services.public_cache import INFO_CACHE_TTL_SECONDS, info_cache_key
 from app.services.scheduling import barber_has_conflict
@@ -154,6 +155,7 @@ class PublicProfessionalOut(BaseModel):
     id: int
     name: str
     specialty: Optional[str]
+    photo_url: Optional[str] = None
 
 
 class PublicHourOut(BaseModel):
@@ -308,7 +310,12 @@ async def public_info(
             if by_service.get(s.id)
         ],
         professionals=[
-            PublicProfessionalOut(id=b.id, name=b.name, specialty=b.specialty)
+            PublicProfessionalOut(
+                id=b.id,
+                name=b.name,
+                specialty=b.specialty,
+                photo_url=media.public_url(b.photo_path),
+            )
             for b in barbers
         ],
         hours=hours,

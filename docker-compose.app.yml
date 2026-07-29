@@ -51,6 +51,11 @@ services:
       # Redis é deste mesmo compose (nome do serviço resolve na rede do projeto);
       # não é o evolution-redis (isolado, outra rede/projeto).
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      # Mídia enviada pelo painel (D-85: fotos de profissionais). Bind mount no
+      # host — arquivo de usuário NÃO pode viver só na imagem (rebuild apagaria).
+      # **Incluir no backup junto com o dump do banco.**
+      - ./uploads:/app/uploads
     extra_hosts:
       # Resolve o host (onde postgres/evolution estão publicados)
       - "host.docker.internal:host-gateway"

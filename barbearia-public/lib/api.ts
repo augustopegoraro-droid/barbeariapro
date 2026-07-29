@@ -28,6 +28,8 @@ export type PublicProfessional = {
   id: number;
   name: string;
   specialty: string | null;
+  /* URL absoluta da foto (D-85), servida pela API. null = usar a inicial. */
+  photo_url: string | null;
 };
 
 export type PublicHour = {
