@@ -91,10 +91,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return resp.json();
 }
 
+/* Tag do cache da vitrine. O backend invalida sob demanda via
+   POST /api/revalidate quando o painel cadastra profissional/serviço/horário
+   (D-84) — o `revalidate` abaixo é só o teto de segurança. */
+export const INFO_TAG = "public-info";
+
 export async function fetchInfo(revalidateSeconds = 300): Promise<PublicInfo> {
   // Server-side (home SSR/ISR): usa o cache do Next.
   const resp = await fetch(`${base()}/info`, {
-    next: { revalidate: revalidateSeconds },
+    next: { revalidate: revalidateSeconds, tags: [INFO_TAG] },
   });
   if (!resp.ok) throw new ApiError(resp.status, "Falha ao carregar informações.");
   return resp.json();

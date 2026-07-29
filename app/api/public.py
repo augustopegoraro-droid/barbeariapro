@@ -39,6 +39,7 @@ from app.db.session import get_db, set_current_org
 from app.services.audit import record_event
 from app.services.availability import free_slots
 from app.services.calendar_sync import push_appointment
+from app.services.public_cache import INFO_CACHE_TTL_SECONDS, info_cache_key
 from app.services.scheduling import barber_has_conflict
 from app.services.tenant import org_id_by_subdomain
 from models import (
@@ -61,7 +62,6 @@ router = APIRouter(prefix="/public/{subdomain}", tags=["public"])
 logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "tt_session"
-INFO_CACHE_TTL_SECONDS = 60
 
 
 def _client_ip(request: Request) -> str:
@@ -212,7 +212,7 @@ async def public_info(
     db: Annotated[AsyncSession, Depends(get_db)],
     org_id: Annotated[int, Depends(get_public_org)],
 ) -> PublicInfoOut:
-    cache_key = f"public_info:{org_id}"
+    cache_key = info_cache_key(org_id)
     try:
         cached = await get_redis().get(cache_key)
         if cached:

@@ -117,6 +117,10 @@ services:
     environment:
       # SSR/ISR da home fala com o backend pela rede interna do compose.
       API_URL_INTERNAL: http://backend:8000
+      # Segredo do POST /api/revalidate (D-84) — o backend usa o MESMO valor em
+      # PUBLIC_REVALIDATE_SECRET. Vazio = rota responde 503 (fail closed) e o
+      # site volta a depender só do TTL do ISR.
+      REVALIDATE_SECRET: ${PUBLIC_REVALIDATE_SECRET:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

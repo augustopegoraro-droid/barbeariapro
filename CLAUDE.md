@@ -645,6 +645,24 @@ auditoria `security.users.update`. Frontend: botão "E-mail" na linha + `edit-em
 > `Host`/`X-Forwarded-Host` não resolve. Padrão adotado: `signOut({ redirect: false })` + navegação **relativa**
 > (`window.location.href`), que preserva o multi-tenant por subdomínio. Nunca voltar a usar `callbackUrl` aqui.
 
+**Sincronização painel → site público (D-84, 2026-07-29 — ⏳ pendente deploy, sem migration):** cadastrar
+profissional/serviço/horário no painel agora reflete na vitrine do apex **na hora**. Antes, três camadas
+independentes seguravam a mudança: cache Redis de `GET /public/{sub}/info` (`public_info:{org_id}`, 60s), ISR do
+Next (home 300s, `/agendar` 60s) e — latente — a whitelist `mode:"custom"` do `client_visibility_settings`
+(D-73), que faria um cadastro novo nascer invisível **para sempre**. Porta única: `app/services/public_cache.py::
+invalidate_public_info(org_id)` (apaga a chave do Redis + `POST {site}/api/revalidate` para expirar a tag
+`public-info` do ISR), **sempre registrada em `BackgroundTasks`** — roda após a resposta, logo após o commit de
+`get_tenant_db`, e nunca derruba a escrita do painel (falha = comportamento antigo). Call-sites: `equipe.py`
+(criar/editar/arquivar barbeiro), `servicos.py` (criar/atualizar/arquivar/reativar), `empresa.py`
+(`PATCH /empresa` + `PUT /empresa/horarios`), `security.py` (`PUT /admin/security/site-visibility`); folgas ficam
+fora (afetam `/slots`, não cacheado). `site_visibility.py::ensure_visible` adiciona o cadastro novo à whitelist
+quando ela existe — **cadastrar já publica**; para esconder, desmarcar em `/admin/seguranca/visibilidade` (no-op
+em `mode:"all"`). No site: `lib/api.ts` tagueia o fetch (`INFO_TAG`) e `app/api/revalidate/route.ts` valida o
+segredo em tempo constante, é **fail closed** (sem `REVALIDATE_SECRET` → 503) e está **bloqueado no nginx do
+apex** (`deny all`) — só a rede interna do compose chega nele. Envs novas: `PUBLIC_SITE_INTERNAL_URL` +
+`PUBLIC_REVALIDATE_SECRET` (o compose repassa como `REVALIDATE_SECRET` ao serviço `public`); vazias = só o Redis
+é invalidado. Suíte 619 pass (+5 em `tests/test_public_sync.py`). Ver D-84.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

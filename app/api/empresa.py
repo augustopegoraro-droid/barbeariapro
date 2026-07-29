@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.services.audit import record_event
+from app.services.public_cache import invalidate_public_info
 from models import Barber, BusinessHours, Organization, Subscription, Unit
 
 router = APIRouter(tags=["empresa"])
@@ -219,6 +220,7 @@ async def obter_empresa(
 @router.patch("/empresa", response_model=OrganizationOut)
 async def atualizar_empresa(
     body: OrganizationUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_tenant_db),
     current_user=Depends(get_current_user),
 ):
@@ -248,6 +250,8 @@ async def atualizar_empresa(
         resource_id=org.id,
         after=changed,
     )
+    # nome/logo/contato aparecem na vitrine pública (D-84)
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return out
 
 
@@ -294,6 +298,7 @@ async def atualizar_unidade(
 @router.put("/empresa/horarios", response_model=list[BusinessHourSlot])
 async def substituir_horarios(
     body: HorariosUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_tenant_db),
     current_user=Depends(get_current_user),
 ):
@@ -345,4 +350,6 @@ async def substituir_horarios(
         resource_id=unit.id,
         after={"slots_count": len(body.slots)},
     )
+    # a régua de dias/horários do site vem daqui (D-81/D-84)
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return out

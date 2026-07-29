@@ -2516,6 +2516,71 @@ botão "Sair" no admin (débito à parte).
 
 ---
 
+### D-84 — Sincronização painel → site público (profissional/serviço/horário aparecem na hora) — 2026-07-29 (⏳ pendente deploy)
+
+**Problema.** Cadastrar um profissional em `/admin/equipe` não refletia no site público (apex
+`taylorethedy.com`) — o dono cadastrava e o site continuava mostrando a equipe antiga. Três causas
+independentes, todas de cache/configuração (nenhum bug de dado):
+
+1. **Cache Redis da vitrine** — `GET /public/{subdomain}/info` guarda a resposta em
+   `public_info:{org_id}` por 60s (D-79) e nada invalidava a chave numa escrita do painel.
+2. **ISR do Next** — o site é SSR/ISR: a home tinha `export const revalidate = 300` (5 min) e
+   `/agendar` 60s. Mesmo com o backend atualizado, o HTML servido era o cacheado.
+3. **Whitelist de visibilidade (D-73)** — se o gestor tivesse escolhido `mode: "custom"` em
+   `client_visibility_settings.professionals`, um cadastro novo nasceria **invisível para sempre**,
+   independente de cache. (Prod está em `mode: "all"`, então esta era latente.)
+
+**Solução — porta única de invalidação + revalidação sob demanda.**
+- `app/services/public_cache.py` (novo): `invalidate_public_info(org_id)` apaga a chave do Redis e,
+  se `PUBLIC_SITE_INTERNAL_URL` + `PUBLIC_REVALIDATE_SECRET` estiverem configurados, chama
+  `POST {site}/api/revalidate` (segredo no header `X-Revalidate-Secret`) para expirar a tag
+  `public-info` do ISR. A constante `INFO_CACHE_TTL_SECONDS` e o builder `info_cache_key` saíram de
+  `app/api/public.py` para cá (chave única, sem string duplicada).
+- **Sempre via `BackgroundTasks`** do FastAPI, nunca inline: roda depois da resposta — logo, depois do
+  commit de `get_tenant_db` (invalidar antes do commit poderia recachear o estado anterior) — e o
+  gestor não espera a rede do site. Toda falha é logada e engolida: sem Redis ou com o site fora, o
+  pior caso é o comportamento antigo (atualiza no vencimento do TTL). Sem os dois envs, só o Redis é
+  invalidado (dev/staging).
+- **Call-sites** (tudo que a vitrine mostra): `equipe.py` criar/editar/arquivar barbeiro;
+  `servicos.py` criar/atualizar/arquivar/reativar; `empresa.py` `PATCH /empresa` (nome/contato/logo) e
+  `PUT /empresa/horarios` (a régua de dias do site vem daí); `security.py`
+  `PUT /admin/security/site-visibility`. Folgas (`TimeOff`) **não** entram: afetam `/slots`, que não é
+  cacheado.
+- `app/services/site_visibility.py::ensure_visible(db, org, kind, id)` (novo): quando a org usa
+  `mode: "custom"`, o profissional/serviço recém-cadastrado é **adicionado à whitelist**. Decisão:
+  *cadastrar já publica* — para esconder, o gestor desmarca em `/admin/seguranca/visibilidade`. Sem
+  isso "adicionar funcionário" não teria efeito nenhum na vitrine. Em `mode: "all"` (padrão) e em orgs
+  que nunca abriram a tela, é no-op — não converte a config para custom por engano. Reatribui o JSONB
+  (dict sem `MutableDict` não marca mutação in-place).
+- **Site público:** `lib/api.ts` exporta `INFO_TAG = "public-info"` e o fetch de `/info` passou a levar
+  `next: { revalidate, tags: [INFO_TAG] }` (o `revalidate` fica como teto de segurança);
+  `app/api/revalidate/route.ts` (novo) valida o segredo em **tempo constante** (`timingSafeEqual`),
+  chama `revalidateTag(INFO_TAG, "seconds")` — o Next 16 exige o profile de cacheLife — e é **fail
+  closed**: sem `REVALIDATE_SECRET` no ambiente responde **503**, nunca revalida sem provar identidade.
+- **Exposição:** o nginx do apex ganhou `location = /api/revalidate { deny all; return 404; }` — a rota
+  só é alcançável pela rede interna do compose (defesa em profundidade; ela já exigia o segredo).
+- **Config:** `PUBLIC_SITE_INTERNAL_URL` / `PUBLIC_REVALIDATE_SECRET` no `Settings` + `.env.example` +
+  `.env.production.example`; o serviço `public` do `docker-compose.app.yml` recebe
+  `REVALIDATE_SECRET: ${PUBLIC_REVALIDATE_SECRET:-}` (runtime, não build arg — o route handler é
+  dinâmico). **Sem migration.**
+
+**Validação.** `tests/test_public_sync.py` (5 testes, reusando o fixture `public_seed` do
+`test_public_site.py`): profissional novo aparece na vitrine na hora (sem a invalidação o cache de 60s
+o esconderia); arquivado sai na hora; whitelist `custom` recebe o id novo e o profissional aparece;
+`mode: "all"` não é convertido em custom; serviço renomeado aparece na hora. Suíte **619 pass / 2
+ambientais / 1 skip / 0 regressões** (baseline 614). Site público: `tsc --noEmit` e `next build`
+limpos. Route handler exercitado de verdade (`next start` local): sem segredo **401**, segredo errado
+**401**, correto **200** `{"revalidated":"public-info"}`, `GET` **405**.
+
+**Deploy (pendente).** Molde D-79/D-80/D-82, **sem migration**: gerar o segredo
+(`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`), acrescentar
+`PUBLIC_SITE_INTERNAL_URL=http://public:3200` + `PUBLIC_REVALIDATE_SECRET=<segredo>` ao
+`/opt/barbeariapro/.env` da VM, `git pull` + rebuild dos serviços `backend` e `public`, aplicar o
+`location` novo no nginx da VM (`sudo nginx -t && sudo systemctl reload nginx`) e validar cadastrando
+um profissional de teste (deve aparecer no apex sem espera; arquivar depois).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

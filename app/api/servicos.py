@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,8 @@ from starlette import status as http_status
 from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services.public_cache import invalidate_public_info
+from app.services.site_visibility import ensure_visible
 from models import Barber, BarberService, Service
 
 router = APIRouter(tags=["servicos"])
@@ -89,6 +91,7 @@ async def listar_servicos(
 @router.post("/servicos", response_model=ServicoOut, status_code=http_status.HTTP_201_CREATED)
 async def criar_servico(
     body: ServicoIn,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
 ):
@@ -115,8 +118,12 @@ async def criar_servico(
     for bid in barber_ids:
         db.add(BarberService(barber_id=bid, service_id=svc.id))
 
+    await db.flush()
+    # Site público (D-84): entra na whitelist (se houver) e a vitrine é invalidada.
+    await ensure_visible(db, current_user.organization_id, "services", svc.id)
     out = _svc_out(svc)
     await db.commit()
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return out
 
 
@@ -125,6 +132,7 @@ async def criar_servico(
 @router.patch("/servicos/{id}", response_model=ServicoOut)
 async def atualizar_servico(
     body: ServicoUpdate,
+    background_tasks: BackgroundTasks,
     id: int = Path(..., gt=0),
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
@@ -152,6 +160,7 @@ async def atualizar_servico(
     await db.flush()
     out = _svc_out(svc)
     await db.commit()
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return out
 
 
@@ -159,6 +168,7 @@ async def atualizar_servico(
 
 @router.patch("/servicos/{id}/arquivar", response_model=ServicoOut)
 async def arquivar_servico(
+    background_tasks: BackgroundTasks,
     id: int = Path(..., gt=0),
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
@@ -176,6 +186,7 @@ async def arquivar_servico(
     await db.flush()
     out = _svc_out(svc)
     await db.commit()
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return out
 
 
@@ -183,6 +194,7 @@ async def arquivar_servico(
 
 @router.patch("/servicos/{id}/reativar", response_model=ServicoOut)
 async def reativar_servico(
+    background_tasks: BackgroundTasks,
     id: int = Path(..., gt=0),
     db: AsyncSession = Depends(get_tenant_db),
     current_user = Depends(get_current_user),
@@ -200,4 +212,5 @@ async def reativar_servico(
     await db.flush()
     out = _svc_out(svc)
     await db.commit()
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return out

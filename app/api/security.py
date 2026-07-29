@@ -16,7 +16,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +40,7 @@ from app.schemas.security_dashboard import SecurityDashboardOut
 from app.schemas.site_visibility import SiteVisibilityOut, SiteVisibilityUpdateIn
 from app.services.audit import purge_expired, record_event
 from app.services.security_dashboard import dashboard_summary
+from app.services.public_cache import invalidate_public_info
 from app.services.site_visibility import get_or_create as get_or_create_visibility
 from models import AuditLog, Barber, Unit, UnitRole, User, UserSession, UserUnit
 
@@ -432,6 +433,7 @@ async def get_site_visibility(
 @router.put("/site-visibility", response_model=SiteVisibilityOut)
 async def update_site_visibility(
     body: SiteVisibilityUpdateIn,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> SiteVisibilityOut:
@@ -457,6 +459,8 @@ async def update_site_visibility(
         resource_type="client_visibility_settings",
         resource_id=current_user.organization_id,
     )
+    # o site reflete a nova configuração na hora (D-84)
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return out
 
 

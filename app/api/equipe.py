@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status as http_status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, status as http_status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,8 @@ from app.core.entitlements import check_limit
 from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services.public_cache import invalidate_public_info
+from app.services.site_visibility import ensure_visible
 from models import (
     Appointment,
     AppointmentItem,
@@ -288,6 +290,7 @@ def _barber_out(b: Barber) -> BarberSimpleOut:
 @router.post("/barbeiros", response_model=BarberSimpleOut, status_code=http_status.HTTP_201_CREATED)
 async def criar_barbeiro(
     body: BarberCreateIn,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> BarberSimpleOut:
@@ -332,12 +335,16 @@ async def criar_barbeiro(
         db.add(BarberService(barber_id=barber.id, service_id=sid))
 
     await db.flush()
+    # Site público (D-84): entra na whitelist (se houver) e a vitrine é invalidada.
+    await ensure_visible(db, current_user.organization_id, "professionals", barber.id)
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return _barber_out(barber)
 
 
 @router.patch("/barbeiros/{barber_id}", response_model=BarberSimpleOut)
 async def editar_barbeiro(
     body: BarberEditIn,
+    background_tasks: BackgroundTasks,
     barber_id: Annotated[int, Path(gt=0)],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
@@ -359,11 +366,14 @@ async def editar_barbeiro(
         barber.chair_rent = Decimal(str(body.chair_rent))
 
     await db.flush()
+    # nome/especialidade aparecem na vitrine (D-84)
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return _barber_out(barber)
 
 
 @router.patch("/barbeiros/{barber_id}/arquivar", response_model=BarberSimpleOut)
 async def arquivar_barbeiro(
+    background_tasks: BackgroundTasks,
     barber_id: Annotated[int, Path(gt=0)],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
@@ -389,6 +399,7 @@ async def arquivar_barbeiro(
 
     barber.deleted_at = datetime.now(timezone.utc)
     await db.flush()
+    background_tasks.add_task(invalidate_public_info, current_user.organization_id)
     return _barber_out(barber)
 
 

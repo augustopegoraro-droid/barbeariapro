@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     public_session_max_age_days: int = 400
     # Antecedência mínima (horas) para o cliente cancelar pelo site (fixo na v1).
     public_cancel_min_hours: int = 2
+    # Sincronização painel → site público (D-84). URL INTERNA do site (rede do
+    # compose, ex.: "http://public:3200") + segredo compartilhado com o route
+    # handler /api/revalidate. Vazios = só o Redis é invalidado (dev/staging).
+    public_site_internal_url: str = ""
+    public_revalidate_secret: str = ""
 
     # Reativação de clientes
     reactivation_trigger_days: int = 60
