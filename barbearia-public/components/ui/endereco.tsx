@@ -2,8 +2,10 @@
    pergunta "onde fica?" nasce. Repete o endereço da seção "Onde e quando" de
    propósito: quem reconhece a fachada quer o mapa ali, não 3 seções abaixo. */
 
-export function mapsUrl(endereco: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`;
+const GOOGLE_MAPS_URL = "https://maps.app.goo.gl/8QKLfpgmMgsr5CVMA";
+
+export function mapsUrl(_endereco: string) {
+  return GOOGLE_MAPS_URL;
 }
 
 export function EnderecoLegenda({
