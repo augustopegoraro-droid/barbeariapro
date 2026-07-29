@@ -2448,7 +2448,7 @@ depois commit + deploy.
 
 ---
 
-### D-83 — Criação de usuário pelo gestor em `/admin/usuarios` — 2026-07-29 (implementado, **não deployado**)
+### D-83 — Criação de usuário pelo gestor em `/admin/usuarios` — 2026-07-29 (✅ DEPLOYADO em prod 2026-07-29)
 
 **Contexto:** a tela `/admin/usuarios` (D-68) só listava usuários e agia sobre os existentes (sessões, reset de
 senha). Não havia **nenhuma** forma de criar um login novo dentro do tenant — só o onboarding de plataforma
@@ -2479,8 +2479,15 @@ do `ResetPasswordDialog`.
 
 **Testes:** +6 em `tests/test_auth_sessions.py` (criação → login real com a senha devolvida + troca obrigatória;
 senha explícita; 409 duplicado; 422 senha curta; 422 papel inválido; 403 sem permissão). Suíte **609 pass /
-2 ambientais / 0 regressões**; `tsc --noEmit` limpo. **Pendente:** validação visual e deploy (backend + frontend,
-sem migration).
+2 ambientais / 0 regressões**; `tsc --noEmit` limpo.
+
+**✅ DEPLOYADO em prod 2026-07-29** (backend `285decb` + frontend `5ef5b54`, direto na `main`; **sem migration**,
+por isso sem backup prévio — molde D-80/D-82): `git pull --ff-only` em `/opt/barbeariapro` + `submodule update`
+do `barbearia-frontend` → rebuild de `backend` e `frontend`. Smoke: `/health` 200, `POST /admin/security/users`
+sem token → **401** (rota no ar e protegida), `app.taylorethedy.com/login` 200, apex 200, todos os containers
+healthy. **Efeito colateral esperado:** o pull do submódulo trouxe junto o commit `60de9c3` (frontend do D-74 —
+exportar/anonimizar dados do titular na ficha do cliente), que estava commitado mas ainda não tinha ido à VM;
+entrou neste mesmo rebuild. **Pendente:** validação visual do fluxo (criar um usuário real pelo painel).
 
 ---
 
