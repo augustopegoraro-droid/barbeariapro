@@ -2487,7 +2487,20 @@ do `barbearia-frontend` → rebuild de `backend` e `frontend`. Smoke: `/health` 
 sem token → **401** (rota no ar e protegida), `app.taylorethedy.com/login` 200, apex 200, todos os containers
 healthy. **Efeito colateral esperado:** o pull do submódulo trouxe junto o commit `60de9c3` (frontend do D-74 —
 exportar/anonimizar dados do titular na ficha do cliente), que estava commitado mas ainda não tinha ido à VM;
-entrou neste mesmo rebuild. **Pendente:** validação visual do fluxo (criar um usuário real pelo painel).
+entrou neste mesmo rebuild.
+
+**Bug encontrado na validação (mesmo dia, ✅ CORRIGIDO em prod — frontend `e0dca66`):** ao concluir a troca
+obrigatória de senha do primeiro login, o usuário caía em **`https://localhost:3000/login`**. Causa: em
+`app/trocar-senha/page.tsx` o `signOut({ callbackUrl: "/login" })` deixa o **Auth.js** montar a URL absoluta,
+e atrás do nginx ele a deriva do request **interno do container** (`localhost:3000`), aplicando só o
+`X-Forwarded-Proto` — daí o `https://localhost:3000`. Passar `Host`/`X-Forwarded-Host` público **não** muda
+(confirmado por `curl` contra `POST /api/auth/signout` em prod, antes e depois de injetar o header);
+`AUTH_TRUST_HOST=true` já estava ligado e não há `AUTH_URL` no `.env.docker`. Fix: `signOut({ redirect: false })`
++ `window.location.href = "/login"` — caminho **relativo**, resolvido pelo browser contra o domínio real, o que
+também mantém o multi-tenant por subdomínio (fixar `AUTH_URL` amarraria o portal a um host só). Bug era
+**pré-existente do D-68** (todo reset administrativo caía nele); só apareceu agora porque a criação de usuário
+tornou o fluxo de primeiro login rotineiro. Único ponto do frontend do tenant que usava `callbackUrl` — não há
+botão "Sair" no admin (débito à parte).
 
 ---
 

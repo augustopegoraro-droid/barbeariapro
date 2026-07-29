@@ -636,6 +636,11 @@ gated por `security.users.manage` (sem migration, sem permissão nova) — cria 
 devolve a senha inicial **uma única vez** (definida pelo gestor ou gerada), sempre com `must_change_password=True`.
 Só o proprietário cria outro proprietário (403 — anti-escalada). Auditado (`security.users.create`). Frontend:
 botão "Novo usuário" + `components/usuarios/create-user-dialog.tsx` em `/admin/usuarios`. Suíte 609 pass.
+> **Armadilha (corrigida em prod, frontend `e0dca66`):** `signOut({ callbackUrl })` do Auth.js atrás do nginx
+> monta a URL absoluta a partir do request **interno** do container → mandava o usuário para
+> `https://localhost:3000/login` ao fim da troca obrigatória de senha (bug pré-existente do D-68). Passar
+> `Host`/`X-Forwarded-Host` não resolve. Padrão adotado: `signOut({ redirect: false })` + navegação **relativa**
+> (`window.location.href`), que preserva o multi-tenant por subdomínio. Nunca voltar a usar `callbackUrl` aqui.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
