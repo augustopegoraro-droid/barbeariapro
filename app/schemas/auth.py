@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -78,6 +78,33 @@ class AdminUserOut(BaseModel):
     is_active: bool
     must_change_password: bool
     created_at: datetime
+
+
+class AdminUserCreateIn(BaseModel):
+    """Criação de usuário da org pelo gestor (`POST /admin/security/users`).
+
+    Sem provedor de e-mail no stack (D-68): ou o gestor define a senha inicial,
+    ou o backend gera uma temporária — em ambos os casos a troca no primeiro
+    login é obrigatória, já que a senha passa pela mão de um terceiro.
+    """
+
+    email: EmailStr
+    # Papel de sistema primário (grava em `user_units.role`, mecanismo legado
+    # que alimenta `resolve_role`). Papéis adicionais/personalizados são outra
+    # feature (`security.roles.manage`).
+    role: Literal["owner", "manager", "reception", "barber"]
+    password: Optional[str] = Field(default=None, min_length=8)
+    phone_e164: Optional[str] = Field(default=None, max_length=20)
+    # Só faz sentido com role="barber": liga o login ao profissional da agenda.
+    barber_id: Optional[int] = Field(default=None, gt=0)
+    unit_id: Optional[int] = Field(default=None, gt=0)
+
+
+class AdminUserCreatedOut(BaseModel):
+    """Usuário criado + senha inicial (exibida UMA ÚNICA VEZ, como no reset)."""
+
+    user: AdminUserOut
+    temporary_password: str
 
 
 class TenantResponse(BaseModel):

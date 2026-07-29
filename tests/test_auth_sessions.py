@@ -333,6 +333,131 @@ async def test_admin_list_users_includes_seeded_owner(client, auth_headers):
     assert owner["is_active"] is True
 
 
+# ─── Criação de usuário pelo gestor ─────────────────────────────────────────
+async def _delete_user(email: str) -> None:
+    """Limpeza direta (papel admin) — as rotas não expõem exclusão de usuário."""
+    from sqlalchemy import create_engine, text
+
+    from app.services.audit import wait_for_pending
+
+    await wait_for_pending()  # evita o deadlock descrito no reset de senha acima
+    eng = create_engine(ADMIN_URL)
+    with eng.begin() as conn:
+        conn.execute(
+            text(
+                "DELETE FROM user_units WHERE user_id IN "
+                "(SELECT id FROM users WHERE organization_id=:o AND email=:e)"
+            ),
+            {"o": SEED_ORG_ID, "e": email},
+        )
+        conn.execute(
+            text("DELETE FROM users WHERE organization_id=:o AND email=:e"),
+            {"o": SEED_ORG_ID, "e": email},
+        )
+
+
+@pytest.mark.asyncio
+async def test_admin_create_user_logs_in_and_must_change_password(client, auth_headers):
+    if not ADMIN_URL:
+        pytest.skip("ADMIN_DATABASE_URL ausente.")
+    email = "novo-usuario-d83@example.com"
+    await _delete_user(email)
+    try:
+        r = await client.post(
+            "/admin/security/users",
+            headers=auth_headers,
+            json={"email": email, "role": "reception"},
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["user"]["role"] == "reception"
+        assert body["user"]["must_change_password"] is True
+        temp = body["temporary_password"]
+        assert temp
+
+        # aparece na listagem e consegue logar com a senha devolvida.
+        listed = (await client.get("/admin/security/users", headers=auth_headers)).json()
+        assert email in [u["email"] for u in listed]
+
+        r_login = await client.post(
+            "/auth/login",
+            json={"email": email, "password": temp, "organization_id": SEED_ORG_ID},
+        )
+        assert r_login.status_code == 200, r_login.text
+        assert r_login.json()["must_change_password"] is True
+        assert r_login.json()["role"] == "reception"
+    finally:
+        await _delete_user(email)
+
+
+@pytest.mark.asyncio
+async def test_admin_create_user_accepts_explicit_password(client, auth_headers):
+    if not ADMIN_URL:
+        pytest.skip("ADMIN_DATABASE_URL ausente.")
+    email = "novo-usuario-senha-d83@example.com"
+    await _delete_user(email)
+    try:
+        r = await client.post(
+            "/admin/security/users",
+            headers=auth_headers,
+            json={"email": email, "role": "manager", "password": "senha-definida-123"},
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["temporary_password"] == "senha-definida-123"
+
+        r_login = await client.post(
+            "/auth/login",
+            json={
+                "email": email,
+                "password": "senha-definida-123",
+                "organization_id": SEED_ORG_ID,
+            },
+        )
+        assert r_login.status_code == 200, r_login.text
+    finally:
+        await _delete_user(email)
+
+
+@pytest.mark.asyncio
+async def test_admin_create_user_duplicate_email_409(client, auth_headers):
+    r = await client.post(
+        "/admin/security/users",
+        headers=auth_headers,
+        json={"email": SEED_OWNER_EMAIL, "role": "reception"},
+    )
+    assert r.status_code == 409, r.text
+
+
+@pytest.mark.asyncio
+async def test_admin_create_user_short_password_422(client, auth_headers):
+    r = await client.post(
+        "/admin/security/users",
+        headers=auth_headers,
+        json={"email": "curta-d83@example.com", "role": "reception", "password": "123"},
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_create_user_invalid_role_422(client, auth_headers):
+    r = await client.post(
+        "/admin/security/users",
+        headers=auth_headers,
+        json={"email": "papel-d83@example.com", "role": "superadmin"},
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_create_user_requires_permission(client, barber_headers):
+    r = await client.post(
+        "/admin/security/users",
+        headers=barber_headers,
+        json={"email": "barbeiro-cria-d83@example.com", "role": "owner"},
+    )
+    assert r.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_admin_list_users_requires_permission(client, barber_headers):
     r = await client.get("/admin/security/users", headers=barber_headers)

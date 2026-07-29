@@ -630,7 +630,14 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 > `logo-lockup.webp` 404, `app.`/`api.` intactos. **Falta só validação num celular real** e confirmar o
 > "25 anos" com o dono (não entrou por falta de fonte). Ver D-82.
 
-**Placeholders ("Em breve") no frontend:** `campanhas`, `usuarios`.
+**Criação de usuário pelo gestor (D-83, 2026-07-29 — implementado, NÃO deployado):** `POST /admin/security/users`
+gated por `security.users.manage` (sem migration, sem permissão nova) — cria o login, grava o papel de sistema em
+`user_units.role` (só `owner|manager|reception|barber`), opcionalmente vincula um `barber_id` (papel Barbeiro) e
+devolve a senha inicial **uma única vez** (definida pelo gestor ou gerada), sempre com `must_change_password=True`.
+Só o proprietário cria outro proprietário (403 — anti-escalada). Auditado (`security.users.create`). Frontend:
+botão "Novo usuário" + `components/usuarios/create-user-dialog.tsx` em `/admin/usuarios`. Suíte 609 pass.
+
+**Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
 **Pendente (visão do produto):** Caixa · Consumo de produtos no atendimento · Estoque/Produtos ·

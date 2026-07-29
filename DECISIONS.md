@@ -2448,6 +2448,42 @@ depois commit + deploy.
 
 ---
 
+### D-83 — Criação de usuário pelo gestor em `/admin/usuarios` — 2026-07-29 (implementado, **não deployado**)
+
+**Contexto:** a tela `/admin/usuarios` (D-68) só listava usuários e agia sobre os existentes (sessões, reset de
+senha). Não havia **nenhuma** forma de criar um login novo dentro do tenant — só o onboarding de plataforma
+(`POST /platform/orgs`, D-55) criava o owner inicial, via superadmin. Na prática, o dono da barbearia não
+conseguia dar acesso a um funcionário sem intervenção manual no banco.
+
+**Decisão:** `POST /admin/security/users` (`app/api/security.py`), gated pela permissão já existente
+`security.users.manage` (catálogo do D-67 — **sem migration e sem permissão nova**).
+- **Papel** grava em `user_units.role` (mecanismo legado que alimenta `resolve_role`/`resolve_permissions`),
+  restrito aos 4 valores do enum `UnitRole` (`owner|manager|reception|barber`). Os 9 papéis do D-67 vivem em
+  `user_roles` e continuam sendo assunto de `security.roles.manage` — feature à parte.
+- **Anti-escalada:** criar `owner` exige que o solicitante seja `owner` (403 caso contrário) — impede que um
+  gestor com `security.users.manage` se promova criando um proprietário. A UI já esconde a opção (só UX).
+- **Senha:** o gestor pode definir uma (mín. 8) ou o backend gera com `secrets.token_urlsafe(12)`. Nos dois
+  casos `must_change_password=True` — a senha passa pela mão de um terceiro. Devolvida **uma única vez** na
+  resposta, mesmo padrão do reset administrativo (não há provedor de e-mail no stack, D-68).
+- **Unidade:** `unit_id` opcional; default = primeira unidade da org (RLS já escopa `units`). `barber_id`
+  opcional só com `role="barber"`, ligando o login ao profissional da agenda (`user_units.barber_id`).
+- Telefone opcional normalizado por `normalize_phone` (E.164, alimenta o gating do Agente Gestor, D-52).
+- E-mail duplicado na org → **409** (checado antes do insert; a UNIQUE `users_email_per_org` é o backstop).
+- Auditoria `security.users.create` via `record_event` (D-70).
+
+**Frontend:** botão "Novo usuário" no `SectionTitle` de `/admin/usuarios` (gated por
+`usePermissions().has("security.users.manage")`) + `components/usuarios/create-user-dialog.tsx` (e-mail, papel
+com dica do que cada um enxerga, senha/telefone opcionais, seletor de profissional quando papel = Barbeiro) +
+`useAdminCreateUser` em `hooks/use-admin-users.ts`. A senha inicial aparece com botão "Copiar", no mesmo molde
+do `ResetPasswordDialog`.
+
+**Testes:** +6 em `tests/test_auth_sessions.py` (criação → login real com a senha devolvida + troca obrigatória;
+senha explícita; 409 duplicado; 422 senha curta; 422 papel inválido; 403 sem permissão). Suíte **609 pass /
+2 ambientais / 0 regressões**; `tsc --noEmit` limpo. **Pendente:** validação visual e deploy (backend + frontend,
+sem migration).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

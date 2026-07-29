@@ -22,18 +22,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.authz import require_permission
 from app.core.rate_limit import limiter
+from app.core.phone import normalize_phone
 from app.core.security import hash_password, secrets_match
 from app.db.redis import get_redis
 from app.core.config import settings
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.schemas.audit import AuditLogListOut, AuditLogOut
-from app.schemas.auth import AdminResetPasswordResponse, AdminUserOut, SessionOut
+from app.schemas.auth import (
+    AdminResetPasswordResponse,
+    AdminUserCreatedOut,
+    AdminUserCreateIn,
+    AdminUserOut,
+    SessionOut,
+)
 from app.schemas.security_dashboard import SecurityDashboardOut
 from app.schemas.site_visibility import SiteVisibilityOut, SiteVisibilityUpdateIn
 from app.services.audit import purge_expired, record_event
 from app.services.security_dashboard import dashboard_summary
 from app.services.site_visibility import get_or_create as get_or_create_visibility
-from models import AuditLog, User, UserSession
+from models import AuditLog, Barber, Unit, UnitRole, User, UserSession, UserUnit
 
 router = APIRouter(prefix="/admin/security", tags=["security"])
 
@@ -69,6 +76,116 @@ async def list_org_users(
         )
         for r in rows
     ]
+
+
+@router.post("/users", response_model=AdminUserCreatedOut, status_code=status.HTTP_201_CREATED)
+async def create_org_user(
+    payload: AdminUserCreateIn,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> AdminUserCreatedOut:
+    """Cria um usuário (login) na própria org, com papel de sistema primário.
+
+    Só o Proprietário pode criar outro Proprietário — impede que um gestor com
+    `security.users.manage` escale privilégios criando um owner para si.
+    A senha (definida ou gerada) vale uma vez: `must_change_password=True`.
+    """
+    await require_permission(db, current_user, "security.users.manage")
+
+    if payload.role == "owner" and await resolve_current_role(db, current_user) != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas o proprietário pode criar outro proprietário.",
+        )
+
+    email = payload.email.strip().lower()
+    exists = (
+        await db.execute(select(User.id).where(func.lower(User.email) == email))
+    ).scalar_one_or_none()
+    if exists is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Já existe um usuário com esse e-mail nesta organização.",
+        )
+
+    # RLS escopa `units` à org: unidade informada ou a primeira da organização.
+    unit_query = select(Unit.id).order_by(Unit.id)
+    if payload.unit_id is not None:
+        unit_query = unit_query.where(Unit.id == payload.unit_id)
+    unit_id = (await db.execute(unit_query.limit(1))).scalar_one_or_none()
+    if unit_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unidade não encontrada nesta organização.",
+        )
+
+    barber_id: Optional[int] = None
+    if payload.barber_id is not None:
+        if payload.role != "barber":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Vincular a um profissional só faz sentido no papel Barbeiro.",
+            )
+        barber_id = (
+            await db.execute(select(Barber.id).where(Barber.id == payload.barber_id))
+        ).scalar_one_or_none()
+        if barber_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Profissional não encontrado."
+            )
+
+    phone: Optional[str] = None
+    if payload.phone_e164:
+        try:
+            phone = normalize_phone(payload.phone_e164)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Telefone inválido."
+            )
+
+    password = payload.password or secrets.token_urlsafe(12)
+    new_user = User(
+        organization_id=current_user.organization_id,
+        email=email,
+        password_hash=hash_password(password),
+        phone_e164=phone,
+        must_change_password=True,
+    )
+    db.add(new_user)
+    await db.flush()
+    db.add(
+        UserUnit(
+            user_id=new_user.id,
+            unit_id=unit_id,
+            role=UnitRole(payload.role),
+            barber_id=barber_id,
+        )
+    )
+    await db.flush()
+    await db.refresh(new_user)  # `created_at` vem de server_default
+
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="security.users.create",
+        resource_type="user",
+        resource_id=new_user.id,
+        after={"email": email, "role": payload.role, "unit_id": unit_id},
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return AdminUserCreatedOut(
+        user=AdminUserOut(
+            id=new_user.id,
+            email=new_user.email,
+            role=payload.role,
+            is_active=new_user.is_active,
+            must_change_password=new_user.must_change_password,
+            created_at=new_user.created_at,
+        ),
+        temporary_password=password,
+    )
 
 
 @router.get("/sessions", response_model=list[SessionOut])
