@@ -645,7 +645,8 @@ auditoria `security.users.update`. Frontend: botão "E-mail" na linha + `edit-em
 > `Host`/`X-Forwarded-Host` não resolve. Padrão adotado: `signOut({ redirect: false })` + navegação **relativa**
 > (`window.location.href`), que preserva o multi-tenant por subdomínio. Nunca voltar a usar `callbackUrl` aqui.
 
-**Sincronização painel → site público (D-84, 2026-07-29 — ⏳ pendente deploy, sem migration):** cadastrar
+**Sincronização painel → site público (D-84, 2026-07-29 — ✅ DEPLOYADO em prod 2026-07-29, commit `7dcf304`,
+sem migration):** cadastrar
 profissional/serviço/horário no painel agora reflete na vitrine do apex **na hora**. Antes, três camadas
 independentes seguravam a mudança: cache Redis de `GET /public/{sub}/info` (`public_info:{org_id}`, 60s), ISR do
 Next (home 300s, `/agendar` 60s) e — latente — a whitelist `mode:"custom"` do `client_visibility_settings`
@@ -660,8 +661,10 @@ quando ela existe — **cadastrar já publica**; para esconder, desmarcar em `/a
 em `mode:"all"`). No site: `lib/api.ts` tagueia o fetch (`INFO_TAG`) e `app/api/revalidate/route.ts` valida o
 segredo em tempo constante, é **fail closed** (sem `REVALIDATE_SECRET` → 503) e está **bloqueado no nginx do
 apex** (`deny all`) — só a rede interna do compose chega nele. Envs novas: `PUBLIC_SITE_INTERNAL_URL` +
-`PUBLIC_REVALIDATE_SECRET` (o compose repassa como `REVALIDATE_SECRET` ao serviço `public`); vazias = só o Redis
-é invalidado. Suíte 619 pass (+5 em `tests/test_public_sync.py`). Ver D-84.
+`PUBLIC_REVALIDATE_SECRET` (o compose repassa como `REVALIDATE_SECRET` ao serviço `public`, mesma variável nas
+duas pontas); vazias = só o Redis é invalidado. Suíte 619 pass (+5 em `tests/test_public_sync.py`). Em prod a
+org 1 **não tem linha** em `client_visibility_settings` (tudo visível, `ensure_visible` é no-op) — a whitelist só
+morde se o dono escolher `custom` na tela. Ver D-84.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

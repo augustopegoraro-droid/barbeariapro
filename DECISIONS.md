@@ -2516,7 +2516,7 @@ botão "Sair" no admin (débito à parte).
 
 ---
 
-### D-84 — Sincronização painel → site público (profissional/serviço/horário aparecem na hora) — 2026-07-29 (⏳ pendente deploy)
+### D-84 — Sincronização painel → site público (profissional/serviço/horário aparecem na hora) — 2026-07-29 (✅ DEPLOYADO em prod 2026-07-29)
 
 **Problema.** Cadastrar um profissional em `/admin/equipe` não refletia no site público (apex
 `taylorethedy.com`) — o dono cadastrava e o site continuava mostrando a equipe antiga. Três causas
@@ -2572,12 +2572,31 @@ ambientais / 1 skip / 0 regressões** (baseline 614). Site público: `tsc --noEm
 limpos. Route handler exercitado de verdade (`next start` local): sem segredo **401**, segredo errado
 **401**, correto **200** `{"revalidated":"public-info"}`, `GET` **405**.
 
-**Deploy (pendente).** Molde D-79/D-80/D-82, **sem migration**: gerar o segredo
-(`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`), acrescentar
-`PUBLIC_SITE_INTERNAL_URL=http://public:3200` + `PUBLIC_REVALIDATE_SECRET=<segredo>` ao
-`/opt/barbeariapro/.env` da VM, `git pull` + rebuild dos serviços `backend` e `public`, aplicar o
-`location` novo no nginx da VM (`sudo nginx -t && sudo systemctl reload nginx`) e validar cadastrando
-um profissional de teste (deve aparecer no apex sem espera; arquivar depois).
+**✅ Deploy em prod — 2026-07-29** (commit `7dcf304`; molde D-80/D-82, **sem migration** → sem backup de
+banco, só do `.env` e do nginx):
+1. `git -c submodule.recurse=false merge --ff-only origin/main` em `/opt/barbeariapro` (`b6869af`→`7dcf304`).
+2. Segredo **gerado na própria VM** (`secrets.token_urlsafe(32)`, 43 chars — nunca trafegou pela sessão) e
+   acrescentado ao `/opt/barbeariapro/.env` junto de `PUBLIC_SITE_INTERNAL_URL=http://public:3200`
+   (backup: `~/env.pre-d84.bak`). O compose repassa o mesmo valor como `REVALIDATE_SECRET` ao serviço
+   `public` — as duas pontas leem da mesma variável, não há como divergirem.
+3. `docker compose -f docker-compose.app.yml up -d --build backend public` → ambos recriados e healthy.
+4. nginx: a config da VM estava **byte a byte igual** ao `deploy/nginx.conf` exceto pelo `location` novo
+   (conferido por `diff` antes de tocar), então foi cópia direta + `nginx -t` + `systemctl reload`
+   (backup: `~/nginx.pre-d84.bak`).
+
+**Smoke em prod:** `/health` 200 · apex `/` e `/agendar` 200 · `app.` 200 · `api.` 200 ·
+`POST https://taylorethedy.com/api/revalidate` da internet → **404** (o `deny all` funciona) · a mesma rota
+pela rede interna sem segredo → **401** · **com** o segredo do backend → **200
+`{"revalidated":"public-info"}`** (prova que as duas pontas pareiam, o elo que só existe em produção) ·
+`GET /public/app/info` devolve a vitrine real (5 profissionais, 15 serviços, 6 faixas de horário) e
+repovoa `public_info:1` no Redis.
+
+**Achado do deploy:** a org 1 **não tem linha** em `client_visibility_settings` — logo `vis is None`, tudo
+visível por padrão e `ensure_visible` é no-op em prod hoje. A causa nº 3 (whitelist) era mesmo latente:
+só passaria a morder quando o dono abrisse `/admin/seguranca/visibilidade` e escolhesse `custom`.
+
+**Falta:** validação com um cadastro real (exige login de gestor) — cadastrar um profissional em
+`/admin/equipe` e conferir que aparece no apex sem espera.
 
 ---
 
