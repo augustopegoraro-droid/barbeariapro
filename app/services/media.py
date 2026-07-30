@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import io
 import logging
+import mimetypes
 from pathlib import Path
 from typing import Optional
 
@@ -44,6 +45,12 @@ try:
     HEIC_SUPPORTED = True
 except ImportError:  # pragma: no cover — ambiente sem a dep opcional
     HEIC_SUPPORTED = False
+
+# O `mimetypes` do Python resolve `.webp` a partir do /etc/mime.types do SO, que
+# NÃO existe na imagem `python:3.12-slim` — sem este registro o StaticFiles serve
+# a foto como `application/octet-stream` (pegado no smoke de prod do D-85; passa
+# despercebido em dev, onde o macOS tem o arquivo).
+mimetypes.add_type("image/webp", ".webp")
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB: foto de celular moderna cabe
 OUTPUT_SIZE = 800                   # lado do quadrado final, em px

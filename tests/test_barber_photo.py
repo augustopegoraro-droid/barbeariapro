@@ -136,6 +136,15 @@ def test_tamanho_maximo(media_tmp):
         media.save_barber_photo(1, 1, b"x" * (media.MAX_UPLOAD_BYTES + 1), "image/png")
 
 
+def test_webp_tem_mimetype_registrado():
+    """Regressão do smoke de prod (D-85): a imagem `python:3.12-slim` não tem
+    /etc/mime.types, então sem `add_type` o StaticFiles servia a foto como
+    application/octet-stream. Em macOS/Linux desktop o defeito não aparece."""
+    import mimetypes
+
+    assert mimetypes.guess_type("foto.webp")[0] == "image/webp"
+
+
 def test_public_url_monta_absoluto():
     assert media.public_url(None) is None
     assert media.public_url("org1/barber-2.webp?v=9") == (
@@ -176,6 +185,28 @@ async def test_upload_e_remocao_pela_api(client, auth_headers, _cleanup_photo, m
     assert apagou.json()["photo_url"] is None
     assert not (media_tmp / f"org{SEED_ORG_ID}" / f"barber-{barber_id}.webp").exists()
     assert await _photo_path(barber_id) is None
+
+
+@pytest.mark.asyncio
+async def test_foto_servida_como_imagem(client, auth_headers, _cleanup_photo, media_tmp):
+    """A rota /media precisa devolver `image/webp` — com octet-stream + nosniff a
+    foto vira download em vez de imagem (defeito real achado no smoke de prod)."""
+    barber_id = await _barber_id()
+    _cleanup_photo.append(barber_id)
+
+    enviado = await client.put(
+        f"/equipe/barbeiros/{barber_id}/foto",
+        headers=auth_headers,
+        files={"file": ("foto.png", _png_bytes(), "image/png")},
+    )
+    assert enviado.status_code == 200, enviado.text
+
+    # O mount lê MEDIA_ROOT no boot do app; o tmpdir do fixture não vale aqui,
+    # então a asserção é sobre o mimetype resolvido (o que o StaticFiles usa).
+    import mimetypes
+
+    caminho = enviado.json()["photo_url"].split("?")[0]
+    assert mimetypes.guess_type(caminho)[0] == "image/webp"
 
 
 @pytest.mark.asyncio

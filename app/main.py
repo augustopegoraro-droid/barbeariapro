@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +18,7 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.session import engine
+from app.services import media
 
 
 @asynccontextmanager
@@ -56,8 +56,10 @@ app.add_middleware(
 # único host que o site público (apex) e o painel (app.) alcançam em comum, e o
 # nginx de `api.` já proxya tudo, então não há server block novo. Conteúdo
 # público por natureza (aparece na vitrine), logo sem auth.
+# Importar `media` aqui não é decorativo: é ele que registra o mimetype de .webp,
+# ausente na imagem slim (ver o módulo).
 try:
-    Path(settings.media_root).mkdir(parents=True, exist_ok=True)
+    media.media_root().mkdir(parents=True, exist_ok=True)
     app.mount("/media", StaticFiles(directory=settings.media_root), name="media")
 except OSError:
     # Volume ausente/sem permissão: a API sobe sem mídia (upload dará 500 no
