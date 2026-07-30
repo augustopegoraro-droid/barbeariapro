@@ -2600,7 +2600,7 @@ só passaria a morder quando o dono abrisse `/admin/seguranca/visibilidade` e es
 
 ---
 
-### D-85 — Foto do profissional + primeiro storage de mídia do produto — 2026-07-29 (⏳ pendente deploy)
+### D-85 — Foto do profissional + primeiro storage de mídia do produto — 2026-07-29 (✅ DEPLOYADO em prod 2026-07-29)
 
 **Pedido.** "Deve ser possível adicionar foto para cada profissional" — a foto aparece no painel (card da
 equipe) e, principalmente, no **site público**: quem agenda escolhe uma pessoa, não um nome.
@@ -2670,11 +2670,44 @@ exatamente o caso que o D-84 cobre em produção (a revalidação por tag), e em
 então o TTL manda. **Validação visual na UI do painel ficou pendente** — a extensão do Chrome não estava
 conectada; o upload foi exercitado por HTTP, não clicando no botão.
 
-**Deploy (pendente).** Migration + deps novas, então: backup do banco → `git pull` → **criar
-`/opt/barbeariapro/uploads` com `chown` para o uid do usuário `app` do container** → `MEDIA_ROOT` e
-`MEDIA_PUBLIC_BASE=https://api.taylorethedy.com/media` no `.env` → aplicar `0045` → **rebuild do backend
-(deps novas: pillow, pillow-heif, python-multipart)** e do site público + submódulo do painel → `location
-/media/` no nginx da VM → smoke: upload real, `GET /media/...` 200, foto na vitrine.
+**✅ Deploy em prod — 2026-07-29** (backend `ba3aee4`, painel `a9e86ae`; molde D-59/D-63/D-65/D-84):
+1. **Transporte por bundle git, não `git pull`:** `github.com:443` estava inacessível do Mac (SSH na 22 conecta,
+   sem chave autorizada; `api.taylorethedy.com` respondia 200 — bloqueio específico do GitHub). Em vez de `scp`
+   de arquivos soltos (que sujaria o working tree da VM e conflitaria no próximo pull), foram gerados
+   `git bundle` dos ranges `7dcf304..main` (backend) e `09e4978..main` (painel), enviados por
+   `gcloud compute scp` e aplicados com `git fetch <bundle> main` + `merge --ff-only`. **Os objetos são os
+   mesmos**, então o `git push`/`git pull` futuro será fast-forward limpo. *(Push ao GitHub segue pendente:
+   fazer quando a rede permitir — a VM está à frente do remote.)*
+2. Backup: `~/predeploy_d85_20260730_000624.sql` (3,2 MB).
+3. `/opt/barbeariapro/uploads` criado com **`chown 999:999`** (uid do usuário `app` do container) — sem isso o
+   bind mount nasce de root e o upload falharia. Confirmado de dentro: `os.access(MEDIA_ROOT, W_OK) is True`.
+4. `MEDIA_ROOT=/app/uploads` + `MEDIA_PUBLIC_BASE=https://api.taylorethedy.com/media` no `.env`
+   (backup `~/env.pre-d85.bak`).
+5. Migration `0045` aplicada pelo molde D-60 (repo do host montado, `postgres` via `host.docker.internal`) →
+   head **`0045_barber_photo`**, coluna `photo_path` confirmada.
+6. Rebuild de `backend` (deps novas: pillow, pillow-heif, python-multipart), `public` e `frontend` — todos
+   healthy. `HEIC: True` confirmado dentro do container.
+7. nginx: config da VM estava idêntica ao repo exceto pelo `location /media/` (conferido por `diff`) → cópia
+   direta + `nginx -t` + reload (backup `~/nginx.pre-d85.bak`).
+
+**Smoke em prod:** `api/health` · apex · `app./login` · `admin./login` todos 200 · `PUT
+/equipe/barbeiros/1/foto` sem token → **401** · `/media/...` inexistente → **404** (rota existe, não 502) ·
+escrita real no volume pelo container (uid 999) → arquivo no host → **`GET https://api.../media/... 200`,
+WebP 800×800, `cache-control: max-age=2592000`**. Arquivo de teste (id fictício 999999) removido depois;
+`count(*) FROM barbers WHERE photo_path IS NOT NULL` = **0** — nenhum dado real foi tocado.
+
+**🐞 Defeito achado NO SMOKE DE PROD e corrigido no mesmo deploy (`ba3aee4`):** a foto era servida como
+**`application/octet-stream`** em vez de `image/webp`. Causa: o `mimetypes` do Python resolve `.webp` a partir
+do `/etc/mime.types` **do sistema operacional**, que **não existe na imagem `python:3.12-slim`**
+(`mimetypes.knownfiles` → nenhum arquivo presente); no macOS/Linux desktop o defeito não aparece, por isso
+passou por 14 testes locais e pela validação em dev. Com `X-Content-Type-Options: nosniff`, a foto tenderia a
+virar download em vez de imagem. Fix: `mimetypes.add_type("image/webp", ".webp")` no `media.py` (dono do
+formato) + `main.py` importa `media` explicitamente e usa `media.media_root()` no mount, para a correção não
+depender da ordem de imports. +2 testes de regressão. Rebuild do backend → **`content-type: image/webp`**
+confirmado em produção. Suíte **635 pass / 2 ambientais**.
+
+**Falta:** validação clicando na UI (a extensão do Chrome não conectou nesta sessão) — subir a primeira foto
+real da equipe em `/admin/equipe` → Editar → Foto, e conferir no apex.
 
 ---
 

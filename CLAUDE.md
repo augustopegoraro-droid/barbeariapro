@@ -666,7 +666,8 @@ duas pontas); vazias = só o Redis é invalidado. Suíte 619 pass (+5 em `tests/
 org 1 **não tem linha** em `client_visibility_settings` (tudo visível, `ensure_visible` é no-op) — a whitelist só
 morde se o dono escolher `custom` na tela. Ver D-84.
 
-**Foto do profissional + primeiro storage de mídia (D-85, 2026-07-29 — ⏳ pendente deploy, migration `0045`):**
+**Foto do profissional + primeiro storage de mídia (D-85, 2026-07-29 — ✅ DEPLOYADO em prod 2026-07-29,
+backend `ba3aee4` + painel `a9e86ae`, migration `0045`):**
 `barbers.photo_path` guarda o **caminho relativo** (`org1/barber-7.webp?v=<mtime_ns>`), nunca a URL — a URL
 pública é montada na leitura com `MEDIA_PUBLIC_BASE`, então trocar de domínio/storage não invalida o banco.
 `app/services/media.py` é o storage (decisão do dono: **volume na VM**, não GCS nem campo de URL): descarta o
@@ -679,8 +680,11 @@ o único host que apex e `app.` alcançam em comum — no nginx só entra um `lo
 diálogo de edição, **só na edição** — o upload precisa do id) e `ProfessionalAvatar` do site público com
 fallback de inicial (avatar cresce a 64px quando há foto). Infra: bind mount `./uploads:/app/uploads`,
 `uploads/` no `.gitignore` (**PII**) e `.dockerignore`; **o container roda como não-root, então o diretório do
-host precisa de `chown` para o uid do usuário `app`** — senão o upload falha. Suíte 633 pass (+14 em
-`tests/test_barber_photo.py`). Ver D-85.
+host precisa de `chown` para o uid do usuário `app`** (999 em prod) — senão o upload falha. **Pegadinha achada
+no smoke de prod:** `python:3.12-slim` não tem `/etc/mime.types`, então sem `mimetypes.add_type("image/webp",
+".webp")` (feito no `media.py`) o StaticFiles serve a foto como `application/octet-stream` — invisível em
+macOS/Linux desktop. Suíte 635 pass (+16 em `tests/test_barber_photo.py`). Deploy transportado por **git
+bundle** (GitHub inacessível do Mac na hora; **push ao remote segue pendente — a VM está à frente**). Ver D-85.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
