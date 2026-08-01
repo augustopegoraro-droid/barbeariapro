@@ -25,7 +25,10 @@ PRIVACY_POLICY_VERSION: Final[str] = "2026-07-30"
 # `DPA`   = contrato de operador (LGPD art. 39), aceito UMA VEZ por organização,
 #           obrigatoriamente pelo proprietário.
 TERMS_VERSION: Final[str] = "2026-07-31"
-DPA_VERSION: Final[str] = "2026-07-31"
+# 2026-08-01: revisão jurídica do contrato de operador. O termo do funcionário
+# não mudou, então `TERMS_VERSION` fica como está — quem já aceitou continua
+# aceito; só o DPA volta a ser pedido.
+DPA_VERSION: Final[str] = "2026-08-01"
 
 SOURCE_TERMS_ACCEPT: Final[str] = "painel_termo_uso"
 SOURCE_DPA_ACCEPT: Final[str] = "painel_contrato_operador"
