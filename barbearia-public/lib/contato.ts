@@ -14,7 +14,7 @@ import type { PublicInfo } from "@/lib/api";
 const VERIFICADO = {
   whatsapp: "(63) 98456-6175",
   phone: "(63) 3215-2164",
-  instagram: "taylorethedy",
+  instagram: "taylorethedy_",
   /* Perfil do Facebook — informado pelo dono em 2026-07-25. A API pública não
      tem campo para redes além do Instagram, então este vive só aqui. */
   facebook: "taylor.thedy",
