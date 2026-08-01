@@ -96,7 +96,11 @@ async def list_client_consents(
     ).scalars().all()
     return [
         ConsentRecordOut(
-            channel=r.channel, status=r.status, source=r.source, created_at=r.created_at
+            channel=r.channel,
+            status=r.status,
+            source=r.source,
+            policy_version=r.policy_version,
+            created_at=r.created_at,
         )
         for r in rows
     ]

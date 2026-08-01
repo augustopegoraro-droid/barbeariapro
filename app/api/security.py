@@ -27,7 +27,13 @@ from app.core.security import hash_password, secrets_match
 from app.db.redis import get_redis
 from app.core.config import settings
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
-from app.schemas.audit import AuditLogListOut, AuditLogOut
+from app.schemas.audit import (
+    AuditChainOut,
+    AuditLogListOut,
+    AuditLogOut,
+    RetentionOut,
+    RetentionUpdateIn,
+)
 from app.schemas.auth import (
     AdminResetPasswordResponse,
     AdminUserCreatedOut,
@@ -38,11 +44,21 @@ from app.schemas.auth import (
 )
 from app.schemas.security_dashboard import SecurityDashboardOut
 from app.schemas.site_visibility import SiteVisibilityOut, SiteVisibilityUpdateIn
-from app.services.audit import purge_expired, record_event
+from app.services.audit import purge_expired, record_event, verify_chain
+from app.services.retention import purge_expired_sessions
 from app.services.security_dashboard import dashboard_summary
 from app.services.public_cache import invalidate_public_info
 from app.services.site_visibility import get_or_create as get_or_create_visibility
-from models import AuditLog, Barber, Unit, UnitRole, User, UserSession, UserUnit
+from models import (
+    AuditLog,
+    Barber,
+    Organization,
+    Unit,
+    UnitRole,
+    User,
+    UserSession,
+    UserUnit,
+)
 
 router = APIRouter(prefix="/admin/security", tags=["security"])
 
@@ -605,6 +621,69 @@ async def export_audit_logs_csv(
     )
 
 
+@router.get("/audit/verify", response_model=AuditChainOut)
+async def verify_audit_chain(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    limit: int = Query(5000, ge=1, le=50000),
+) -> AuditChainOut:
+    """Confere a integridade da cadeia de hash da trilha (D-86).
+
+    Encadear e nunca verificar não prova nada — esta é a rotina que transforma
+    o `prev_hash` da 0039 em evidência de fato."""
+    await require_permission(db, current_user, "security.audit.view")
+    result = await verify_chain(db, organization_id=current_user.organization_id, limit=limit)
+    return AuditChainOut(**result)
+
+
+# ─── retenção (LGPD) ────────────────────────────────────────────────────────
+
+@router.get("/retention", response_model=RetentionOut)
+async def get_retention(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> RetentionOut:
+    await require_permission(db, current_user, "security.audit.view")
+    months = (
+        await db.execute(
+            select(Organization.audit_retention_months).where(
+                Organization.id == current_user.organization_id
+            )
+        )
+    ).scalar_one()
+    return RetentionOut(audit_retention_months=months)
+
+
+@router.put("/retention", response_model=RetentionOut)
+async def update_retention(
+    body: RetentionUpdateIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> RetentionOut:
+    """Política de retenção da trilha de auditoria. Era configurável só por
+    UPDATE manual no banco (D-70) — política que só o DBA consegue mexer não é
+    política de ninguém."""
+    await require_permission(db, current_user, "privacy.lgpd.manage")
+    org = (
+        await db.execute(
+            select(Organization).where(Organization.id == current_user.organization_id)
+        )
+    ).scalar_one()
+    before = org.audit_retention_months
+    org.audit_retention_months = body.audit_retention_months
+    await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="privacy.retention.update",
+        resource_type="organization",
+        resource_id=current_user.organization_id,
+        before={"audit_retention_months": before},
+        after={"audit_retention_months": body.audit_retention_months},
+    )
+    return RetentionOut(audit_retention_months=body.audit_retention_months)
+
+
 # ─── cron interno (n8n) — purga por retenção (X-Bot-Token) ──────────────────
 
 internal_router = APIRouter(prefix="/internal/audit", tags=["audit-internal"])
@@ -615,8 +694,12 @@ async def purge_audit_logs(
     x_bot_token: Annotated[Optional[str], Header(alias="X-Bot-Token")] = None,
 ) -> dict:
     """Apaga linhas além da retenção configurada por org (`app_audit_purge_expired`,
-    SECURITY DEFINER — roda por cima de todas as orgs numa só chamada)."""
+    SECURITY DEFINER — roda por cima de todas as orgs numa só chamada).
+
+    Purga também as sessões expiradas (D-86): mesmo cron, para não depender de
+    um segundo agendamento no n8n que ficaria esquecido."""
     if not settings.bot_api_key or not secrets_match(x_bot_token or "", settings.bot_api_key):
         raise HTTPException(status_code=401, detail="Token inválido.")
     deleted = await purge_expired()
-    return {"deleted": deleted}
+    sessions_deleted = await purge_expired_sessions()
+    return {"deleted": deleted, "sessions": sessions_deleted}

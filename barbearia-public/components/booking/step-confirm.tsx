@@ -13,10 +13,12 @@ export function StepConfirm({
   knownName,
   name,
   phone,
+  acceptPrivacy,
   submitting,
   error,
   onNameChange,
   onPhoneChange,
+  onAcceptPrivacyChange,
   onForget,
   onConfirm,
   onBack,
@@ -29,10 +31,12 @@ export function StepConfirm({
   knownName: string | null;
   name: string;
   phone: string;
+  acceptPrivacy: boolean;
   submitting: boolean;
   error: string | null;
   onNameChange: (v: string) => void;
   onPhoneChange: (v: string) => void;
+  onAcceptPrivacyChange: (v: boolean) => void;
   onForget: () => void;
   onConfirm: () => void;
   onBack: () => void;
@@ -97,6 +101,27 @@ export function StepConfirm({
               Usamos seu número para confirmar e lembrar do horário.
             </p>
           </div>
+          <label className="flex items-start gap-3 py-1 text-sm text-tinta-suave">
+            <input
+              type="checkbox"
+              checked={acceptPrivacy}
+              onChange={(e) => onAcceptPrivacyChange(e.target.checked)}
+              required
+              className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--ouro)]"
+            />
+            <span>
+              Li e aceito a{" "}
+              <a
+                href="/privacidade"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-4 hover:text-tinta"
+              >
+                política de privacidade
+              </a>
+              . Você pode pedir para sair das mensagens quando quiser.
+            </span>
+          </label>
           {error && (
             <p role="alert" className="text-sm text-vermelho-tinta">
               {error}

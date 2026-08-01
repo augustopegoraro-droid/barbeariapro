@@ -32,12 +32,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.phone import normalize_phone
+from app.core.privacy import PRIVACY_POLICY_VERSION, SOURCE_SITE_SIGNUP
 from app.core.rate_limit import limiter
 from app.core.security import generate_refresh_token, hash_refresh_token
 from app.db.redis import get_redis
 from app.db.session import get_db, set_current_org
 from app.services.audit import record_event
 from app.services.availability import free_slots
+from app.services.consent import set_consent
 from app.services import media
 from app.services.calendar_sync import push_appointment
 from app.services.public_cache import INFO_CACHE_TTL_SECONDS, info_cache_key
@@ -51,8 +53,10 @@ from models import (
     BarberService,
     BusinessHours,
     Client,
+    ClientConsent,
     ClientSession,
     ClientVisibilitySettings,
+    ConsentStatus,
     ContactChannel,
     Organization,
     Service,
@@ -176,6 +180,11 @@ class PublicInfoOut(BaseModel):
 class SessionCreateIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     phone: str = Field(min_length=8, max_length=25)
+    # Aceite explícito da política de privacidade (LGPD, D-86). Obrigatório:
+    # é aqui que o titular entra na base, então é aqui que a base legal nasce.
+    accept_privacy: bool = Field(
+        description="Aceite da política de privacidade — obrigatório para criar a sessão."
+    )
 
 
 class SessionOut(BaseModel):
@@ -398,6 +407,11 @@ async def create_session(
     db: Annotated[AsyncSession, Depends(get_db)],
     org_id: Annotated[int, Depends(get_public_org)],
 ) -> SessionOut:
+    if not body.accept_privacy:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "É necessário aceitar a política de privacidade para continuar.",
+        )
     try:
         phone = normalize_phone(body.phone)
     except ValueError:
@@ -420,6 +434,30 @@ async def create_session(
         )
         db.add(client)
         await db.flush()
+
+    # Base legal do contato (D-86). Para quem já existia sem consentimento
+    # registrado (ex.: carga histórica da Trinks), este aceite é o primeiro —
+    # daí gravar também no caminho do cliente existente. Quem já tem estado
+    # gravado (inclusive opt-out) não é tocado: aceitar a política do site não
+    # pode ressuscitar um descadastro que o titular pediu no WhatsApp.
+    has_consent = (
+        await db.execute(
+            select(ClientConsent.id)
+            .where(ClientConsent.client_id == client.id)
+            .where(ClientConsent.channel == ContactChannel.whatsapp)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if has_consent is None:
+        await set_consent(
+            db,
+            organization_id=org_id,
+            client_id=client.id,
+            channel=ContactChannel.whatsapp,
+            status=ConsentStatus.opt_in,
+            source=SOURCE_SITE_SIGNUP,
+            ip=_client_ip(request),
+        )
 
     raw_token, token_hash = generate_refresh_token()
     session_row = ClientSession(
@@ -451,6 +489,7 @@ async def create_session(
         actor_kind="client",
         resource_type="client",
         resource_id=client_id,
+        reason=f"Aceite da política de privacidade v{PRIVACY_POLICY_VERSION}",
         ip=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )

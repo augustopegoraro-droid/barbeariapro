@@ -173,6 +173,72 @@ async def wait_for_pending() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
+async def verify_chain(
+    session: AsyncSession, *, organization_id: int, limit: int = 5000
+) -> dict[str, Any]:
+    """Recomputa a cadeia `prev_hash`/`hash` das últimas `limit` linhas da org.
+
+    A cadeia só vale como prova se alguém a confere — encadear hash e nunca
+    verificar prova tanto quanto não encadear (D-86). Percorre em ordem
+    crescente de `id` e reporta a primeira linha inconsistente.
+
+    O trecho verificado é uma janela do fim da trilha, então a primeira linha
+    da janela tem o `prev_hash` aceito como âncora (não dá para recomputá-lo
+    sem reler tudo desde o início); as demais são conferidas de ponta a ponta.
+    """
+    rows = (
+        await session.execute(
+            select(AuditLog)
+            .where(AuditLog.organization_id == organization_id)
+            .order_by(AuditLog.id.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    rows = list(reversed(rows))
+
+    expected_prev: Optional[str] = rows[0].prev_hash if rows else None
+    for row in rows:
+        payload = {
+            "organization_id": row.organization_id,
+            "actor_user_id": row.actor_user_id,
+            "actor_kind": row.actor_kind,
+            "action": row.action,
+            "resource_type": row.resource_type,
+            "resource_id": row.resource_id,
+            "before": row.before,
+            "after": row.after,
+            "result": row.result,
+            "reason": row.reason,
+            # Normaliza para UTC: a sessão pode devolver outro fuso e mudaria
+            # o texto do isoformat que entrou no hash.
+            "created_at": row.created_at.astimezone(timezone.utc).isoformat(),
+        }
+        if row.prev_hash != expected_prev:
+            # Elo rompido: alguém removeu ou inseriu linha no meio da trilha.
+            kind = "link"
+        elif row.hash != _compute_hash(row.prev_hash, payload):
+            # Conteúdo divergente: a linha foi editada depois de gravada.
+            kind = "payload"
+        else:
+            expected_prev = row.hash
+            continue
+        return {
+            "checked": len(rows),
+            "ok": False,
+            "kind": kind,
+            "broken_at_id": row.id,
+            "broken_at": row.created_at,
+        }
+
+    return {
+        "checked": len(rows),
+        "ok": True,
+        "kind": None,
+        "broken_at_id": None,
+        "broken_at": None,
+    }
+
+
 async def purge_expired() -> int:
     """Apaga linhas além da retenção por org, via `app_audit_purge_expired`
     (SECURITY DEFINER — cobre todas as orgs numa única chamada, sem RLS)."""

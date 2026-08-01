@@ -460,6 +460,12 @@ export default async function HomePage() {
               <IconeFacebook />
               Facebook
             </a>
+            <Link
+              href="/privacidade"
+              className="inline-flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+            >
+              Privacidade
+            </Link>
           </div>
         </div>
       </footer>

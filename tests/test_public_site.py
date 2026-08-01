@@ -147,7 +147,7 @@ def _next_open_day(weekdays: set[int]) -> datetime:
 
 async def _create_session(client, name="Cliente Teste", phone=None):
     phone = phone or _test_phone()
-    resp = await client.post(f"{BASE}/auth/session", json={"name": name, "phone": phone})
+    resp = await client.post(f"{BASE}/auth/session", json={"name": name, "phone": phone, "accept_privacy": True})
     assert resp.status_code == 201, resp.text
     return resp, phone
 
@@ -250,7 +250,7 @@ async def test_criar_sessao_novo_e_merge(client, public_seed):
 
 @pytest.mark.asyncio
 async def test_telefone_invalido_422(client, public_seed):
-    resp = await client.post(f"{BASE}/auth/session", json={"name": "X Y", "phone": "abc"})
+    resp = await client.post(f"{BASE}/auth/session", json={"name": "X Y", "phone": "abc", "accept_privacy": True})
     assert resp.status_code == 422
 
 
@@ -268,7 +268,7 @@ async def test_cliente_bloqueado_403(client, public_seed):
                     is_blocked=True,
                 )
             )
-    resp = await client.post(f"{BASE}/auth/session", json={"name": "Bloqueado", "phone": phone})
+    resp = await client.post(f"{BASE}/auth/session", json={"name": "Bloqueado", "phone": phone, "accept_privacy": True})
     assert resp.status_code == 403
 
 
@@ -430,3 +430,66 @@ async def test_logout_revoga_sessao(client, public_seed):
     assert resp.status_code == 204
     # o cookie antigo não vale mais mesmo se reapresentado
     assert (await client.get(f"{BASE}/me/appointments")).status_code == 401
+
+
+# ─── LGPD (D-86) ─────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_sessao_exige_aceite_da_politica(client, public_seed):
+    """Sem aceite explícito o titular não entra na base (LGPD, D-86)."""
+    resp = await client.post(
+        f"{BASE}/auth/session",
+        json={"name": "Sem Aceite", "phone": _test_phone(), "accept_privacy": False},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_sessao_registra_consentimento_com_versao(client, public_seed):
+    from app.core.privacy import PRIVACY_POLICY_VERSION, SOURCE_SITE_SIGNUP
+    from models import Client as ClientModel, ConsentRecord
+
+    _, phone = await _create_session(client)
+    async with AsyncSessionLocal() as s:
+        async with s.begin():
+            await set_current_org(s, SEED_ORG_ID)
+            cli = (
+                await s.execute(select(ClientModel).where(ClientModel.phone_e164 == phone))
+            ).scalar_one()
+            records = (
+                await s.execute(
+                    select(ConsentRecord)
+                    .where(ConsentRecord.subject_type == "client")
+                    .where(ConsentRecord.subject_id == cli.id)
+                )
+            ).scalars().all()
+    assert records, "sessão do site não registrou base legal"
+    assert records[-1].source == SOURCE_SITE_SIGNUP
+    assert records[-1].policy_version == PRIVACY_POLICY_VERSION
+    assert records[-1].ip
+
+
+@pytest.mark.asyncio
+async def test_evento_do_site_publico_grava_de_fato(client, public_seed):
+    """Regressão do achado do D-86: a CHECK da 0039 só aceitava
+    `user|bot|system`, então TODO evento do site público (`actor_kind='client'`)
+    falhava em silêncio — `record_event` engole a exceção."""
+    from sqlalchemy import func
+
+    from app.services import audit as audit_svc
+    from models import AuditLog
+
+    await _create_session(client)
+    await audit_svc.wait_for_pending()
+
+    async with AsyncSessionLocal() as s:
+        async with s.begin():
+            await set_current_org(s, SEED_ORG_ID)
+            total = (
+                await s.execute(
+                    select(func.count(AuditLog.id))
+                    .where(AuditLog.organization_id == SEED_ORG_ID)
+                    .where(AuditLog.action == "public.session_created")
+                )
+            ).scalar_one()
+    assert total > 0, "evento do site público continua não sendo gravado"

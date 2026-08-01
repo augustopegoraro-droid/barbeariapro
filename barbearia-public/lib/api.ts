@@ -113,10 +113,12 @@ export const api = {
     request<{ slots: string[] }>(
       `/slots?service_id=${serviceId}&barber_id=${barberId}&day=${day}`,
     ),
-  createSession: (name: string, phone: string) =>
+  // `accept_privacy` é o aceite explícito da política (LGPD, D-86) — o backend
+  // recusa a sessão sem ele.
+  createSession: (name: string, phone: string, acceptPrivacy: boolean) =>
     request<{ client_name: string; is_new_client: boolean }>("/auth/session", {
       method: "POST",
-      body: JSON.stringify({ name, phone }),
+      body: JSON.stringify({ name, phone, accept_privacy: acceptPrivacy }),
     }),
   book: (serviceId: number, barberId: number, startAt: string) =>
     request<PublicAppointment>("/appointments", {

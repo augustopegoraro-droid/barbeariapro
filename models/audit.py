@@ -31,7 +31,10 @@ from .base import Base
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
-        CheckConstraint("actor_kind IN ('user', 'bot', 'system')", name="audit_logs_actor_kind_valid"),
+        CheckConstraint(
+            "actor_kind IN ('user', 'bot', 'system', 'client')",
+            name="audit_logs_actor_kind_valid",
+        ),
         CheckConstraint("result IN ('allow', 'deny')", name="audit_logs_result_valid"),
         Index("idx_audit_logs_org_created", "organization_id", "created_at"),
         Index("idx_audit_logs_org_actor", "organization_id", "actor_user_id"),
@@ -43,9 +46,12 @@ class AuditLog(Base):
     organization_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
     )
-    actor_user_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
-    )
+    # SEM ForeignKey de propósito (migration 0048/D-86): o `ON DELETE SET NULL`
+    # anterior fazia o banco reescrever linhas desta tabela append-only ao
+    # apagar um usuário, quebrando a cadeia de hash. O id do ator é um fato
+    # histórico e precisa sobreviver ao usuário; a tela resolve o e-mail por
+    # LEFT JOIN enquanto ele existir.
+    actor_user_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     actor_kind: Mapped[str] = mapped_column(Text, nullable=False, server_default="user")
     action: Mapped[str] = mapped_column(Text, nullable=False)
     resource_type: Mapped[Optional[str]] = mapped_column(Text)

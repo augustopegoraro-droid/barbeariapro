@@ -52,6 +52,10 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # Termo de uso e confidencialidade do painel (D-87). Guarda a VERSÃO aceita
+    # (NULL = nunca aceitou); texto novo reabre o aceite sem migration.
+    terms_version_accepted: Mapped[Optional[str]] = mapped_column(Text)
+    terms_accepted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

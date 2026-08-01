@@ -2711,6 +2711,160 @@ real da equipe em `/admin/equipe` → Editar → Foto, e conferir no apex.
 
 ---
 
+### D-86 — Auditoria de LGPD: base legal na entrada, cobertura real do art. 18 e retenção — 2026-07-30 (⏳ NÃO deployado)
+
+**Origem.** Auditoria do schema e das rotas contra os requisitos técnicos da LGPD (aceite versionado,
+opt-in/opt-out, direitos do titular, log de auditoria, retenção, anonimização). A Fase 8 (D-74) tinha
+entregue a fundação; a auditoria mostrou que ela parava justamente nas duas pontas — **onde o titular
+entra** e **onde o dado deveria sair**.
+
+**Diagnóstico (o que estava errado, não o que faltava de bonito):**
+1. **O titular entrava na base sem base legal.** `POST /public/{sub}/auth/session` (D-79) e
+   `POST /clientes` criavam `Client` sem nenhuma linha em `client_consents`/`consent_records`. Só o bot
+   (`lead_funnel.py`) registrava opt-in. Somando a carga da Trinks (2.911 titulares, D-56), a maior parte
+   da base de produção **não tinha registro de por que podemos contatá-la** — e ainda assim entrava em
+   lembrete/reativação, que só barram quem está explicitamente em `opt_out`.
+2. **`policy_version` existia no schema e nunca era preenchido** — e não havia política publicada para
+   versionar. O histórico provava que houve aceite, não a quê.
+3. **Anonimização parcial.** `anonymize_client` limpava a ficha e deixava intactas as conversas do CRM
+   (`messages.body_text`), o `message_log`, os leads e as sessões do site (IP + user-agent). O titular
+   seguia identificável pela própria conversa de WhatsApp.
+4. **Export incompleto e mentindo por omissão:** `LIMIT 500` silencioso em agendamentos; sem mensagens,
+   pagamentos, leads nem sessões.
+5. **Retenção declarada e nunca executada:** `audit_retention_months` só era editável por UPDATE manual no
+   banco e o cron `/internal/audit/purge` **nunca foi agendado no n8n** (D-70). Sessões não tinham prazo
+   nenhum.
+6. **A cadeia de hash da auditoria nunca era verificada** — encadear e não conferir prova tanto quanto não
+   encadear.
+
+**Dois defeitos reais achados durante a implementação (nenhum dos dois estava na lista original):**
+- **A trilha do site público nunca existiu.** O D-79 emite eventos com `actor_kind="client"`, mas a CHECK
+  da 0039 só admitia `user|bot|system`. Como `record_event` é fire-and-forget e engole a exceção, **todo**
+  evento do cliente final (sessão criada, agendamento, cancelamento) falhava em silêncio desde 2026-07-17.
+  → migration **0046** amplia a CHECK; teste de regressão em `tests/test_public_site.py`.
+- **O próprio banco reescrevia a tabela append-only.** `audit_logs.actor_user_id` tinha
+  `FK ... ON DELETE SET NULL`: apagar um usuário zerava o campo nas linhas antigas dele e o hash gravado
+  deixava de bater — a trilha ficava "adulterada" sem ninguém a ter adulterado (138 linhas assim no
+  staging). Trilha de auditoria não deve ter integridade referencial com a entidade que audita: o id do
+  ator é fato histórico, não referência viva. → migration **0048** solta o FK (a tela resolve o e-mail por
+  `LEFT JOIN` enquanto o usuário existir). As linhas já zeradas são perda irrecuperável e a verificação
+  continua apontando-as.
+
+**O que foi implementado.**
+- **Porta única de consentimento** — `app/services/consent.py::set_consent` grava estado (`client_consents`)
+  + histórico (`consent_records`) numa chamada; `opt_out.py` e `lead_funnel.py` migrados. Antes cada
+  call-site fazia o upsert à mão e era fácil gravar um sem o outro.
+- **Versão de política** — `app/core/privacy.py::PRIVACY_POLICY_VERSION` (`"2026-07-30"`) + constantes de
+  origem. Regra: publicar texto novo e subir a constante **no mesmo commit**.
+- **Política publicada** — `barbearia-public/app/privacidade/page.tsx` (o que o sistema realmente faz,
+  verificado no código: dados coletados, finalidades, subprocessadores, transferência internacional,
+  prazos, direitos, SAIR no WhatsApp). Link no rodapé + sitemap. **Revisão jurídica pendente.**
+- **Aceite na entrada** — `accept_privacy` obrigatório em `POST /public/auth/session` (422 sem ele) com
+  checkbox e link no passo 4 do agendamento; e opcional (default `true`) em `POST /clientes`, com checkbox
+  no diálogo do painel — desmarcar cadastra em opt-out. Default `true` preserva o comportamento de hoje: a
+  mudança é passar a **registrar** a base legal em vez de presumi-la. Cliente pré-existente **sem** consent
+  ganha o registro no primeiro acesso pelo site; quem já tem estado (inclusive opt-out) não é tocado —
+  aceitar a política não ressuscita um descadastro pedido no WhatsApp.
+- **Export completo** — pagamentos, conversas, `message_log`, leads e sessões do site; toda coleção devolve
+  `{total, truncado, itens}` (teto de 5.000, explícito).
+- **Anonimização completa** — `Conversation`/`Message`/`Attachment`, `MessageLog`, `Lead` e `ClientSession`
+  (revogada + IP/UA limpos). Sobrevivem de propósito: `payments`/`appointment_items` (receita reconhecida,
+  sem PII) e `consent_records` (é a prova do consentimento — apagá-la destruiria a defesa da organização).
+- **Verificação da cadeia** — `audit.py::verify_chain` + `GET /admin/security/audit/verify`, distinguindo
+  `kind="link"` (linha removida/inserida) de `kind="payload"` (linha editada).
+- **Leitura em massa auditada** — `GET /clientes` com `limit > 100` emite `clients.bulk_read`. Varrer a base
+  em páginas grandes é exfiltração por usuário legítimo e não deixava rastro; páginas pequenas (uso normal
+  da tela) não são auditadas para não afogar a trilha.
+- **Retenção** — `GET/PUT /admin/security/retention` (leitura com `security.audit.view`, escrita com
+  `privacy.lgpd.manage`, teto de 120 meses, auditada) + purga de sessões (`app_sessions_purge_expired`,
+  migration **0047**, `SECURITY DEFINER` no molde da 0039) pendurada no **mesmo** cron interno da purga de
+  auditoria, para não depender de um segundo agendamento no n8n que ficaria esquecido.
+- **Backfill de base legal** — `scripts/backfill_consent.py` (dry-run padrão, `--confirm-name`, idempotente,
+  só toca em cliente sem nenhum consent). `--status opt_in` (default) registra o relacionamento
+  pré-existente migrado; `--status opt_out` silencia a base histórica até haver aceite. **Não fabrica
+  consentimento** — registra o que de fato aconteceu; a escolha do status é do dono.
+
+**Migrations:** 0046 (CHECK do `actor_kind`), 0047 (purga de sessões), 0048 (solta o FK do ator).
+**Testes:** `tests/test_lgpd_d86.py` (14) + 3 em `tests/test_public_site.py`. Suíte **649 pass / 2
+ambientais / 0 regressões** (uma flakiness em `test_membership_corrections` na 1ª execução não se repetiu).
+Build do site público e typecheck dos dois frontends limpos.
+
+**Decidido NÃO fazer agora (com motivo):**
+- **Consentimento por finalidade** (separar transacional de marketing): hoje é por canal. É mudança de
+  schema + comportamento de envio, e a decisão de silenciar quem nunca deu opt-in explícito (1.557 alvos de
+  reativação, D-62) é do dono, não técnica.
+- **Exigir opt-in positivo para marketing**: mesma razão. Hoje o filtro é "não estar em opt-out".
+- **Retenção de dado pessoal do cliente** (descarte de inativo): precisa de prazo definido pelo dono e é
+  destrutivo; a purga de sessões entrega a parte sem decisão pendente.
+- **Portal do titular (art. 18 self-service)**: a sessão do site não é identidade verificada sem OTP
+  (D-79) — expor exportação/eliminação por lá seria vazamento por telefone alheio digitado.
+- **Redigir PII de `audit_logs.before/after`**: a tabela é append-only por desenho; edições antigas podem
+  conter nome/telefone anteriores. Débito consciente.
+
+**Falta para produção:** aplicar 0046–0048 (backup antes), rebuild do backend + serviço `public`, **agendar
+`POST /internal/audit/purge` no n8n** (a purga nunca rodou), rodar `backfill_consent.py` na org 1 depois de
+o dono escolher o status, revisão jurídica do texto da política, e telas de gestor para verificação da
+cadeia/retenção (as rotas existem, a UI não).
+
+---
+
+### D-87 — Aceite de quem opera o sistema: termo do funcionário e contrato de operador (DPA) — 2026-07-31 (⏳ NÃO deployado)
+
+**Origem.** Pergunta do dono logo após o D-86: "os usuários da barbearia já terão onde aceitar os termos
+quando acessarem suas contas?" Não tinham. O D-86 fechou a entrada do **cliente final**; funcionário e dono
+continuavam entrando no painel sem aceitar nada — `User` não tinha coluna de aceite e
+`consent_records.subject_type` já previa `'user'` mas nada gravava com esse valor.
+
+**Dois documentos, duas naturezas jurídicas.** A distinção é o ponto da decisão:
+- **Termo de uso e confidencialidade** (por usuário). **Não é consentimento** — a base legal do tratamento
+  dos dados do funcionário é a relação de trabalho, e consentimento de empregado é frágil por
+  desequilíbrio de poder. É o registro de que ele foi informado do dever de sigilo, do uso proporcional e
+  de que suas ações são auditadas. Serve de defesa da barbearia se um funcionário levar a base de contatos.
+- **Contrato de operador / DPA** (por organização, só o proprietário aceita). A LGPD art. 39 exige que o
+  operador trate os dados conforme instruções **documentadas** do controlador. A plataforma é operadora dos
+  clientes finais de cada barbearia, e uma org nascia por `POST /platform/orgs` (D-55) e começava a operar
+  sem contrato — em incidente, a responsabilidade ficava indefinida.
+
+**Desenho (mesmo do D-86): estado na coluna, prova no append-only.** Migration **0049** (aditiva) adiciona
+`users.terms_version_accepted`/`terms_accepted_at` e `organizations.dpa_version_accepted`/`dpa_accepted_at`/
+`dpa_accepted_by_user_id`; o histórico vai para `consent_records` com `subject_type='user'` (o valor já
+existia no CHECK e nunca tinha sido usado). Guarda-se a **versão aceita**, não um booleano: subir
+`TERMS_VERSION`/`DPA_VERSION` em `app/core/privacy.py` reabre o aceite sozinho, sem migration. `dpa_accepted_by_user_id` **sem FK**, pelo mesmo motivo da 0048: fato jurídico
+sobrevive ao usuário que clicou.
+
+**API** (`app/api/legal.py`): `GET /auth/me/legal` (sem permissão específica — todo usuário precisa saber o
+que devem dele) e `POST /auth/me/legal/accept`. O DPA devolve `pending=false` para quem não é `owner` (não é
+omissão: eles não podem assinar em nome da empresa) e responde **403** se tentarem. Ambos auditados
+(`legal.terms.accept` / `legal.dpa.accept`).
+
+**Gate** (`components/legal/legal-gate.tsx`, montado no `AdminShell` e no layout do barbeiro, que não usa o
+shell): modal sem fechar/Esc/clique-fora, termo primeiro e contrato depois. Diferente do
+`must_change_password` (D-68, que redireciona pelo `proxy.ts`), o `pending` vem da **API**, não do JWT — por
+isso aceitar libera na hora, sem novo login, e publicar texto novo reabre para todo mundo no próximo acesso
+em vez de esperar o próximo login. O componente ainda compara a versão do texto local com a do backend e
+bloqueia o botão se divergirem (evita aceitar um texto e registrar outra versão num deploy pela metade).
+
+**Decisão explícita: o bloqueio é de UX, não de API.** As rotas de negócio continuam respondendo a um token
+válido com aceite pendente. Travar a API inteira derrubaria a barbearia por um bug de tela, e o valor
+jurídico está no registro auditado — não em negar `GET /agenda`. Se algum dia isso precisar virar bloqueio
+real, o lugar é o guard central (`app/authz.py`), com exceção explícita para as rotas de aceite.
+
+**Textos** (`barbearia-frontend/lib/legal.ts`): texto-base escrito a partir do que o sistema **realmente**
+faz (permissões por perfil, trilha imutável, subprocessadores reais, isolamento por org). **Pendente de
+revisão jurídica**, igual à política do D-86.
+
+**Armadilha encontrada:** `get_tenant_db` abre a transação num context manager, então qualquer consulta
+depois do `db.commit()` explode com *"Can't operate on closed transaction inside context manager"*. A
+resposta passou a ser montada **antes** do commit — mesmo cuidado que `clientes.py` já tomava.
+
+**Testes:** `tests/test_legal_acceptance.py` (12). Suíte **661 pass / 2 ambientais / 0 regressões**;
+typecheck e build do painel limpos.
+
+**Falta para produção:** aplicar a 0049 (junto com 0046–0048 do D-86), revisão jurídica dos dois textos,
+rebuild do backend + painel, e validação clicando (o gate ainda não foi visto num browser real).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -2733,4 +2887,9 @@ real da equipe em `/admin/equipe` → Editar → Foto, e conferir no apex.
 | VM sem política de reinício automático | GCP VM | ⚠️ Alto | WhatsApp cai toda vez que VM reinicia; usar /admin/integracoes |
 | ~~Migrations 0012–0014 + telas novas não deployadas~~ | VM / `barbearia-frontend` | ✅ Resolvido | D-46 (2026-06-27): 0012/0013 já estavam; 0014 aplicada; `/admin/assinaturas`+`/admin/empresa` deployadas. Falta só smoke test visual. |
 | `ADMIN_DATABASE_URL` ausente no `.env` da VM | `/opt/barbeariapro/.env` | Médio | Só nos `.example`; `deploy/update.sh` quebra no passo de migration (`set -u`). Provisionar p/ deploy automatizado (D-46). |
+| Purga de auditoria/sessões sem cron no n8n | `POST /internal/audit/purge` | ⚠️ Alto | D-70/D-86: a rotina existe e nunca foi agendada — retenção declarada e não cumprida. Agendar 1×/dia. |
+| Consentimento é por canal, não por finalidade | `models/client.py` | Médio | D-86: lembrete transacional e marketing compartilham o mesmo opt-in; titular não consegue recusar só marketing. Exige schema + decisão do dono. |
+| Sem prazo de descarte de dado pessoal do cliente | `clients` e conversas | Médio | D-86: base da Trinks tem titulares inativos desde 2020. Só sessões e auditoria têm retenção hoje. |
+| PII antiga sobrevive em `audit_logs.before/after` | `app/services/audit.py` | Baixo | D-86: tabela append-only por desenho; anonimizar o titular não reescreve edições passadas. |
+| Backups `.sql` da VM com PII, sem cifra nem prazo | `~/predeploy_*.sql` na VM | Médio | D-86: anonimizar um titular não o remove dos dumps. Inventariar e descartar os antigos. |
 | `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Médio | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas LLM (Claude desde o D-77 — custo por chamada maior que o gpt-4o-mini). |

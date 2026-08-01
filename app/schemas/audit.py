@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AuditLogOut(BaseModel):
@@ -31,3 +31,24 @@ class AuditLogListOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AuditChainOut(BaseModel):
+    """Resultado da verificação da cadeia de hash (D-86)."""
+
+    checked: int
+    ok: bool
+    # "link" = linha removida/inserida no meio; "payload" = linha editada.
+    kind: Optional[str] = None
+    broken_at_id: Optional[int] = None
+    broken_at: Optional[datetime] = None
+
+
+class RetentionOut(BaseModel):
+    audit_retention_months: int
+
+
+class RetentionUpdateIn(BaseModel):
+    # Teto de 10 anos: acima disso o "prazo" deixa de ser retenção e vira
+    # guarda indefinida, que é exatamente o que a LGPD quer evitar.
+    audit_retention_months: int = Field(ge=1, le=120)

@@ -14,13 +14,19 @@ from sqlalchemy.orm import selectinload
 
 from app.authz import AuthContext, require, require_permission
 from app.core.phone import normalize_phone as _validate_phone
+from app.core.privacy import SOURCE_PANEL_SIGNUP
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.services.audit import record_event
+from app.services.consent import set_consent
 from models import Client, ClientLoyalty, Conversation, User
-from models.enums import ContactChannel, LoyaltyNivel, LoyaltyStatus
+from models.enums import ConsentStatus, ContactChannel, LoyaltyNivel, LoyaltyStatus
 
 router = APIRouter(prefix="/clientes", tags=["clientes"])
+
+# Acima disto, a listagem deixa de ser navegação de tela e vira leitura em
+# massa da base — passa a ser auditada (D-86).
+_BULK_READ_THRESHOLD = 100
 
 
 class LoyaltyOut(BaseModel):
@@ -65,6 +71,11 @@ class ClientCreateIn(BaseModel):
     name: str
     phone: str
     acquisition_channel: Optional[str] = None
+    # Aceite declarado por quem cadastra (LGPD, D-86). Default `True` preserva
+    # o comportamento de hoje (cliente cadastrado no balcão recebe lembrete) —
+    # a mudança é passar a REGISTRAR essa base legal em vez de presumi-la. Quem
+    # marca "não" nasce em opt-out e nunca entra em disparo.
+    accept_privacy: bool = True
 
     @field_validator("name")
     @classmethod
@@ -191,6 +202,18 @@ async def get_clientes(
     )
     clients = (await db.execute(q)).scalars().unique().all()
 
+    # Leitura em massa de PII (D-86): varrer a base inteira em páginas grandes é
+    # exfiltração por usuário legítimo e antes não deixava rastro. Páginas
+    # pequenas (uso normal da tela) não são auditadas para não afogar a trilha.
+    if limit > _BULK_READ_THRESHOLD:
+        record_event(
+            organization_id=current_user.organization_id,
+            actor_user_id=current_user.id,
+            action="clients.bulk_read",
+            resource_type="client",
+            reason=f"{len(clients)} cliente(s), offset {offset}",
+        )
+
     return ClientesOut(
         total=filtered_total,
         ativo_count=count_map.get("ativo", 0),
@@ -226,6 +249,18 @@ async def create_cliente(
             status_code=http_status.HTTP_409_CONFLICT,
             detail="Telefone já cadastrado nesta organização",
         )
+
+    # Base legal do contato (D-86): quem cadastra pelo balcão declara o aceite
+    # que colheu presencialmente. Sem isto o cliente nasceria sem consentimento
+    # algum e ainda assim entraria em lembrete/reativação.
+    await set_consent(
+        db,
+        organization_id=current_user.organization_id,
+        client_id=client.id,
+        channel=ContactChannel.whatsapp,
+        status=ConsentStatus.opt_in if body.accept_privacy else ConsentStatus.opt_out,
+        source=SOURCE_PANEL_SIGNUP,
+    )
 
     # Novo cliente nunca tem loyalty — construir resposta sem acessar relacionamento lazy
     response = ClientOut(

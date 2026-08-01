@@ -20,8 +20,9 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.consent import record_consent
-from models import Client, ClientConsent, Lead, LeadEvent
+from app.core.privacy import SOURCE_CHATBOT
+from app.services.consent import set_consent
+from models import Client, Lead, LeadEvent
 from models.enums import ConsentStatus, ContactChannel, LeadStage
 
 _logger = logging.getLogger(__name__)
@@ -124,19 +125,13 @@ async def upsert_client_and_lead(
     )
     db.add(client)
     await db.flush()
-    db.add(ClientConsent(
+    await set_consent(
+        db,
+        organization_id=org_id,
         client_id=client.id,
         channel=channel,
         status=ConsentStatus.opt_in,
-        source="chatbot_first_contact",
-    ))
-    await record_consent(
-        db,
-        organization_id=org_id,
-        subject_id=client.id,
-        channel=channel.value,
-        status=ConsentStatus.opt_in.value,
-        source="chatbot_first_contact",
+        source=SOURCE_CHATBOT,
     )
     await _create_novo_contato_lead(
         db, org_id=org_id, client=client, phone=phone, channel=channel,

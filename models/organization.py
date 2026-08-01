@@ -102,6 +102,12 @@ class Organization(Base):
     audit_retention_months: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("12")
     )
+    # Contrato de operador / DPA (D-87): aceito uma vez por org, pelo dono.
+    # Guarda a VERSÃO aceita — texto novo reabre o aceite sozinho.
+    dpa_version_accepted: Mapped[Optional[str]] = mapped_column(Text)
+    dpa_accepted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+    # Sem FK de propósito (molde da 0048): fato jurídico sobrevive ao usuário.
+    dpa_accepted_by_user_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

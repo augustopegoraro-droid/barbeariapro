@@ -13,6 +13,9 @@ class ConsentRecordOut(BaseModel):
     channel: str
     status: str
     source: Optional[str] = None
+    # Versão da política aceita — sem ela o histórico prova que houve aceite,
+    # mas não a que texto (D-86).
+    policy_version: Optional[str] = None
     created_at: datetime
 
 

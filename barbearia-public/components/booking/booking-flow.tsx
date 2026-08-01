@@ -48,6 +48,9 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
   const [conflictSlot, setConflictSlot] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // Aceite da política de privacidade — só aparece para quem ainda não tem
+  // sessão (é quando o titular entra na base).
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [knownName, setKnownName] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,7 +155,12 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
           setSubmitting(false);
           return;
         }
-        const session = await api.createSession(name.trim(), digits);
+        if (!acceptPrivacy) {
+          setError("Aceite a política de privacidade para continuar.");
+          setSubmitting(false);
+          return;
+        }
+        const session = await api.createSession(name.trim(), digits, acceptPrivacy);
         localStorage.setItem(KNOWN_NAME_KEY, session.client_name);
         setKnownName(session.client_name);
         setNeedsIdentify(false);
@@ -178,7 +186,7 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
     } finally {
       setSubmitting(false);
     }
-  }, [service, professional, slot, needsIdentify, name, phone]);
+  }, [service, professional, slot, needsIdentify, name, phone, acceptPrivacy]);
 
   if (done) {
     return <BookingSuccess done={done} />;
@@ -249,11 +257,13 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
           knownName={knownName}
           name={name}
           phone={phone}
+          acceptPrivacy={acceptPrivacy}
           submitting={submitting}
           error={error}
           headingRef={headingRef}
           onNameChange={setName}
           onPhoneChange={setPhone}
+          onAcceptPrivacyChange={setAcceptPrivacy}
           onForget={() => {
             localStorage.removeItem(KNOWN_NAME_KEY);
             setKnownName(null);

@@ -13,12 +13,12 @@ from __future__ import annotations
 import logging
 import unicodedata
 
-from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.consent import record_consent
-from models import Client, ClientConsent, ConsentStatus, ContactChannel
+from app.core.privacy import SOURCE_WA_KEYWORD
+from app.services.consent import set_consent
+from models import Client, ConsentStatus, ContactChannel
 
 _logger = logging.getLogger(__name__)
 
@@ -88,29 +88,14 @@ async def register_opt_out(
     if client_id is None:
         return None
 
-    await session.execute(
-        pg_insert(ClientConsent)
-        .values(
-            client_id=client_id,
-            channel=ContactChannel.whatsapp,
-            status=ConsentStatus.opt_out,
-            source="wa_keyword",
-        )
-        .on_conflict_do_update(
-            constraint="client_consents_unique",
-            set_={
-                "status": ConsentStatus.opt_out,
-                "source": "wa_keyword",
-                "updated_at": func.now(),
-            },
-        )
-    )
-    await record_consent(
+    # Revogação: não há texto de política aceito aqui, então `policy_version=None`.
+    await set_consent(
         session,
         organization_id=org_id,
-        subject_id=client_id,
-        channel=ContactChannel.whatsapp.value,
-        status=ConsentStatus.opt_out.value,
-        source="wa_keyword",
+        client_id=client_id,
+        channel=ContactChannel.whatsapp,
+        status=ConsentStatus.opt_out,
+        source=SOURCE_WA_KEYWORD,
+        policy_version=None,
     )
     return client_id
