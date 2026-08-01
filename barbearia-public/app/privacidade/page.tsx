@@ -18,8 +18,8 @@ export const metadata = {
 };
 
 /* Mesma string de `app/core/privacy.py::PRIVACY_POLICY_VERSION`. */
-const VERSAO = "2026-07-30";
-const PUBLICADA_EM = "30 de julho de 2026";
+const VERSAO = "2026-08-01";
+const PUBLICADA_EM = "1º de agosto de 2026";
 
 function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
@@ -83,9 +83,11 @@ export default function PrivacidadePage() {
         </ul>
         <p>
           Não coletamos dados sensíveis (saúde, biometria, origem racial,
-          convicção religiosa) e não usamos cookies de publicidade nem
-          ferramentas de rastreamento de terceiros neste site. O único cookie é
-          o que mantém sua sessão aberta para você ver seus agendamentos.
+          convicção religiosa). Atualmente este site não utiliza cookies de
+          publicidade nem ferramentas de rastreamento de terceiros: o único
+          cookie é o que mantém sua sessão aberta para você ver seus
+          agendamentos. Caso isso mude, atualizaremos esta política e pediremos
+          seu consentimento quando a lei exigir.
         </p>
       </Secao>
 
@@ -137,12 +139,22 @@ export default function PrivacidadePage() {
 
       <Secao titulo="Por quanto tempo guardamos">
         <p>
-          Mantemos seus dados enquanto você for cliente e pelo prazo necessário
-          para cumprir obrigações legais (em geral 5 anos para registros
-          fiscais). Registros de acesso e sessões são apagados por rotina
-          automática quando expiram. Se você pedir a eliminação, seus dados de
+          Mantemos seus dados enquanto durar seu relacionamento com a barbearia
+          e, depois disso, pelo período necessário ao cumprimento de obrigações
+          legais e regulatórias (em geral 5 anos para registros fiscais), ao
+          exercício regular de direitos em processos administrativos ou
+          judiciais e às demais hipóteses previstas na LGPD.
+        </p>
+        <p>
+          Registros de acesso e sessões são apagados por rotina automática
+          quando expiram. Se você pedir a eliminação, seus dados de
           identificação são anonimizados e apenas os valores financeiros
           agregados — sem ligação com você — permanecem para a contabilidade.
+        </p>
+        <p>
+          Cópias de segurança (backups) são mantidas por tempo limitado e
+          sobrescritas periodicamente, de modo que a exclusão pode levar até o
+          próximo ciclo de rotação para alcançá-las.
         </p>
       </Secao>
 
@@ -157,18 +169,21 @@ export default function PrivacidadePage() {
         </ul>
         <p>
           Para parar de receber mensagens automáticas, basta responder{" "}
-          <strong className="text-tinta">SAIR</strong> no WhatsApp — o bloqueio
-          é imediato. Para os demais direitos, fale com a barbearia pelo
-          WhatsApp ou pessoalmente; respondemos em até 15 dias.
+          <strong className="text-tinta">SAIR</strong> no WhatsApp — seu cadastro
+          é atualizado imediatamente. Para os demais direitos, fale com a
+          barbearia pelo WhatsApp ou pessoalmente: pedidos de confirmação e de
+          acesso aos dados são respondidos em até 15 dias, e os demais em prazo
+          razoável, conforme a LGPD.
         </p>
       </Secao>
 
       <Secao titulo="Segurança">
         <p>
-          Os dados de cada barbearia ficam isolados no banco de dados, o acesso
-          da equipe é limitado por perfil (a recepção não vê o financeiro, por
-          exemplo) e toda ação sensível fica registrada numa trilha de auditoria
-          que não pode ser alterada.
+          Adotamos medidas técnicas e organizacionais destinadas a proteger seus
+          dados: isolamento lógico dos dados de cada barbearia, acesso da equipe
+          limitado por perfil (a recepção não vê o financeiro, por exemplo) e
+          registro das ações sensíveis em trilha de auditoria protegida contra
+          alteração não autorizada.
         </p>
       </Secao>
 

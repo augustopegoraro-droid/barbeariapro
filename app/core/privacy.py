@@ -14,7 +14,14 @@ from __future__ import annotations
 
 from typing import Final
 
-PRIVACY_POLICY_VERSION: Final[str] = "2026-07-30"
+# 2026-08-01: revisão do texto (segurança como "medidas adotadas", SAIR sem
+# promessa de bloqueio instantâneo, prazos de resposta conforme a LGPD em vez de
+# 15 dias para tudo, retenção pós-relacionamento com backups e defesa em
+# processo, e ressalva de que a ausência de rastreadores vale "atualmente").
+# Diferente do termo/DPA, subir esta versão NÃO reabre aceite de ninguém: ela é
+# carimbada em cada consentimento novo, e os já gravados guardam a versão que o
+# titular de fato viu.
+PRIVACY_POLICY_VERSION: Final[str] = "2026-08-01"
 
 # Documentos de quem OPERA o sistema (D-87). Mesma regra da política: subir a
 # versão no mesmo commit em que o texto muda — aqui isso tem efeito prático
