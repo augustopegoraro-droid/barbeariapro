@@ -2711,7 +2711,7 @@ real da equipe em `/admin/equipe` → Editar → Foto, e conferir no apex.
 
 ---
 
-### D-86 — Auditoria de LGPD: base legal na entrada, cobertura real do art. 18 e retenção — 2026-07-30 (⏳ NÃO deployado)
+### D-86 — Auditoria de LGPD: base legal na entrada, cobertura real do art. 18 e retenção — 2026-07-30 (✅ DEPLOYADO em prod 2026-08-01)
 
 **Origem.** Auditoria do schema e das rotas contra os requisitos técnicos da LGPD (aceite versionado,
 opt-in/opt-out, direitos do titular, log de auditoria, retenção, anonimização). A Fase 8 (D-74) tinha
@@ -2808,7 +2808,7 @@ cadeia/retenção (as rotas existem, a UI não).
 
 ---
 
-### D-87 — Aceite de quem opera o sistema: termo do funcionário e contrato de operador (DPA) — 2026-07-31 (⏳ NÃO deployado)
+### D-87 — Aceite de quem opera o sistema: termo do funcionário e contrato de operador (DPA) — 2026-07-31 (✅ DEPLOYADO em prod 2026-08-01)
 
 **Origem.** Pergunta do dono logo após o D-86: "os usuários da barbearia já terão onde aceitar os termos
 quando acessarem suas contas?" Não tinham. O D-86 fechou a entrada do **cliente final**; funcionário e dono
@@ -2860,8 +2860,37 @@ resposta passou a ser montada **antes** do commit — mesmo cuidado que `cliente
 **Testes:** `tests/test_legal_acceptance.py` (12). Suíte **661 pass / 2 ambientais / 0 regressões**;
 typecheck e build do painel limpos.
 
-**Falta para produção:** aplicar a 0049 (junto com 0046–0048 do D-86), revisão jurídica dos dois textos,
-rebuild do backend + painel, e validação clicando (o gate ainda não foi visto num browser real).
+**✅ DEPLOY EM PROD — 2026-08-01 (D-86 + D-87 juntos, backend `b6c52d2` + painel `f76046d`).** Molde
+D-59/D-63/D-65/D-67/D-68/D-85:
+
+1. push dos dois repos (backend e submódulo do painel) → `git pull --recurse-submodules` na VM;
+2. backup `~/predeploy_d86_d87_20260801_001830.sql` (3,2 MB);
+3. pré-auditoria: head `0045`, 22 linhas em `audit_logs` (2 sem ator), FK `ON DELETE SET NULL` presente,
+   11 sessões de staff / 7 de cliente;
+4. migrations **0046→0049** aplicadas montando o repo do host (a imagem não copia `alembic/`), como
+   `postgres`, na rede `barbearia_network`. **Pegadinha:** `source /opt/barbeariapro/.env` **quebra** —
+   `CORS_ORIGIN_REGEX` tem parênteses sem aspas (`syntax error near unexpected token '('`). Ler só as
+   chaves necessárias com `grep`/`cut`, nunca `source` no arquivo inteiro (script em `/tmp/migrate.sh`);
+5. rebuild `backend`, depois `frontend` + `public`. Os 5 containers voltaram healthy.
+
+**Validado em prod:** head `0049`; CHECK do `actor_kind` inclui `client`; FK do ator **removido** (só resta
+o de `organization_id`); `app_sessions_purge_expired` existe; 5 colunas novas de aceite criadas;
+`/health` 200 e `/auth/me/legal`, `/admin/security/retention`, `/admin/security/audit/verify` respondendo
+**401** sem token (existem e estão protegidas); apex, `/privacidade`, `/agendar`, `/meus-agendamentos`,
+`app.`, `admin.` e `api.` todos **200**; a política publicada mostra "Versão 2026-07-30" e o
+`accept_privacy` está no bundle do `/agendar`; **`POST /public/app/auth/session` sem aceite → 422** com a
+mensagem correta; `INSERT` com `actor_kind='client'` **aceito** (testado dentro de `BEGIN`/`ROLLBACK`, sem
+resíduo — 0 linhas depois), provando que a trilha do site público volta a gravar.
+
+**Purga executada manualmente** (validação do caminho completo): `{"deleted":0,"sessions":{"staff":0,
+"client":0}}` — no-op hoje, como esperado: a auditoria começou em 2026-07 e a retenção é de 12 meses.
+Confirma que ligar o cron agora é seguro.
+
+**Continua pendente (depende de você, não de código):** (1) **agendar o cron no n8n** — o n8n usa login
+por e-mail/senha (`N8N_ACCESS_RECOVERY.md`), sem API key disponível, então não dá para automatizar daqui;
+runbook em `docs/RETENCAO_CRON_N8N.md`; (2) **revisão jurídica** dos três textos (política + termo + DPA);
+(3) **rodar `scripts/backfill_consent.py`** na org 1 depois de escolher `--status`; (4) validação clicando
+no gate de aceite num browser real.
 
 ---
 

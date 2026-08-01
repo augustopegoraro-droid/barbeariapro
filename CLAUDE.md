@@ -686,8 +686,8 @@ no smoke de prod:** `python:3.12-slim` não tem `/etc/mime.types`, então sem `m
 macOS/Linux desktop. Suíte 635 pass (+16 em `tests/test_barber_photo.py`). Deploy transportado por **git
 bundle** (GitHub inacessível do Mac na hora; **push ao remote segue pendente — a VM está à frente**). Ver D-85.
 
-**LGPD — base legal na entrada, art. 18 de verdade e retenção (D-86, 2026-07-30 — ⏳ NÃO deployado, head
-`0048`):** auditoria do schema/rotas contra os requisitos técnicos da lei. A Fase 8 (D-74) tinha a fundação;
+**LGPD — base legal na entrada, art. 18 de verdade e retenção (D-86, 2026-07-30 — ✅ DEPLOYADO em prod 2026-08-01, head
+`0049`):** auditoria do schema/rotas contra os requisitos técnicos da lei. A Fase 8 (D-74) tinha a fundação;
 faltavam as duas pontas. **Consentimento:** porta única `app/services/consent.py::set_consent` (estado
 `client_consents` + histórico `consent_records` numa chamada) + `app/core/privacy.py::PRIVACY_POLICY_VERSION`
 (carimbada em todo aceite; publicar texto novo e subir a constante **no mesmo commit**) + política publicada
@@ -720,7 +720,7 @@ de propósito: `payments`/`appointment_items` e `consent_records` (é a **prova*
 > da política, telas de gestor para cadeia/retenção. Suíte **649 pass / 2 ambientais**. Ver D-86.
 
 **Aceite de quem OPERA o sistema — termo do funcionário + contrato de operador/DPA (D-87, 2026-07-31 —
-⏳ NÃO deployado, head `0049`):** o D-86 fechou a entrada do cliente final; funcionário e dono entravam no
+✅ DEPLOYADO em prod 2026-08-01, head `0049`):** o D-86 fechou a entrada do cliente final; funcionário e dono entravam no
 painel sem aceitar nada. **Dois documentos com naturezas jurídicas diferentes:** (a) **termo de uso e
 confidencialidade**, por usuário — **não é consentimento** (a base legal do vínculo é a relação de trabalho;
 consentimento de empregado é frágil por desequilíbrio de poder), é o registro do dever de sigilo e do uso
