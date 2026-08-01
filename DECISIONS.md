@@ -2073,6 +2073,36 @@ configurável via `KERNEL_IA_MODEL`). O bot "Raquel" no n8n **não** foi tocado 
 custo incomodar, trocar `KERNEL_IA_MODEL=claude-haiku-4-5` ($1/$5) sem mexer em código. O débito "sem rate
 limiting em `/kernel-ia/query`" continua valendo (agora com custo maior por chamada).
 
+> **Atualização 2026-07-31 — default barateado para `claude-haiku-4-5` (a saída prevista acima, executada
+> antes do 1º deploy com chave real).** O dono pediu para visar economia. A tarefa do Kernel IA é rasa:
+> escolher UMA rota de um catálogo **fechado** (enum, não texto livre) e escrever **1 frase** de insight que
+> ainda passa pelo `guard_insight` fail-closed — não precisa de modelo de fronteira. Haiku 4.5 = **$1/$5 por
+> MTok, 5× mais barato** que o Opus 4.8, e suporta tool use (o único recurso que o serviço usa). Mudança de
+> **1 linha** em `app/core/config.py` (`kernel_ia_model`), sem tocar em `kernel_ia.py` — o código não passa
+> `thinking`, `effort` nem `temperature`, que é exatamente onde Haiku diverge dos modelos Opus/Sonnet.
+> `.env.docker.example` corrigido de quebra: ainda anunciava `gpt-4o-mini` e a `OPENAI_API_KEY` como chave do
+> Kernel IA (defasado desde a própria D-77) — agora traz `ANTHROPIC_API_KEY` separada da key do n8n.
+> Limites do Haiku 4.5 a ter em mente: contexto **200K** (vs 1M do Opus) e saída **64K** — irrelevantes aqui
+> (prompt curto + `max_tokens` de 1024/150). Suíte **660 pass / 2 ambientais / 0 regressões**.
+> **Se a escolha de rota errar demais**, subir para `KERNEL_IA_MODEL=claude-sonnet-5` ($3/$15) e só então
+> `claude-opus-5` ($5/$25) — sempre por env, sem deploy de código.
+>
+> **✅ EM PROD 2026-07-31 — sem deploy de código.** O dono provisionou `ANTHROPIC_API_KEY` **e**
+> `KERNEL_IA_MODEL=claude-haiku-4-5` em `/opt/barbeariapro/.env` (editor interativo na VM — a chave nunca
+> passou pelo chat, §5) → `docker compose -f docker-compose.app.yml up -d backend` (recreate, sem rebuild).
+> **Isto encerra a pendência que abriu em 2026-07-02: o Kernel IA ficou 29 dias fora do ar** (D-57/D-58
+> inteiros degradando em `action=config` desde que a `OPENAI_API_KEY` expirou).
+> **Validado:** container `healthy`; `/health` 200 (HTTPS); `/kernel-ia/query` 401 sem auth (protegido,
+> não 404/500); `printenv` no container confirma `KERNEL_IA_MODEL=claude-haiku-4-5` e chave presente; e
+> **chamada real ao LLM** via SDK `anthropic` de dentro do container → `claude-haiku-4-5-20251001`
+> respondeu (12 tokens in / 4 out) — **encerra também a validação "LLM real", pendente desde o D-58**.
+> **Detalhe operacional:** a env var do `.env` é o que manda hoje — o **código** em prod ainda carrega o
+> default `claude-opus-4-8`, porque a mudança de 1 linha em `config.py` não foi deployada. Foi de
+> propósito: pôr o modelo no `.env` fez a economia valer na hora, sem esperar deploy. No próximo rebuild
+> de backend os dois alinham. Pegadinha achada no caminho: a imagem `python:3.12-slim` **não tem `curl`**
+> (mesma família da pegadinha do mimetype no D-85) — validar chamadas externas de dentro do container
+> exige `python -c` com `httpx`/SDK, não `curl`.
+
 **✅ DEPLOYADO em prod 2026-07-15** (backend `5cea9af`, direto na main; molde D-76 — sem migration): backup
 `~/predeploy_d77_*.sql` → `git merge --ff-only origin/main` (`51f6125`→`5cea9af`, sem stash — o lote não toca o
 `docker-compose.yml` com digest pinado) → rebuild `backend`. **Validado:** container healthy; `anthropic 0.116.0`
@@ -2949,6 +2979,47 @@ runbook em `docs/RETENCAO_CRON_N8N.md`; (2) **revisão jurídica** dos três tex
 
 ---
 
+### D-88 — Kernel IA: modelo barateado, chave provisionada e UI legível no tema claro — 2026-08-01 (✅ DEPLOYADO em prod)
+
+Três coisas pequenas que fecham juntas o Kernel IA, que estava **fora do ar desde 2026-07-02** (29 dias).
+
+**1. Modelo: Opus 4.8 → `claude-haiku-4-5` (economia, pedido do dono).** A tarefa do Kernel IA é rasa —
+escolher UMA rota de um catálogo **fechado** (enum, não texto livre) e escrever **1 frase** de insight que
+ainda passa pelo `guard_insight` fail-closed. Não precisa de modelo de fronteira. Haiku 4.5 custa **$1/$5 por
+MTok contra $5/$25 — 5× mais barato**. Mudança de **1 linha** (`kernel_ia_model` em `app/core/config.py`); o
+`kernel_ia.py` não foi tocado, porque o código não passa `thinking`, `effort` nem `temperature` — exatamente
+onde o Haiku diverge dos Opus/Sonnet. Limites do Haiku (contexto 200K vs 1M, saída 64K) são irrelevantes aqui:
+prompt curto e `max_tokens` de 1024/150. **Se a escolha de rota errar demais**, escalar por env para
+`claude-sonnet-5` ($3/$15) e só então `claude-opus-5` — sem deploy de código. Suíte 660 pass / 2 ambientais.
+
+**2. `ANTHROPIC_API_KEY` provisionada em prod — encerra a pendência que abriu no D-77.** O dono editou
+`/opt/barbeariapro/.env` na VM por editor interativo (a chave nunca passou pelo chat, §5), acrescentando a
+chave **e** `KERNEL_IA_MODEL=claude-haiku-4-5`; `up -d backend` recarrega sem rebuild. **Validado com chamada
+real ao LLM** pelo SDK dentro do container → `claude-haiku-4-5-20251001` respondeu (12 tokens in / 4 out),
+o que **encerra também a validação "LLM real" pendente desde o D-58**. Detalhe: pôr o modelo no `.env` fez a
+economia valer na hora, sem esperar deploy — a env var vence o default do código. **Não remover essa linha do
+`.env`** enquanto a VM não tiver o backend rebuildado com este commit, senão volta para o Opus.
+
+**3. UI: FAB e painel legíveis no tema claro** (`components/kernel-ia-launcher.tsx`, frontend `6aba5d2` +
+`5780096`). O componente inteiro tinha sido escrito só para o tema escuro (`bg-white/10`, `text-white`,
+`border-white/15`): no tema claro o FAB sumia e o painel virava texto branco sobre vidro claro. Corrigido na
+convenção do `AGENTS.md` — **claro é a base, `dark:` é a variante**, com o escuro preservado pixel a pixel.
+O FAB inverte o vidro por tema (no claro, véu âmbar da marca `bg-primary/15` + `border-primary/50` + ícone
+`text-foreground`, porque âmbar sobre âmbar não teria contraste, + `backdrop-blur-md`, já que no claro ele
+passa sobre conteúdo de alto brilho). O painel troca as cores hardcoded pelos tokens (`bg-popover`, `bg-card`,
+`bg-muted`, `border-border`, `text-foreground`, `text-muted-foreground`, `shadow-overlay`). Os dois
+`text-black` que sobraram são os pares do âmbar sólido (balão do usuário e botão enviar) e valem nos dois
+temas. `tsc` e `next build` limpos.
+
+**Pegadinha registrada:** a imagem `python:3.12-slim` **não tem `curl`** (mesma família da pegadinha do
+mimetype no D-85) — validar chamada externa de dentro do container exige `python -c` com o SDK/`httpx`.
+
+**Falta:** validação visual num browser real, nos dois temas (o smoke test prova que o CSS está no bundle
+servido, não que ficou bom). O débito "`POST /kernel-ia/query` sem rate limiting" continua — agora com custo
+por chamada 5× menor, o que reduz a severidade mas não fecha o item.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -2977,4 +3048,4 @@ runbook em `docs/RETENCAO_CRON_N8N.md`; (2) **revisão jurídica** dos três tex
 | Sem prazo de descarte de dado pessoal do cliente | `clients` e conversas | Médio | D-86: base da Trinks tem titulares inativos desde 2020. Só sessões e auditoria têm retenção hoje. |
 | PII antiga sobrevive em `audit_logs.before/after` | `app/services/audit.py` | Baixo | D-86: tabela append-only por desenho; anonimizar o titular não reescreve edições passadas. |
 | Backups `.sql` da VM com PII, sem cifra nem prazo | `~/predeploy_*.sql` na VM | Médio | D-86: anonimizar um titular não o remove dos dumps. Inventariar e descartar os antigos. |
-| `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Médio | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas LLM (Claude desde o D-77 — custo por chamada maior que o gpt-4o-mini). |
+| `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Baixo | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas LLM. Severidade caiu de Médio para Baixo no **D-88** (modelo passou a `claude-haiku-4-5`, $1/$5 por MTok) — o item continua aberto, só o custo do abuso encolheu. |

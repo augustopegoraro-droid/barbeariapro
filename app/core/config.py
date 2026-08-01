@@ -77,7 +77,11 @@ class Settings(BaseSettings):
     # Kernel IA (assistente in-app, /kernel-ia/query). Provedor: Anthropic (Claude).
     # Vazio → endpoint responde mensagem amigável "IA não configurada" (sem crash).
     anthropic_api_key: str = ""
-    kernel_ia_model: str = "claude-opus-4-8"
+    # Haiku 4.5 ($1/$5 por MTok) e não Opus ($5/$25): o Kernel IA só escolhe uma
+    # rota de um catálogo FECHADO e escreve 1 frase de insight sob guardrail —
+    # tarefa simples, não precisa do modelo caro. Subir p/ claude-sonnet-5 ou
+    # claude-opus-5 via KERNEL_IA_MODEL se a escolha de rota errar demais.
+    kernel_ia_model: str = "claude-haiku-4-5"
 
     # Webhook direto Evolution → FastAPI (substitui debounce do n8n para o CRM)
     # N8N_WEBHOOK_URL: URL base do n8n para forward (ex: http://host.docker.internal:5678)

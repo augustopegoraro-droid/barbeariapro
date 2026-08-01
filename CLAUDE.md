@@ -367,8 +367,8 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 **Kernel IA + Gestão inteligente de equipe (D-57, 2026-07-02 — ✅ DEPLOYADO em prod 2026-07-02,
 código + migrations `0024`/`0025`, head `0025`):**
 - **Kernel IA = NAVEGADOR por linguagem natural (anti-alucinação):** `app/services/kernel_ia.py` +
-  `POST /kernel-ia/query` — o LLM (Claude `claude-opus-4-8`, `ANTHROPIC_API_KEY` — D-77; era OpenAI
-  `gpt-4o-mini` até 2026-07-15) só escolhe uma rota de
+  `POST /kernel-ia/query` — o LLM (Claude `claude-haiku-4-5`, `ANTHROPIC_API_KEY` — D-77, modelo
+  barateado em 2026-07-31; era `claude-opus-4-8`, e OpenAI `gpt-4o-mini` até 2026-07-15) só escolhe uma rota de
   um **catálogo fechado** filtrado por papel (RBAC: barbeiro → só a própria agenda + tool
   `solicitar_remarcacao_turno`); mensagem templada + `action=navigate`/`route` → o frontend
   redireciona (FAB `kernel-ia-launcher.tsx` no admin). **Não responde dados no chat** — exceto a
@@ -410,10 +410,20 @@ número citado que não esteja no relatório real nem no playbook é descartado 
 Recepção e barbeiro seguem sem acesso a dados financeiros (regressão coberta em
 `tests/test_kernel_ia.py`). `action=finance_answer` novo no contrato do endpoint; frontend só
 precisou de `whitespace-pre-line` no balão + tipo do `action`.
-> ⚠️ **Bloqueio conhecido em prod:** o Kernel IA está fora do ar desde 2026-07-02 (a `OPENAI_API_KEY`
-> da VM expirou; degrada com graça em `action=config`, sem 500). **Resolução decidida (D-77,
-> 2026-07-15): o Kernel IA migrou de provedor — OpenAI → Anthropic/Claude** (`claude-opus-4-8`,
-> configurável via `KERNEL_IA_MODEL`; SDK `anthropic` substitui `openai` no `requirements.txt`).
+> ✅ **RESOLVIDO em prod 2026-07-31 (chave) / 2026-08-01 (UI) — ver D-88** — voltou ao ar após 29 dias fora (desde
+> 2026-07-02, quando a `OPENAI_API_KEY` da VM expirou; degradava com graça em `action=config`, sem 500).
+> `ANTHROPIC_API_KEY` + `KERNEL_IA_MODEL=claude-haiku-4-5` provisionados em `/opt/barbeariapro/.env`
+> pelo dono; `up -d backend` (sem rebuild). Validado: container healthy, `/health` 200,
+> `/kernel-ia/query` 401 sem auth, e **chamada real ao LLM** pelo SDK dentro do container →
+> `claude-haiku-4-5-20251001` respondeu (encerra a validação "LLM real" pendente desde o D-58).
+> ⚠️ O **código** em prod ainda tem o default `claude-opus-4-8`; quem manda é a env var do `.env`.
+> No próximo deploy de backend o default do repo (já `claude-haiku-4-5`) alinha os dois.
+> **Histórico — resolução decidida (D-77,
+> 2026-07-15): o Kernel IA migrou de provedor — OpenAI → Anthropic/Claude** (SDK `anthropic`
+> substitui `openai` no `requirements.txt`). **Modelo default `claude-haiku-4-5` desde 2026-07-31**
+> (era `claude-opus-4-8`): a tarefa é escolher 1 rota de catálogo fechado + 1 frase sob guardrail —
+> Haiku dá conta a $1/$5 por MTok (5× mais barato). Escalar por env (`KERNEL_IA_MODEL`) para
+> `claude-sonnet-5` → `claude-opus-5` **se** a escolha de rota errar demais; sem deploy de código.
 > Só a camada de provedor mudou — catálogo fechado, mensagens templadas, `guard_insight`,
 > `redact_for_llm` (V15) e RBAC intactos; contrato do endpoint inalterado (frontend sem mudança).
 > Suíte 589 pass / 2 ambientais / 0 regressões. **✅ DEPLOYADO em prod 2026-07-15** (backend
