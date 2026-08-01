@@ -738,8 +738,15 @@ histórico em `consent_records` com `subject_type='user'` (valor já previsto no
 sem migration. API `app/api/legal.py`: `GET /auth/me/legal` + `POST /auth/me/legal/accept` (DPA → 403 para
 quem não é owner; ambos auditados). Gate `components/legal/legal-gate.tsx` no `AdminShell` **e** no layout do
 barbeiro (que não usa o shell): o `pending` vem da **API, não do JWT** — aceitar libera na hora sem novo login
-(≠ `must_change_password`/D-68, que redireciona pelo `proxy.ts`). Textos-base em
-`barbearia-frontend/lib/legal.ts`, **pendentes de revisão jurídica**.
+(≠ `must_change_password`/D-68, que redireciona pelo `proxy.ts`). Textos em
+`barbearia-frontend/lib/legal.ts`. **DPA revisado pelo dono em 2026-08-01 (v`2026-08-01`, em prod):**
+isolamento vira "medidas adotadas" (não garantia), finalidades cobrem segurança/antifraude/obrigação legal,
+subprocessadores sem promessa de aviso prévio, "trilha imutável" → "registros protegidos contra alteração não
+autorizada", incidente "sem atraso injustificado", suporte a pedidos de titular, retenção pós-contrato
+realista e **item 8 "Responsabilidades da Controladora"** (a barbearia declara ter base legal — impede que
+atribua à plataforma um envio sem autorização). O termo do funcionário segue em `2026-07-31` e **quem já
+aceitou não foi incomodado** — versionar por documento provou o desenho. Política do site ainda pendente de
+revisão.
 > **Decisão explícita: o bloqueio é de UX, não de API** — as rotas de negócio seguem respondendo a token
 > válido com aceite pendente. Travar tudo derrubaria a barbearia por um bug de tela, e o valor jurídico está
 > no registro auditado. Se virar bloqueio real, o lugar é o guard central (`app/authz.py`), com exceção para

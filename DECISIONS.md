@@ -2860,6 +2860,22 @@ resposta passou a ser montada **antes** do commit — mesmo cuidado que `cliente
 **Testes:** `tests/test_legal_acceptance.py` (12). Suíte **661 pass / 2 ambientais / 0 regressões**;
 typecheck e build do painel limpos.
 
+**Revisão jurídica do DPA — 2026-08-01 (✅ em prod, painel `6404a5c` + backend `e3ab2a0`).** O dono revisou o
+contrato e pediu 7 ajustes, todos reduzindo exposição da plataforma: isolamento entre empresas passa a ser
+"medidas técnicas e organizacionais adotadas" (não garantia absoluta); finalidades ganham segurança,
+integridade, antifraude e obrigação legal (cobre analisar log, restaurar backup, investigar incidente);
+subprocessadores viram lista atualizável com publicação, **sem** promessa de aviso prévio (trocar de nuvem às
+2h por causa de incidente não permite avisar antes); "trilha imutável" → "registros protegidos contra
+alteração não autorizada" (imutável é contestável tecnicamente); incidente com "sem atraso injustificado";
+compromisso de suporte técnico razoável nos pedidos de titular; e retenção reescrita para refletir a realidade
+(backup, log, obrigação fiscal, defesa em processo) em vez de "enquanto durar a contratação". **Item 8 novo —
+Responsabilidades da Controladora:** a barbearia declara ter base legal e responde pelos consentimentos,
+impedindo que atribua à plataforma um WhatsApp enviado sem autorização.
+
+`DPA_VERSION` → `2026-08-01`, o que **reabre só o aceite do contrato**; `TERMS_VERSION` fica em `2026-07-31` e
+o usuário que já aceitou o termo não é incomodado — a prova de que versionar **por documento** era o desenho
+certo. Verificado antes de subir: nenhuma org tinha aceitado o DPA, então nada foi invalidado.
+
 **✅ DEPLOY EM PROD — 2026-08-01 (D-86 + D-87 juntos, backend `b6c52d2` + painel `f76046d`).** Molde
 D-59/D-63/D-65/D-67/D-68/D-85:
 
