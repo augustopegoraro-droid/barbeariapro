@@ -703,7 +703,12 @@ de propósito: `payments`/`appointment_items` e `consent_records` (é a **prova*
 `clients.bulk_read` quando a listagem passa de 100 (exfiltração por usuário legítimo não deixava rastro).
 **Retenção:** `GET/PUT /admin/security/retention` + purga de sessões (`app_sessions_purge_expired`, 0047) no
 **mesmo** cron `/internal/audit/purge`. **Backfill:** `scripts/backfill_consent.py` (dry-run,
-`--confirm-name`, idempotente) para a carga da Trinks.
+`--confirm-name`, idempotente) — **✅ EXECUTADO em prod 2026-08-01** com `--status opt_in` (decisão do dono:
+"cliente de relacionamento anterior, migrado da Trinks"): **2.918 de estado + 2.918 de histórico**, 0 clientes
+sem base legal (antes `client_consents` estava **vazia**); anonimizados ficam de fora de propósito.
+**Decidido (dono, 2026-08-01): separar consentimento por finalidade** (transacional × marketing) **na
+migração para a Cloud API** — hoje o SAIR desliga os dois, e quem só não quer propaganda perde o lembrete do
+próprio horário.
 > **🐞 Dois defeitos reais achados na implementação.** (1) **A trilha do site público nunca existiu:** o D-79
 > emite `actor_kind="client"` e a CHECK da 0039 só admitia `user|bot|system` — como `record_event` é
 > fire-and-forget e engole a exceção, todo evento do cliente final falhava em silêncio desde 2026-07-17

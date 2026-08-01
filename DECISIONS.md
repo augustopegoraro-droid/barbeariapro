@@ -2886,11 +2886,32 @@ resíduo — 0 linhas depois), provando que a trilha do site público volta a gr
 "client":0}}` — no-op hoje, como esperado: a auditoria começou em 2026-07 e a retenção é de 12 meses.
 Confirma que ligar o cron agora é seguro.
 
+**✅ Backfill executado em prod — 2026-08-01.** Decisão do dono: `--status opt_in`, origem
+`trinks_import` ("cliente de relacionamento anterior, migrado da Trinks") — mantém os 1.557 clientes
+sumidos elegíveis para a reativação quando o WhatsApp voltar, com o SAIR em toda mensagem. Resultado na
+org 1: **2.918 linhas de estado + 2.918 de histórico**, e **0 clientes sem base legal** (os anonimizados
+seguem fora, de propósito). Antes: `client_consents` **literalmente vazia**.
+
+**🐞 Dois bugs no `scripts/backfill_consent.py`, achados rodando em produção** (commit `b027be0`):
+1. `:status::consent_status` — o SQLAlchemy **não** substitui um bind seguido de `::` (lê como cast), então
+   o `:status` literal chegava ao Postgres e o INSERT falhava. Trocado por `CAST(:status AS consent_status)`.
+   A transação inteira reverteu — nada chegou a ser gravado em prod.
+2. **O grave:** os dois INSERTs reusavam o predicado "clientes SEM consentimento". Depois do primeiro
+   INSERT o predicado deixa de casar, então o histórico em `consent_records` saía **vazio** e o estado
+   ficava sem prova — exatamente a falha que `set_consent` foi criada para impedir, reintroduzida no
+   script. Agora ambos usam a lista de ids já apurada. Pego no staging comparando estado × histórico
+   (63 × 0); depois do fix, 63 × 63.
+
+**Decisão registrada (Decisão 2, dono, 2026-08-01): separar consentimento por finalidade — transacional
+(lembrete do próprio horário) × marketing (reativação/promoção) — na migração para a WhatsApp Cloud API**,
+que é quando o envio recomeça. Hoje o SAIR desliga os dois, e quem só não quer propaganda perde o lembrete
+do horário que ele mesmo marcou. Fazer junto com a Cloud API evita mexer no schema e nas telas sem efeito
+prático (o envio está desligado desde o D-41).
+
 **Continua pendente (depende de você, não de código):** (1) **agendar o cron no n8n** — o n8n usa login
 por e-mail/senha (`N8N_ACCESS_RECOVERY.md`), sem API key disponível, então não dá para automatizar daqui;
 runbook em `docs/RETENCAO_CRON_N8N.md`; (2) **revisão jurídica** dos três textos (política + termo + DPA);
-(3) **rodar `scripts/backfill_consent.py`** na org 1 depois de escolher `--status`; (4) validação clicando
-no gate de aceite num browser real.
+(3) validação clicando no gate de aceite num browser real.
 
 ---
 
@@ -2917,7 +2938,7 @@ no gate de aceite num browser real.
 | ~~Migrations 0012–0014 + telas novas não deployadas~~ | VM / `barbearia-frontend` | ✅ Resolvido | D-46 (2026-06-27): 0012/0013 já estavam; 0014 aplicada; `/admin/assinaturas`+`/admin/empresa` deployadas. Falta só smoke test visual. |
 | `ADMIN_DATABASE_URL` ausente no `.env` da VM | `/opt/barbeariapro/.env` | Médio | Só nos `.example`; `deploy/update.sh` quebra no passo de migration (`set -u`). Provisionar p/ deploy automatizado (D-46). |
 | Purga de auditoria/sessões sem cron no n8n | `POST /internal/audit/purge` | ⚠️ Alto | D-70/D-86: a rotina existe e nunca foi agendada — retenção declarada e não cumprida. Agendar 1×/dia. |
-| Consentimento é por canal, não por finalidade | `models/client.py` | Médio | D-86: lembrete transacional e marketing compartilham o mesmo opt-in; titular não consegue recusar só marketing. Exige schema + decisão do dono. |
+| Consentimento é por canal, não por finalidade | `models/client.py` | Médio | D-86: lembrete transacional e marketing compartilham o mesmo opt-in. **Decidido (dono, 2026-08-01): separar na migração para a Cloud API**, que é quando o envio recomeça — fazer antes seria mexer em schema e telas sem efeito prático. |
 | Sem prazo de descarte de dado pessoal do cliente | `clients` e conversas | Médio | D-86: base da Trinks tem titulares inativos desde 2020. Só sessões e auditoria têm retenção hoje. |
 | PII antiga sobrevive em `audit_logs.before/after` | `app/services/audit.py` | Baixo | D-86: tabela append-only por desenho; anonimizar o titular não reescreve edições passadas. |
 | Backups `.sql` da VM com PII, sem cifra nem prazo | `~/predeploy_*.sql` na VM | Médio | D-86: anonimizar um titular não o remove dos dumps. Inventariar e descartar os antigos. |
