@@ -639,6 +639,10 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 > junto e voltou healthy). Smoke OK: apex + `/agendar` + `/meus-agendamentos` 200, assets novos 200,
 > `logo-lockup.webp` 404, `app.`/`api.` intactos. **Falta só validação num celular real** e confirmar o
 > "25 anos" com o dono (não entrou por falta de fonte). Ver D-82.
+> **Fix pontual (2026-08-01):** handle do Instagram em `lib/contato.ts` estava sem o `_` final
+> (`taylorethedy` → `taylorethedy_`, perfil real da barbearia). Deploy só-frontend (molde D-79/D-80:
+> `git pull` na VM + rebuild do serviço `public`, sem migration); validado em prod
+> (`instagram.com/taylorethedy_`).
 
 **Criação de usuário pelo gestor (D-83, 2026-07-29 — ✅ DEPLOYADO em prod 2026-07-29):** `POST /admin/security/users`
 gated por `security.users.manage` (sem migration, sem permissão nova) — cria o login, grava o papel de sistema em
