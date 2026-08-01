@@ -745,8 +745,13 @@ subprocessadores sem promessa de aviso prévio, "trilha imutável" → "registro
 autorizada", incidente "sem atraso injustificado", suporte a pedidos de titular, retenção pós-contrato
 realista e **item 8 "Responsabilidades da Controladora"** (a barbearia declara ter base legal — impede que
 atribua à plataforma um envio sem autorização). O termo do funcionário segue em `2026-07-31` e **quem já
-aceitou não foi incomodado** — versionar por documento provou o desenho. Política do site ainda pendente de
-revisão.
+aceitou não foi incomodado** — versionar por documento provou o desenho. **Política do site revisada em 2026-08-01 (v`2026-08-01`, em prod):** mesmas
+correções — segurança vira "medidas adotadas" + "trilha protegida contra alteração não autorizada", SAIR
+promete atualizar o cadastro (não bloqueio instantâneo), prazo de 15 dias só para confirmação/acesso e o
+resto em prazo razoável, retenção com relacionamento encerrado + defesa em processo + **parágrafo sobre
+backups** (sobrevivem à exclusão até a rotação) e ausência de rastreadores passa a valer "atualmente".
+Subir `PRIVACY_POLICY_VERSION` **não** reabre aceite de ninguém (≠ termo/DPA): ela é carimbada em cada
+consentimento novo e os já gravados guardam a versão que o titular viu.
 > **Decisão explícita: o bloqueio é de UX, não de API** — as rotas de negócio seguem respondendo a token
 > válido com aceite pendente. Travar tudo derrubaria a barbearia por um bug de tela, e o valor jurídico está
 > no registro auditado. Se virar bloqueio real, o lugar é o guard central (`app/authz.py`), com exceção para

@@ -2924,6 +2924,24 @@ que é quando o envio recomeça. Hoje o SAIR desliga os dois, e quem só não qu
 do horário que ele mesmo marcou. Fazer junto com a Cloud API evita mexer no schema e nas telas sem efeito
 prático (o envio está desligado desde o D-41).
 
+**Revisão da política de privacidade — 2026-08-01 (✅ em prod, `f6c777c`, v`2026-08-01`).** Mesmo critério do
+DPA, cinco correções: segurança vira "medidas técnicas e organizacionais adotadas" + "trilha protegida contra
+alteração não autorizada" (a trilha é encadeada por hash e sem GRANT de UPDATE/DELETE à aplicação, mas um
+superusuário do banco alcança — o texto antigo prometia mais do que o código entrega); SAIR promete
+"cadastro atualizado imediatamente" e não "bloqueio imediato" (mensagem já em fila pode sair); prazo de 15
+dias passa a valer só para confirmação/acesso, o resto em prazo razoável conforme a LGPD; retenção reescrita
+com relacionamento encerrado, defesa em processo e **parágrafo próprio sobre backups**, que sobrevivem à
+exclusão até a rotação; e a ausência de rastreadores passa a valer "atualmente", com compromisso de atualizar
+a política se mudar. **Subir `PRIVACY_POLICY_VERSION` não reabre aceite de ninguém** (≠ termo/DPA): ela é
+carimbada em cada consentimento novo e os já gravados guardam a versão que o titular de fato viu.
+
+**⚠️ Achado colateral — a suíte ficou instável no staging.** A baseline de 2 falhas ambientais virou 5, 6 ou
+19, **com conjunto diferente a cada execução** (`test_auth_sessions`, `test_site_visibility`, `billing`,
+`impersonation`, `membership`...). Confirmado que **não** é regressão de código: com as mudanças da política
+revertidas por `git stash`, a suíte falha igual. É deriva de estado do banco de staging, acumulada pelas
+muitas execuções do dia (usuários, clientes, consentimentos e linhas de auditoria que ficam entre rodadas) —
+os testes de LGPD/aceite passam 30/30 em isolamento. Débito de isolamento da suíte, ver tabela abaixo.
+
 **Continua pendente (depende de você, não de código):** (1) **agendar o cron no n8n** — o n8n usa login
 por e-mail/senha (`N8N_ACCESS_RECOVERY.md`), sem API key disponível, então não dá para automatizar daqui;
 runbook em `docs/RETENCAO_CRON_N8N.md`; (2) **revisão jurídica** dos três textos (política + termo + DPA);
@@ -2947,6 +2965,7 @@ runbook em `docs/RETENCAO_CRON_N8N.md`; (2) **revisão jurídica** dos três tex
 | `workflows.json` local diverge da VM | `workflows.json` | ⚠️ Alto | Exportar da VM antes de qualquer edição local |
 | Formato de telefone 8 vs 9 dígitos | DB + `normalize_phone` | Médio | conv_id=1 tem 8 dígitos. Ver D-29. |
 | 3 testes ambientais falham | `tests/` | Baixo | n8n bypass_hours, RLS isolation, par `1/6` hardcoded — **não são bugs** |
+| Suíte depende do estado acumulado do staging | `tests/` | ⚠️ Médio | D-86/D-87 (2026-08-01): rodando a suíte várias vezes no mesmo dia, a baseline de 2 falhas vira 5–19, **com conjunto diferente a cada execução** — testes assumem um banco relativamente limpo e deixam usuários/clientes/consentimentos/auditoria para trás. Provado que não é regressão (falha igual com o código revertido). Some resetando o staging. Custo real: mascara regressão de verdade. |
 | Drag da Agenda reverte silencioso em erro | `barbearia-frontend/components/agenda` | Baixo | Reagendar inválido (serviço/conflito) → 422 → bloco volta sem toast (D-43). Diálogo Reagendar mostra o erro. |
 | Frontend F1–F3 não mergeado/deployado | `barbearia-frontend` branch | ⚠️ Médio | Branch `feat/design-system-react-query-f1-f3`; mergear + deployar (D-42). Inbox exige migrations 0010/0011 (prod já ok). |
 | System prompt do bot hardcoda barbeiros | n8n AI Agent node | Médio | Ao cadastrar novo barbeiro, atualizar manualmente (D-38) |
