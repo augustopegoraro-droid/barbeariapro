@@ -31,7 +31,7 @@ import asyncio
 import os
 import sys
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -84,13 +84,28 @@ async def run(org_id: int, status: str, source: str, commit: bool, confirm_name:
                 print("Nada a fazer.")
                 return 0
 
-            params = {"org": org_id, "status": status, "source": source}
+            # Os dois INSERTs usam a MESMA lista de ids já apurada, nunca o
+            # predicado `_TARGETS` de novo: o primeiro INSERT grava em
+            # `client_consents` e o predicado ("clientes SEM consentimento")
+            # deixa de casar — o histórico sairia vazio e o estado ficaria sem
+            # prova, exatamente o que `set_consent` existe para evitar.
+            params = {
+                "org": org_id,
+                "status": status,
+                "source": source,
+                "ids": tuple(ids),
+            }
+            id_list = bindparam("ids", expanding=True)
             await session.execute(
                 text(
+                    # CAST(...) em vez de `:status::consent_status`: o SQLAlchemy
+                    # não substitui um bind seguido de `::` (lê como cast) e o
+                    # `:status` literal chega ao Postgres.
                     "INSERT INTO client_consents (client_id, channel, status, source) "
-                    "SELECT c.id, 'whatsapp'::contact_channel, :status::consent_status, :source "
-                    f"FROM ({_TARGETS}) AS c"
-                ),
+                    "SELECT c.id, CAST('whatsapp' AS contact_channel), "
+                    "       CAST(:status AS consent_status), :source "
+                    "FROM clients c WHERE c.id IN :ids"
+                ).bindparams(id_list),
                 params,
             )
             await session.execute(
@@ -99,8 +114,8 @@ async def run(org_id: int, status: str, source: str, commit: bool, confirm_name:
                     "(organization_id, subject_type, subject_id, channel, status, "
                     " policy_version, source) "
                     "SELECT :org, 'client', c.id, 'whatsapp', :status, NULL, :source "
-                    f"FROM ({_TARGETS}) AS c"
-                ),
+                    "FROM clients c WHERE c.id IN :ids"
+                ).bindparams(id_list),
                 params,
             )
             print(f"\n{len(ids)} cliente(s) com base legal registrada.")
