@@ -774,6 +774,22 @@ consentimento novo e os já gravados guardam a versão que o titular viu.
 > estoura *"Can't operate on closed transaction inside context manager"*. Montar a resposta antes do commit.
 > Suíte **661 pass / 2 ambientais**. Ver D-87.
 
+**Repasse de comissão entre barbeiros (D-89, 2026-08-02 — código pronto, SÓ STAGING, sem deploy):**
+`commission_transfers` (migration `0050`, molde `consent_records`/0042): repasse **vinculado a um
+`AppointmentItem` já concluído** — o gestor lança que uma fração da comissão do dono do item vai para outro
+barbeiro (atendimento a 4 mãos, acordo entre profissionais), sem mudar o dono do item nem `commission_pct` de
+ninguém; `amount` é snapshot (não recalcula se o `commission_pct` mudar depois). `app/services/management.py`
+ganha `commission_transfer_deltas`/`commissions_by_barber` — função única que aplica o delta líquido (soma
+sempre zero) por cima de `receita × commission_pct`, substituindo a fórmula que estava duplicada em
+`barber_ranking`/`financial_summary`/`payroll_summary`/3 rotas de `financeiro.py`. Permissão nova
+`finance.commission_transfers.manage` (bloco `_FINANCE`, catálogo `app/core/permissions.py`) +
+`POST /financeiro/appointment-items/{id}/repasse-comissao` + `GET/DELETE /financeiro/repasses`, auditadas.
+Frontend: botão "Repassar comissão" nos atendimentos concluídos da visão Dia (`components/financeiro/
+dia-view.tsx` + `repasse-dialog.tsx`) e seção "Repasses do mês" com estorno na visão Mês. Suíte
+**667 pass / 2 ambientais / 0 regressões** (`tests/test_commission_transfers.py`, 6 casos); `tsc`/`eslint`
+limpos. **Falta:** deploy em prod (migration `0050` + sync do catálogo de permissões + rebuild backend/
+frontend, molde D-59/D-63/D-67) e validação visual no browser.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

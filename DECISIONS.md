@@ -3020,6 +3020,54 @@ por chamada 5× menor, o que reduz a severidade mas não fecha o item.
 
 ---
 
+### D-89 — Repasse de comissão entre barbeiros — 2026-08-02 (código pronto, staging only — sem deploy)
+
+Pedido do dono: comissão hoje é um percentual único por barbeiro (`Barber.commission_pct`), aplicado sobre
+`AppointmentItem.price_charged` — sem qualquer noção de divisão entre profissionais. Perguntado o cenário real
+(item com 2 donos vs. repasse fora do item vs. lançamento livre), o dono escolheu: **repasse vinculado a um
+`AppointmentItem` já concluído**, sem mexer no dono original do item nem no `commission_pct` de ninguém — molde
+mais simples entre os levantados, e o que reflete o caso real (atendimento a 4 mãos, acordo entre profissionais).
+
+**Schema (migration `0050`, molde `consent_records`/0042):** tabela nova `commission_transfers`
+(`from_barber_id`, `to_barber_id`, `pct`, `amount` — **snapshot** calculado no lançamento, não recalculado depois
+se o `commission_pct` do barbeiro mudar —, `reason`, `created_by_user_id` **sem FK** de propósito, molde D-86/
+`0048`: fato histórico, não trava se o usuário for removido). RLS + FORCE + `GRANT SELECT, INSERT, DELETE` (sem
+UPDATE — repasse lançado não se edita, só se estorna). `CommissionTransfer` novo em `models/`.
+
+**Cálculo (`app/services/management.py`):** `commission_transfer_deltas` soma o delta líquido por barbeiro no
+período (negativo em quem repassa, positivo em quem recebe — a soma é sempre zero); `commissions_by_barber` é a
+nova função única que aplica esse delta sobre `receita × commission_pct`, substituindo a fórmula repetida em
+`barber_ranking`, `financial_summary`, `payroll_summary` e nas 3 rotas de `financeiro.py` (diária, mensal, export
+CSV de comissões) — consolidação que também resolve a duplicação que o próprio `CLAUDE.md` já registrava como
+dívida ("`GET /financeiro` repete a query inline em vez de reusar `barber_revenue_rows`"). Barbeiro que só
+recebeu repasse (sem atendimento próprio no período) aparece nas listagens com receita zero.
+
+**Permissão nova** (`finance.commission_transfers.manage`, catálogo `app/core/permissions.py`, adicionada ao
+bloco `_FINANCE` — owner/manager/financeiro ganham automático) + 3 rotas em `app/api/financeiro.py`:
+`POST /financeiro/appointment-items/{item_id}/repasse-comissao` (valida item concluído, destino ≠ dono, calcula
+e grava o snapshot), `GET /financeiro/repasses?month=`, `DELETE /financeiro/repasses/{id}` (estorno = delete
+simples, sem "uso consumido" como em membership/D-51). Todas auditadas
+(`finance.commission_transfer.create|delete`). `ApptFinanceOut` (rota diária) ganhou `item_id`/`barber_id` do
+item primário — evita criar um endpoint novo só para listar itens individuais.
+
+**Frontend:** botão "Repassar comissão" (ícone `Repeat`) em cada atendimento concluído da visão **Dia** do
+Financeiro (`components/financeiro/dia-view.tsx`), gated por `usePermissions().has("finance.commission_transfers
+.manage")`; diálogo novo `repasse-dialog.tsx` (select de barbeiro destino via `useBarbers`, percentual, motivo).
+Seção "Repasses de comissão do mês" na visão **Mês** com estorno (ícone lixeira). Hooks novos em
+`use-financeiro.ts` (`useRepasses`, `useCreateRepasse`, `useDeleteRepasse`), invalidando `mensal`/`dia`/`repasses`
+juntos. `tsc`/`eslint` limpos.
+
+**Testes:** `tests/test_commission_transfers.py` (6 casos — cálculo líquido soma zero, criar reflete no
+`/financeiro/mensal`, 422 mesmo barbeiro, 422 item não concluído, 403 recepção, listar+estornar volta ao valor
+cheio). Suíte **667 pass / 2 ambientais / 0 regressões** (mesmas 2 falhas pré-existentes: config n8n
+`bypass_hours` e link barbeiro↔serviço no e2e).
+
+**Só staging.** Migration `0050` aplicada e catálogo de permissões sincronizado no staging; **produção não foi
+tocada** — falta o deploy (backend + frontend, molde D-59/D-63/D-67: `git pull` + migration + rebuild) quando o
+dono decidir subir.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

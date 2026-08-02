@@ -63,6 +63,7 @@ CATALOG: tuple[Permission, ...] = (
     Permission("finance.cash.view", "Ver caixa/fechamentos", "Financeiro"),
     Permission("finance.payments.view", "Ver pagamentos/estornos", "Financeiro"),
     Permission("finance.expenses.manage", "Lançar/excluir despesas", "Financeiro"),
+    Permission("finance.commission_transfers.manage", "Lançar/estornar repasse de comissão entre barbeiros", "Financeiro"),
     Permission("finance.export", "Exportar dados financeiros", "Financeiro"),
     # Relatórios
     Permission("reports.dashboard.view", "Ver dashboard operacional (sem dinheiro)", "Relatórios"),
@@ -160,7 +161,8 @@ _OPERATIONS: frozenset[str] = frozenset({
 _FINANCE: frozenset[str] = frozenset({
     "finance.revenue.view", "finance.margin.view", "finance.cost.view",
     "finance.payroll.view", "finance.dre.view", "finance.cash.view",
-    "finance.payments.view", "finance.expenses.manage", "finance.export",
+    "finance.payments.view", "finance.expenses.manage",
+    "finance.commission_transfers.manage", "finance.export",
     "reports.dashboard.financial.view", "reports.gestor.view",
     "team.cost.view", "services.cost.view", "billing.view", "ai.finance.query",
 })

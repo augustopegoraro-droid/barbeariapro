@@ -58,6 +58,7 @@ from .debt import ClientDebt
 from .cash_closing import CashDailyClosing
 from .payment_transaction import PaymentTransaction
 from .dre import DreMonthlyLine
+from .commission_transfer import CommissionTransfer
 from .billing import (
     BillingCredit,
     BillingCustomer,
@@ -172,6 +173,7 @@ __all__ = [
     "CashDailyClosing",
     "PaymentTransaction",
     "DreMonthlyLine",
+    "CommissionTransfer",
     "AppointmentRescheduleRequest",
     # integrações
     "IntegrationAccount",

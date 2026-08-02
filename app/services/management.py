@@ -34,6 +34,7 @@ from models import (
     Client,
     ClientLoyalty,
     ClientMembership,
+    CommissionTransfer,
     ContactChannel,
     Lead,
     LoyaltyStatus,
@@ -110,25 +111,103 @@ async def barber_revenue_rows(db: AsyncSession, date_from: date, date_to: date):
     ).all()
 
 
-# ─── ranking de barbeiros ─────────────────────────────────────────────────────
+# ─── repasse de comissão entre barbeiros (D-88) ───────────────────────────────
 
-async def barber_ranking(db: AsyncSession, date_from: date, date_to: date) -> list[dict]:
-    """Ranking de produção por barbeiro no período (receita, atendimentos,
-    ticket médio e comissão). Já ordenado por receita desc."""
+async def commission_transfer_deltas(
+    db: AsyncSession, date_from: date, date_to: date
+) -> dict[int, Decimal]:
+    """Delta líquido de repasses de comissão por barbeiro no período: negativo
+    para quem repassa, positivo para quem recebe. A soma de todos os deltas é
+    sempre zero — repasse redistribui, não cria nem some comissão. Filtra pela
+    data do atendimento do item (mesma janela de `barber_revenue_rows`), não
+    pela data do lançamento do repasse.
+    """
+    rows = (
+        await db.execute(
+            select(
+                CommissionTransfer.from_barber_id,
+                CommissionTransfer.to_barber_id,
+                CommissionTransfer.amount,
+            )
+            .join(AppointmentItem, AppointmentItem.id == CommissionTransfer.appointment_item_id)
+            .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
+            .where(local_date(Appointment.start_at) >= date_from)
+            .where(local_date(Appointment.start_at) <= date_to)
+        )
+    ).all()
+    deltas: dict[int, Decimal] = {}
+    for r in rows:
+        amount = Decimal(str(r.amount))
+        deltas[r.from_barber_id] = deltas.get(r.from_barber_id, Decimal("0")) - amount
+        deltas[r.to_barber_id] = deltas.get(r.to_barber_id, Decimal("0")) + amount
+    return deltas
+
+
+async def commissions_by_barber(db: AsyncSession, date_from: date, date_to: date) -> list[dict]:
+    """Comissão líquida por barbeiro no período: `receita × commission_pct`
+    corrigida pelos repasses (D-88). Uma linha por barbeiro com receita própria
+    no período OU com delta de repasse diferente de zero (ex.: barbeiro que só
+    recebeu repasse, sem atendimento concluído próprio na janela).
+    """
     rows = await barber_revenue_rows(db, date_from, date_to)
-    ranking: list[dict] = []
+    deltas = await commission_transfer_deltas(db, date_from, date_to)
+
+    result: list[dict] = []
     for r in rows:
         revenue = Decimal(str(r.revenue))
         commission = (revenue * r.commission_pct).quantize(Decimal("0.01"))
-        ticket = (revenue / r.appt_count).quantize(Decimal("0.01")) if r.appt_count else Decimal("0.00")
-        ranking.append(
+        commission += deltas.pop(r.id, Decimal("0"))
+        result.append(
             {
                 "barber_id": r.id,
                 "barber_name": r.name,
                 "appointment_count": r.appt_count,
+                "revenue": revenue,
+                "commission": commission,
+            }
+        )
+
+    extra_ids = [barber_id for barber_id, delta in deltas.items() if delta != 0]
+    if extra_ids:
+        names = (
+            await db.execute(select(Barber.id, Barber.name).where(Barber.id.in_(extra_ids)))
+        ).all()
+        name_by_id = {n.id: n.name for n in names}
+        for barber_id in extra_ids:
+            result.append(
+                {
+                    "barber_id": barber_id,
+                    "barber_name": name_by_id.get(barber_id, "?"),
+                    "appointment_count": 0,
+                    "revenue": Decimal("0"),
+                    "commission": deltas[barber_id].quantize(Decimal("0.01")),
+                }
+            )
+    return result
+
+
+# ─── ranking de barbeiros ─────────────────────────────────────────────────────
+
+async def barber_ranking(db: AsyncSession, date_from: date, date_to: date) -> list[dict]:
+    """Ranking de produção por barbeiro no período (receita, atendimentos,
+    ticket médio e comissão líquida de repasses). Já ordenado por receita desc."""
+    rows = await commissions_by_barber(db, date_from, date_to)
+    ranking: list[dict] = []
+    for r in rows:
+        revenue = r["revenue"]
+        ticket = (
+            (revenue / r["appointment_count"]).quantize(Decimal("0.01"))
+            if r["appointment_count"]
+            else Decimal("0.00")
+        )
+        ranking.append(
+            {
+                "barber_id": r["barber_id"],
+                "barber_name": r["barber_name"],
+                "appointment_count": r["appointment_count"],
                 "revenue": float(revenue),
                 "ticket_medio": float(ticket),
-                "commission": float(commission),
+                "commission": float(r["commission"]),
             }
         )
     return ranking
@@ -140,17 +219,16 @@ async def financial_summary(db: AsyncSession, date_from: date, date_to: date) ->
     """Resumo financeiro do período.
 
     `revenue` e `commissions` são exatos para qualquer janela (somam itens
-    `concluido` no intervalo). `expenses` segue a semântica de competência mensal
-    já adotada no sistema (`Expense.competence_month`): soma as despesas dos meses
-    tocados pelo intervalo — por isso `net` só é plenamente significativo em
-    janelas de mês fechado. `by_method` agrega `Payment` (valor + gorjeta) no período.
+    `concluido` no intervalo, já líquidos de repasse — D-88). `expenses` segue a
+    semântica de competência mensal já adotada no sistema
+    (`Expense.competence_month`): soma as despesas dos meses tocados pelo
+    intervalo — por isso `net` só é plenamente significativo em janelas de mês
+    fechado. `by_method` agrega `Payment` (valor + gorjeta) no período.
     """
-    barber_rows = await barber_revenue_rows(db, date_from, date_to)
-    revenue = sum((Decimal(str(r.revenue)) for r in barber_rows), Decimal("0"))
-    commissions = sum(
-        (Decimal(str(r.revenue)) * r.commission_pct for r in barber_rows), Decimal("0")
-    )
-    appt_count = sum(r.appt_count for r in barber_rows)
+    barber_rows = await commissions_by_barber(db, date_from, date_to)
+    revenue = sum((r["revenue"] for r in barber_rows), Decimal("0"))
+    commissions = sum((r["commission"] for r in barber_rows), Decimal("0"))
+    appt_count = sum(r["appointment_count"] for r in barber_rows)
 
     method_rows = (
         await db.execute(
@@ -552,11 +630,9 @@ async def payroll_summary(db: AsyncSession, date_from: date, date_to: date) -> d
             .order_by(Barber.name)
         )
     ).all()
-    commissions_by_id: dict[int, Decimal] = {}
-    for r in await barber_revenue_rows(db, date_from, date_to):
-        commissions_by_id[r.id] = (Decimal(str(r.revenue)) * r.commission_pct).quantize(
-            Decimal("0.01")
-        )
+    commissions_by_id: dict[int, Decimal] = {
+        r["barber_id"]: r["commission"] for r in await commissions_by_barber(db, date_from, date_to)
+    }
 
     team: list[dict] = []
     fixed_total = commissions_total = rent_total = Decimal("0")

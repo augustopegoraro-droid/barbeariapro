@@ -12,6 +12,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status as http_status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dates import local_date
@@ -19,7 +20,7 @@ from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.services.audit import record_event
-from app.services.management import barber_revenue_rows
+from app.services.management import commissions_by_barber
 from models import (
     Appointment,
     AppointmentItem,
@@ -27,6 +28,7 @@ from models import (
     Barber,
     CashDailyClosing,
     Client,
+    CommissionTransfer,
     DreMonthlyLine,
     Expense,
     ExpenseCategory,
@@ -62,6 +64,10 @@ class ApptFinanceOut(BaseModel):
     service_name: str
     total_amount: float
     start_at: str
+    # Item primário (position=1) — alimenta o botão de repasse de comissão (D-88).
+    # `None` se o agendamento não tiver item (não deveria acontecer p/ concluído).
+    item_id: Optional[int] = None
+    barber_id: Optional[int] = None
 
 
 class FinanceiroOut(BaseModel):
@@ -82,33 +88,16 @@ async def get_financeiro(
 ) -> FinanceiroOut:
     await require_permission(db, current_user, "finance.revenue.view")
 
-    # --- Receita por barbeiro (via appointment_items.price_charged) ----------
-    barber_rows = (
-        await db.execute(
-            select(
-                Barber.id,
-                Barber.name,
-                Barber.commission_pct,
-                func.count(Appointment.id.distinct()).label("appt_count"),
-                func.coalesce(func.sum(AppointmentItem.price_charged), 0).label("revenue"),
-            )
-            .select_from(AppointmentItem)
-            .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
-            .join(Barber, Barber.id == AppointmentItem.barber_id)
-            .where(Appointment.status == AppointmentStatus.concluido)
-            .where(local_date(Appointment.start_at) == date)
-            .group_by(Barber.id, Barber.name, Barber.commission_pct)
-            .order_by(func.sum(AppointmentItem.price_charged).desc())
-        )
-    ).all()
+    # --- Receita/comissão por barbeiro (líquida de repasse — D-88) -----------
+    barber_rows = await commissions_by_barber(db, date, date)
 
     by_barber = [
         BarberOut(
-            barber_id=r.id,
-            barber_name=r.name,
-            appointment_count=r.appt_count,
-            revenue=float(r.revenue),
-            commission=float(Decimal(str(r.revenue)) * r.commission_pct),
+            barber_id=r["barber_id"],
+            barber_name=r["barber_name"],
+            appointment_count=r["appointment_count"],
+            revenue=float(r["revenue"]),
+            commission=float(r["commission"]),
         )
         for r in barber_rows
     ]
@@ -159,6 +148,8 @@ async def get_financeiro(
                 Client.name.label("client_name"),
                 Barber.name.label("barber_name"),
                 Service.name.label("service_name"),
+                AppointmentItem.id.label("item_id"),
+                AppointmentItem.barber_id.label("item_barber_id"),
             )
             .join(Client, Client.id == Appointment.client_id)
             .outerjoin(
@@ -182,6 +173,8 @@ async def get_financeiro(
             service_name=r.service_name or "—",
             total_amount=float(r.total_amount),
             start_at=r.start_at.isoformat(),
+            item_id=r.item_id,
+            barber_id=r.item_barber_id,
         )
         for r in appt_rows
     ]
@@ -217,8 +210,9 @@ def _month_range(month: str) -> tuple[date, date]:
     return first, next_month - timedelta(days=1)
 
 
-# A query de receita por barbeiro vive em app.services.management
-# (barber_revenue_rows), compartilhada com as tools de gestão (D-52).
+# A comissão líquida por barbeiro (receita × commission_pct − repasses) vive em
+# app.services.management (commissions_by_barber), compartilhada com as tools
+# de gestão (D-52) e o repasse de comissão (D-88).
 
 
 # ─── GET /financeiro/mensal ───────────────────────────────────────────────────
@@ -252,14 +246,14 @@ async def get_financeiro_mensal(
     await _require_manager(db, current_user)
     date_from, date_to = _month_range(month)
 
-    barber_rows = await barber_revenue_rows(db, date_from, date_to)
+    barber_rows = await commissions_by_barber(db, date_from, date_to)
     by_barber = [
         BarberOut(
-            barber_id=r.id,
-            barber_name=r.name,
-            appointment_count=r.appt_count,
-            revenue=float(r.revenue),
-            commission=float(Decimal(str(r.revenue)) * r.commission_pct),
+            barber_id=r["barber_id"],
+            barber_name=r["barber_name"],
+            appointment_count=r["appointment_count"],
+            revenue=float(r["revenue"]),
+            commission=float(r["commission"]),
         )
         for r in barber_rows
     ]
@@ -629,6 +623,193 @@ async def remover_despesa(
     )
 
 
+# ─── Repasse de comissão entre barbeiros (D-88) ───────────────────────────────
+#
+# Lançamento vinculado a um AppointmentItem já concluído: uma fração da
+# comissão do dono do item (`price_charged × Barber.commission_pct`) é
+# repassada a OUTRO barbeiro (atendimento a 4 mãos, acordo entre
+# profissionais). Não altera o dono do item nem `commission_pct` de ninguém —
+# `commissions_by_barber` (app/services/management.py) aplica a correção por
+# cima na hora de agregar comissão por período.
+
+class CommissionTransferCreateIn(BaseModel):
+    to_barber_id: int
+    pct: float = Field(..., gt=0, le=1, description="Fração da comissão do item repassada")
+    reason: Optional[str] = Field(None, max_length=300)
+
+
+class CommissionTransferOut(BaseModel):
+    id: int
+    appointment_item_id: int
+    from_barber_id: int
+    from_barber_name: str
+    to_barber_id: int
+    to_barber_name: str
+    pct: float
+    amount: float
+    reason: Optional[str]
+    created_at: str
+
+
+async def _require_commission_transfer_manage(db: AsyncSession, user: User) -> None:
+    await require_permission(db, user, "finance.commission_transfers.manage")
+
+
+@router.post(
+    "/appointment-items/{item_id}/repasse-comissao",
+    response_model=CommissionTransferOut,
+    status_code=http_status.HTTP_201_CREATED,
+)
+async def criar_repasse_comissao(
+    item_id: Annotated[int, Path(gt=0)],
+    body: CommissionTransferCreateIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> CommissionTransferOut:
+    await _require_commission_transfer_manage(db, current_user)
+
+    item_row = (
+        await db.execute(
+            select(AppointmentItem, Appointment.status)
+            .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
+            .where(AppointmentItem.id == item_id)
+        )
+    ).one_or_none()
+    if item_row is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Atendimento não encontrado.")
+    item, appt_status = item_row
+    if appt_status != AppointmentStatus.concluido:
+        raise HTTPException(422, "Só é possível repassar comissão de um atendimento concluído.")
+    if body.to_barber_id == item.barber_id:
+        raise HTTPException(422, "O destino do repasse não pode ser o próprio dono do item.")
+
+    barbers = (
+        await db.execute(
+            select(Barber).where(Barber.id.in_([item.barber_id, body.to_barber_id]))
+        )
+    ).scalars().all()
+    barbers_by_id = {b.id: b for b in barbers}
+    from_barber = barbers_by_id.get(item.barber_id)
+    to_barber = barbers_by_id.get(body.to_barber_id)
+    if from_barber is None or to_barber is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Barbeiro de destino não encontrado.")
+
+    pct = Decimal(str(body.pct))
+    amount = (item.price_charged * from_barber.commission_pct * pct).quantize(Decimal("0.01"))
+
+    transfer = CommissionTransfer(
+        organization_id=current_user.organization_id,
+        appointment_item_id=item.id,
+        from_barber_id=from_barber.id,
+        to_barber_id=to_barber.id,
+        pct=pct,
+        amount=amount,
+        reason=body.reason or None,
+        created_by_user_id=current_user.id,
+    )
+    db.add(transfer)
+    await db.flush()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.commission_transfer.create",
+        resource_type="commission_transfer",
+        resource_id=transfer.id,
+        after={
+            "appointment_item_id": item.id,
+            "from_barber_id": from_barber.id,
+            "to_barber_id": to_barber.id,
+            "pct": float(pct),
+            "amount": float(amount),
+        },
+    )
+
+    return CommissionTransferOut(
+        id=transfer.id,
+        appointment_item_id=item.id,
+        from_barber_id=from_barber.id,
+        from_barber_name=from_barber.name,
+        to_barber_id=to_barber.id,
+        to_barber_name=to_barber.name,
+        pct=float(pct),
+        amount=float(amount),
+        reason=transfer.reason,
+        created_at=transfer.created_at.isoformat(),
+    )
+
+
+@router.get("/repasses", response_model=list[CommissionTransferOut])
+async def listar_repasses_comissao(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    month: str = Query(..., description="Mês no formato YYYY-MM"),
+) -> list[CommissionTransferOut]:
+    await _require_commission_transfer_manage(db, current_user)
+    date_from, date_to = _month_range(month)
+
+    FromBarber = aliased(Barber)
+    ToBarber = aliased(Barber)
+    rows = (
+        await db.execute(
+            select(CommissionTransfer, FromBarber, ToBarber)
+            .join(AppointmentItem, AppointmentItem.id == CommissionTransfer.appointment_item_id)
+            .join(Appointment, Appointment.id == AppointmentItem.appointment_id)
+            .join(FromBarber, FromBarber.id == CommissionTransfer.from_barber_id)
+            .join(ToBarber, ToBarber.id == CommissionTransfer.to_barber_id)
+            .where(local_date(Appointment.start_at) >= date_from)
+            .where(local_date(Appointment.start_at) <= date_to)
+            .order_by(CommissionTransfer.created_at.desc())
+        )
+    ).all()
+
+    return [
+        CommissionTransferOut(
+            id=t.id,
+            appointment_item_id=t.appointment_item_id,
+            from_barber_id=fb.id,
+            from_barber_name=fb.name,
+            to_barber_id=tb.id,
+            to_barber_name=tb.name,
+            pct=float(t.pct),
+            amount=float(t.amount),
+            reason=t.reason,
+            created_at=t.created_at.isoformat(),
+        )
+        for t, fb, tb in rows
+    ]
+
+
+@router.delete("/repasses/{transfer_id}", status_code=http_status.HTTP_204_NO_CONTENT)
+async def estornar_repasse_comissao(
+    transfer_id: Annotated[int, Path(gt=0)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> None:
+    await _require_commission_transfer_manage(db, current_user)
+    transfer = (
+        await db.execute(select(CommissionTransfer).where(CommissionTransfer.id == transfer_id))
+    ).scalar_one_or_none()
+    if transfer is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Repasse não encontrado.")
+
+    before = {
+        "appointment_item_id": transfer.appointment_item_id,
+        "from_barber_id": transfer.from_barber_id,
+        "to_barber_id": transfer.to_barber_id,
+        "amount": float(transfer.amount),
+    }
+    await db.delete(transfer)
+    await db.flush()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.commission_transfer.delete",
+        resource_type="commission_transfer",
+        resource_id=transfer_id,
+        before=before,
+    )
+
+
 # ─── Export CSV ───────────────────────────────────────────────────────────────
 
 def _csv_response(filename: str, header: list[str], rows: list[list]) -> Response:
@@ -658,20 +839,22 @@ async def export_comissoes_csv(
     await _require_manager(db, current_user)
     date_from, date_to = _month_range(month)
 
-    barber_rows = await barber_revenue_rows(db, date_from, date_to)
+    barber_rows = await commissions_by_barber(db, date_from, date_to)
     rows = [
         [
-            r.name,
-            r.appt_count,
-            float(r.revenue),
-            f"{float(r.commission_pct) * 100:.0f}%",
-            float(Decimal(str(r.revenue)) * r.commission_pct),
+            r["barber_name"],
+            r["appointment_count"],
+            float(r["revenue"]),
+            f"{float(r['commission']) / float(r['revenue']) * 100:.0f}%" if r["revenue"] else "—",
+            float(r["commission"]),
         ]
         for r in barber_rows
     ]
-    total_rev = sum(float(r.revenue) for r in barber_rows)
-    total_com = sum(float(Decimal(str(r.revenue)) * r.commission_pct) for r in barber_rows)
-    rows.append(["TOTAL", sum(r.appt_count for r in barber_rows), total_rev, "", total_com])
+    total_rev = sum(float(r["revenue"]) for r in barber_rows)
+    total_com = sum(float(r["commission"]) for r in barber_rows)
+    rows.append(
+        ["TOTAL", sum(r["appointment_count"] for r in barber_rows), total_rev, "", total_com]
+    )
 
     record_event(
         organization_id=current_user.organization_id,
