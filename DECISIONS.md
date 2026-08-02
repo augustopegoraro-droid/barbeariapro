@@ -3020,7 +3020,7 @@ por chamada 5× menor, o que reduz a severidade mas não fecha o item.
 
 ---
 
-### D-89 — Repasse de comissão entre barbeiros — 2026-08-02 (código pronto, staging only — sem deploy)
+### D-89 — Repasse de comissão entre barbeiros — 2026-08-02 (✅ DEPLOYADO em prod 2026-08-02)
 
 Pedido do dono: comissão hoje é um percentual único por barbeiro (`Barber.commission_pct`), aplicado sobre
 `AppointmentItem.price_charged` — sem qualquer noção de divisão entre profissionais. Perguntado o cenário real
@@ -3062,9 +3062,29 @@ juntos. `tsc`/`eslint` limpos.
 cheio). Suíte **667 pass / 2 ambientais / 0 regressões** (mesmas 2 falhas pré-existentes: config n8n
 `bypass_hours` e link barbeiro↔serviço no e2e).
 
-**Só staging.** Migration `0050` aplicada e catálogo de permissões sincronizado no staging; **produção não foi
-tocada** — falta o deploy (backend + frontend, molde D-59/D-63/D-67: `git pull` + migration + rebuild) quando o
-dono decidir subir.
+**✅ DEPLOYADO em prod 2026-08-02** (backend `d5e63ae` + frontend `22b6a70`; molde D-59/D-63/D-67): push dos dois
+repos → `sudo git pull --recurse-submodules` na VM → backup `~/predeploy_d89_20260802_233802.sql` (3,8 MB,
+`pg_dump` texto plano) → migration `0050` aplicada via container avulso do backend montando o repo do host,
+como superusuário `postgres`, na rede `barbearia_network` (mesma técnica do D-60/D-67: a imagem não copia
+`alembic/`) → `sync_authz_catalog.py` (60 permissões, era 59) → rebuild `backend` e `frontend`.
+
+**🐞 Incidente durante o deploy, corrigido na hora — rede docker errada.** O rebuild inicial rodou
+`docker compose -f docker-compose.yml -f docker-compose.app.yml up -d --build backend`, **combinando os dois
+arquivos de compose** — mas `docker-compose.app.yml` documenta no próprio cabeçalho que roda **sozinho**
+(`-f docker-compose.app.yml`; a infra é alcançada via `host.docker.internal`, não pela rede docker
+compartilhada). Combinar os dois fez o Compose recriar `redis`/`backend` na rede errada
+(`barbeariapro-app_default` vs. a implícita do merge), quebrando a resolução do hostname `redis` — login
+(`POST /auth/login`) voltou **500** (`redis.exceptions.ConnectionError`, rate-limiter do D-68 não conseguia
+falar com o Redis). Diagnosticado pelos logs do backend, corrigido refazendo o `up` só com
+`-f docker-compose.app.yml` (o comando documentado desde o início) — sem precisar reverter nada, sem perda de
+dados (Redis é 100% efêmero, D-68). **Lição:** para este stack, **nunca combinar os dois arquivos de compose**
+no `up`; usar cada um isoladamente conforme o cabeçalho de cada um documenta.
+
+**Validado em prod, pós-correção:** 7 containers do app healthy; `POST /auth/login` → 200 (token real);
+`GET /financeiro/repasses` com token → 200; `GET /auth/me/permissions` confirma
+`finance.commission_transfers.manage` no papel owner; apex/`app.`/backend local → 200; logs do backend sem
+erro. `commission_transfers` em prod: RLS+FORCE ativos, GRANT `INSERT/SELECT/DELETE` para `barber_app`, 0 linhas
+(esperado — feature nova).
 
 ---
 

@@ -774,7 +774,7 @@ consentimento novo e os já gravados guardam a versão que o titular viu.
 > estoura *"Can't operate on closed transaction inside context manager"*. Montar a resposta antes do commit.
 > Suíte **661 pass / 2 ambientais**. Ver D-87.
 
-**Repasse de comissão entre barbeiros (D-89, 2026-08-02 — código pronto, SÓ STAGING, sem deploy):**
+**Repasse de comissão entre barbeiros (D-89, 2026-08-02 — ✅ DEPLOYADO em prod 2026-08-02):**
 `commission_transfers` (migration `0050`, molde `consent_records`/0042): repasse **vinculado a um
 `AppointmentItem` já concluído** — o gestor lança que uma fração da comissão do dono do item vai para outro
 barbeiro (atendimento a 4 mãos, acordo entre profissionais), sem mudar o dono do item nem `commission_pct` de
@@ -787,8 +787,12 @@ sempre zero) por cima de `receita × commission_pct`, substituindo a fórmula qu
 Frontend: botão "Repassar comissão" nos atendimentos concluídos da visão Dia (`components/financeiro/
 dia-view.tsx` + `repasse-dialog.tsx`) e seção "Repasses do mês" com estorno na visão Mês. Suíte
 **667 pass / 2 ambientais / 0 regressões** (`tests/test_commission_transfers.py`, 6 casos); `tsc`/`eslint`
-limpos. **Falta:** deploy em prod (migration `0050` + sync do catálogo de permissões + rebuild backend/
-frontend, molde D-59/D-63/D-67) e validação visual no browser.
+limpos. **✅ DEPLOYADO em prod 2026-08-02** (backend `d5e63ae` + frontend `22b6a70`; migration `0050` aplicada,
+catálogo com 60 permissões, validado via login real + `/financeiro/repasses` + `/auth/me/permissions`).
+**Incidente corrigido no próprio deploy:** combinar `docker-compose.yml` + `docker-compose.app.yml` no `up`
+recriou `redis`/`backend` na rede docker errada (500 no login) — `docker-compose.app.yml` roda **sozinho**
+(a infra é alcançada via `host.docker.internal`); nunca combinar os dois arquivos nesse stack. **Falta:**
+validação visual no browser.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
