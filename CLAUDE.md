@@ -842,9 +842,11 @@ vez de só aplicar a seleção — reproduzido de forma idêntica no diálogo "N
 `@base-ui/react`), não algo introduzido agora. Não investigado a fundo (mudança estrutural em primitivo
 compartilhado exige plano próprio); recomendação: testar com clique real (mouse físico) antes de assumir
 regressão — pode ser artefato da ferramenta de automação de browser.
-**Pendente:** deploy em prod da Fase 2 (aplicar `0052`); Fases 3-8 do plano (venda de balcão com
-baixa automática, integração com a comanda, fornecedores/compras, inventário, relatórios, extensibilidade
-kits/combos/cupons); investigar o achado do Select+Dialog.
+**✅ DEPLOYADO em prod 2026-08-03** (backend+frontend `a4835c7`; migration `0052` aplicada, head `0052`;
+backup `~/predeploy_d90_fase2_estoque_*.sql`; validado `/health` 200, `/estoque/movimentacoes` 401 sem
+auth, `app.taylorethedy.com` 200). **Pendente:** Fases 3-8 do plano (venda de balcão com baixa automática,
+integração com a comanda, fornecedores/compras, inventário, relatórios, extensibilidade kits/combos/
+cupons); investigar o achado do Select+Dialog.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
