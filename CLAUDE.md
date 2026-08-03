@@ -835,18 +835,26 @@ em `ProductVariant.stock_qty` passa exclusivamente por `app/services/inventory.p
 sidebar (`perm="inventory.view"`). Suíte **694 pass / 2 ambientais / 0 regressões** (+11 em
 `tests/test_estoque.py`: RLS, RBAC, saldo negativo→409, perda sem motivo→422, produto sem controle de
 estoque→422). Validado no browser (dev local): produto criado, alerta de mínimo aparece corretamente.
-**Achado (não corrigido nesta sessão — fora de escopo):** ao testar a UI, selecionar uma opção de
-`components/ui/select.tsx` quando o Select está aninhado dentro de um `Dialog` fecha o Dialog inteiro em
-vez de só aplicar a seleção — reproduzido de forma idêntica no diálogo "Novo produto" já em produção
-(Fase 1), então é um problema pré-existente do Design System (interação Select+Dialog do
-`@base-ui/react`), não algo introduzido agora. Não investigado a fundo (mudança estrutural em primitivo
-compartilhado exige plano próprio); recomendação: testar com clique real (mouse físico) antes de assumir
-regressão — pode ser artefato da ferramenta de automação de browser.
+**Achado do Select+Dialog (2026-08-03) — INVESTIGADO E DESCARTADO, não é bug real:** a sessão anterior
+registrou (e depois retratou) uma suspeita de que escolher uma opção de `components/ui/select.tsx`
+aninhado num `Dialog` fechava o Dialog inteiro. Investigação a fundo (event listeners instrumentados,
+inspeção do hidden input do `@base-ui/react` Select, testes via mouse/coordenada e via teclado) mostrou
+que o comportamento é **correto**: clicar no trigger duas vezes na MESMA coordenada é, na prática, abrir
+e depois fechar o popup (a opção só fica alinhada exatamente sobre o trigger quando aberto —
+`alignItemWithTrigger`), então repetir o clique no trigger em vez de mirar a opção reabre/fecha sem
+selecionar. Clicando deliberadamente na **opção** (elemento distinto do trigger, confirmado via
+`elementFromPoint`/hidden input), a seleção é aplicada corretamente e o Dialog permanece aberto — testado
+com sucesso tanto no `MovimentacaoDialog` novo quanto no `ProdutoFormDialog` (categoria) já em produção.
+A causa raiz da confusão original foi um descompasso de escala entre a screenshot da ferramenta de
+automação (1456×829) e o viewport real (1512×861, DPR 2), que fazia os cliques por coordenada errarem o
+alvo por alguns pixels. Mantido como melhoria de código (não como fix de bug): os arrays `items` passados
+aos `Select` em `movimentacao-dialog.tsx` foram memoizados com `useMemo` (evita recriar o array a cada
+render). **Não fechar** `components/ui/select.tsx`/`dialog.tsx` como pendência — não há ação a tomar.
 **✅ DEPLOYADO em prod 2026-08-03** (backend+frontend `a4835c7`; migration `0052` aplicada, head `0052`;
 backup `~/predeploy_d90_fase2_estoque_*.sql`; validado `/health` 200, `/estoque/movimentacoes` 401 sem
 auth, `app.taylorethedy.com` 200). **Pendente:** Fases 3-8 do plano (venda de balcão com baixa automática,
 integração com a comanda, fornecedores/compras, inventário, relatórios, extensibilidade kits/combos/
-cupons); investigar o achado do Select+Dialog.
+cupons).
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
