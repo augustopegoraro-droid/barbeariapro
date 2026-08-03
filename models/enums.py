@@ -157,6 +157,22 @@ class LoyaltyVoucherStatus(str, enum.Enum):
     cancelado = "cancelado"
 
 
+class StockMovementType(str, enum.Enum):
+    """Tipo de movimentação de estoque (append-only, Fase 2 de Produtos).
+
+    `entrada_compra`/`saida_venda`/`inventario` já entram no tipo PG desde já
+    (Fase 2) mesmo sem uso ainda, para as Fases 3/6 (venda/inventário) não
+    precisarem de `ALTER TYPE ... ADD VALUE` depois (não roda na mesma
+    transação que já usa o valor novo — dor conhecida de enum em Postgres)."""
+
+    entrada_compra = "entrada_compra"
+    entrada_ajuste = "entrada_ajuste"
+    saida_venda = "saida_venda"
+    saida_ajuste = "saida_ajuste"
+    perda = "perda"
+    inventario = "inventario"
+
+
 class LeadStage(str, enum.Enum):
     """Estágios do funil/Kanban do CRM."""
 

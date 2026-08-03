@@ -816,9 +816,35 @@ variações inline no mesmo diálogo) + `hooks/use-produtos.ts` + item "Produtos
 `perm="products.view"`). Suíte **682 pass / 2 ambientais / 0 regressões** (+16 em
 `tests/test_produtos.py`: RLS, RBAC, CRUD, variante default). Validado end-to-end no browser (dev local):
 criar categoria → criar produto → adicionar variação → arquivar → ver em "Todos" com badge → reativar.
-**Pendente:** deploy em prod (aplicar `0051`); Fases 2-8 do plano (estoque/alertas, venda de balcão com
+**✅ DEPLOYADO em prod 2026-08-03** (migration `0051` aplicada, head `0051`; backend rebuildado; validado
+`/health` 200 + rotas novas protegidas).
+
+**Produtos/Estoque/Vendas — Fase 2: estoque e alertas (2026-08-03 — implementado, só dev/staging):**
+`stock_movements` (migration `0052`, molde `commission_transfers`/0050 — **append-only**: só
+`GRANT SELECT, INSERT` a `barber_app`, sem UPDATE/DELETE, mesma lógica de `audit_logs`). Enum PG
+`stock_movement_type` já nasce com os 6 valores do plano completo (entrada_compra/entrada_ajuste/
+saida_venda/saida_ajuste/perda/inventario) mesmo só emitindo ajuste/perda manuais nesta fase — evita
+`ALTER TYPE ADD VALUE` (não roda na mesma transação que já usa o valor novo) nas Fases 3/6. Toda escrita
+em `ProductVariant.stock_qty` passa exclusivamente por `app/services/inventory.py::apply_stock_movement`
+(lock `FOR UPDATE` na variante, molde `barbeiro.py::_load_appointment`, bloqueia saldo negativo com 409).
+`low_stock_alerts` no mesmo módulo. Router `app/api/estoque.py`: `GET/POST /estoque/movimentacoes`
+(manual: entrada_ajuste/saida_ajuste/perda — perda exige motivo) + `GET /estoque/alertas`; produto sem
+`tracks_stock` bloqueia movimentação (422). Permissões novas `inventory.view`/`inventory.manage` (bloco
+`_OPERATIONS` → owner/manager/reception; ausentes do papel barbeiro). Frontend: `/admin/estoque` +
+`components/estoque/` (molde `components/produtos/`) + `hooks/use-estoque.ts` + item "Estoque" na
+sidebar (`perm="inventory.view"`). Suíte **694 pass / 2 ambientais / 0 regressões** (+11 em
+`tests/test_estoque.py`: RLS, RBAC, saldo negativo→409, perda sem motivo→422, produto sem controle de
+estoque→422). Validado no browser (dev local): produto criado, alerta de mínimo aparece corretamente.
+**Achado (não corrigido nesta sessão — fora de escopo):** ao testar a UI, selecionar uma opção de
+`components/ui/select.tsx` quando o Select está aninhado dentro de um `Dialog` fecha o Dialog inteiro em
+vez de só aplicar a seleção — reproduzido de forma idêntica no diálogo "Novo produto" já em produção
+(Fase 1), então é um problema pré-existente do Design System (interação Select+Dialog do
+`@base-ui/react`), não algo introduzido agora. Não investigado a fundo (mudança estrutural em primitivo
+compartilhado exige plano próprio); recomendação: testar com clique real (mouse físico) antes de assumir
+regressão — pode ser artefato da ferramenta de automação de browser.
+**Pendente:** deploy em prod da Fase 2 (aplicar `0052`); Fases 3-8 do plano (venda de balcão com
 baixa automática, integração com a comanda, fornecedores/compras, inventário, relatórios, extensibilidade
-kits/combos/cupons).
+kits/combos/cupons); investigar o achado do Select+Dialog.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
