@@ -77,6 +77,10 @@ CATALOG: tuple[Permission, ...] = (
     Permission("services.view", "Ver serviços", "Serviços"),
     Permission("services.manage", "Gerenciar serviços", "Serviços"),
     Permission("services.cost.view", "Ver custo dos serviços", "Serviços", sensitive_field=True),
+    # Produtos / Estoque / Vendas (revenda de itens físicos: lanches, bebidas, doces...)
+    Permission("products.view", "Ver produtos e categorias", "Produtos"),
+    Permission("products.manage", "Cadastrar/editar produtos, categorias e variações", "Produtos"),
+    Permission("products.cost.view", "Ver custo/margem de produtos", "Produtos", sensitive_field=True),
     # Fidelidade / Pacotes
     Permission("loyalty.view", "Ver fidelidade", "Fidelidade"),
     Permission("loyalty.manage", "Configurar fidelidade", "Fidelidade"),
@@ -153,7 +157,7 @@ _OPERATIONS: frozenset[str] = frozenset({
     "crm.leads.view", "crm.leads.manage",
     "conversations.view", "conversations.send", "conversations.stream",
     "loyalty.view", "memberships.view", "memberships.sell",
-    "services.view",
+    "services.view", "products.view",
     "reports.dashboard.view", "reports.operational.view",
     "integrations.view", "ai.assistant.use",
 })

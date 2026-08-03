@@ -59,6 +59,7 @@ from .cash_closing import CashDailyClosing
 from .payment_transaction import PaymentTransaction
 from .dre import DreMonthlyLine
 from .commission_transfer import CommissionTransfer
+from .product import Product, ProductCategory, ProductVariant
 from .billing import (
     BillingCredit,
     BillingCustomer,
@@ -175,6 +176,10 @@ __all__ = [
     "DreMonthlyLine",
     "CommissionTransfer",
     "AppointmentRescheduleRequest",
+    # produtos / estoque / vendas
+    "ProductCategory",
+    "Product",
+    "ProductVariant",
     # integrações
     "IntegrationAccount",
     "CalendarSync",

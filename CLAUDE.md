@@ -794,6 +794,32 @@ recriou `redis`/`backend` na rede docker errada (500 no login) — `docker-compo
 (a infra é alcançada via `host.docker.internal`); nunca combinar os dois arquivos nesse stack. **Falta:**
 validação visual no browser.
 
+**Produtos/Estoque/Vendas — Fase 1: catálogo (2026-08-02 — implementado, só dev/staging):**
+plano completo em `/Users/apleandro/.claude/plans/elabore-um-plano-completo-expressive-lovelace.md`
+(8 fases; venda vira entidade `Sale` própria e opcional ligada a `appointment_id`, sem tocar em
+`AppointmentItem`/`Payment`; "integração com caixa" fica restrita a financeiro/relatórios enquanto não
+existir caixa vivo). Esta fase entrega só o cadastro, sem estoque/venda ainda: `product_categories` +
+`products` + `product_variants` (migration `0051`, molde `commission_transfers`/0050 — RLS+FORCE+GRANT
+incl. UPDATE). Todo produto tem **pelo menos 1 variante** (produto "simples" ganha variante default
+"Único" na criação) — preço/custo/estoque sempre pendura na variante, nunca no produto; isso evita caso
+especial quando existe variação real (tamanho/sabor). `tracks_stock` no produto e `cost_avg`/`stock_qty`/
+`min_stock` na variante já estão no schema desde já (ficam em 0/true sem uso) para a Fase 2 (Estoque) não
+exigir migration própria para essas colunas. Permissões novas (`app/core/permissions.py`):
+`products.view` (bloco `_OPERATIONS` → owner/manager/reception), `products.manage`/`products.cost.view`
+(só owner/manager via `_ALL`/`_MANAGER`). Router `app/api/produtos.py`: CRUD de categorias (arquivar via
+`PATCH .../categorias/{id}` com `active`), produtos (`POST /produtos` aceita `price` solto → cria variante
+"Único", ou `variants[]` explícito) e variações (`POST /produtos/{id}/variacoes`,
+`PATCH /produtos/variacoes/{id}`), auditado (`products.category.*`/`products.product.*`/
+`products.variant.*`). Frontend: `/admin/produtos` (catálogo + painel de categorias inline) +
+`components/produtos/` (molde `components/servicos/`; `produto-form-dialog.tsx` edita cadastro E
+variações inline no mesmo diálogo) + `hooks/use-produtos.ts` + item "Produtos" na sidebar (grupo GESTÃO,
+`perm="products.view"`). Suíte **682 pass / 2 ambientais / 0 regressões** (+16 em
+`tests/test_produtos.py`: RLS, RBAC, CRUD, variante default). Validado end-to-end no browser (dev local):
+criar categoria → criar produto → adicionar variação → arquivar → ver em "Todos" com badge → reativar.
+**Pendente:** deploy em prod (aplicar `0051`); Fases 2-8 do plano (estoque/alertas, venda de balcão com
+baixa automática, integração com a comanda, fornecedores/compras, inventário, relatórios, extensibilidade
+kits/combos/cupons).
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
