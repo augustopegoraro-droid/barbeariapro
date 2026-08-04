@@ -3088,6 +3088,47 @@ erro. `commission_transfers` em prod: RLS+FORCE ativos, GRANT `INSERT/SELECT/DEL
 
 ---
 
+### D-94 — Produtos/Estoque/Vendas — Fases 6/7: inventário físico + relatórios avançados — 2026-08-04 (✅ DEPLOYADO em prod 2026-08-04)
+
+Fecha as fases 6 e 7 do plano completo de Produtos/Estoque/Vendas (a Fase 8 — kits/combos/cupons — ficou só
+como documentação em `CLAUDE.md`, sem código, por decisão do plano original).
+
+**Fase 6 — inventário/contagem física:** `inventory_counts`/`inventory_count_items` (migration `0055`, molde
+`suppliers`/0054 — RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE). Abrir uma contagem
+(`POST /estoque/inventarios`) congela `stock_qty` de toda variação rastreada/ativa em `expected_qty`; a
+Raquel informa `counted_qty` por item; finalizar gera `stock_movements` tipo `inventario` **só para itens
+divergentes** via `apply_stock_movement` (nunca escreve `stock_qty` direto). Permissão nova
+`inventory.count.manage` (bloco `_OPERATIONS` → owner/manager/reception). Frontend:
+`components/estoque/inventario-panel.tsx` + `inventario-dialog.tsx` em `/admin/estoque`.
+
+**Fase 7 — relatórios avançados (sem migration):** `top_selling_products` e `stock_turnover` novos em
+`app/services/management.py` (mesmo molde reusável por bot/dashboard/cron, D-52). O giro de estoque
+**reconstrói o saldo em cada ponta do período a partir do ledger append-only `stock_movements`** (nunca lido
+só de `stock_qty`, que é a foto de agora). Expostos em `GET /vendas/produtos-mais-vendidos` (gated por
+`sales.view`) e `GET /estoque/giro` (gated por `inventory.view`). Frontend:
+`components/vendas/produtos-mais-vendidos-panel.tsx` + `components/estoque/giro-panel.tsx`, janela fixa de
+30 dias.
+
+**Testes:** `tests/test_inventario.py` (+15: RLS, RBAC, congelamento de `expected_qty`, finalizar sem/com
+divergência, item sem contagem é ignorado, PATCH/finalizar após finalizado→409, finalizar 2×→409) +
+`tests/test_relatorios_produtos.py` (+5: soma qty/receita, cálculo de giro, variante sem venda fica de fora,
+RBAC). Suíte **733 pass / 2 ambientais / 0 regressões** (mesmas 2 falhas pré-existentes: config n8n
+`bypass_hours` e e2e link barbeiro↔serviço). `tsc`/`eslint`/`next build` do frontend limpos.
+
+**✅ DEPLOYADO em prod 2026-08-04** (backend `c273d0b` + frontend `34bd3d4`; molde D-90/D-91/D-93): backup
+`~/predeploy_d94_20260804_134509.sql` na VM (via `pg_dump` dentro do container `barbeariapro-postgres`) →
+push dos dois repos → `sudo git pull` + `sudo git submodule update --init --recursive` na VM (bump do
+ponteiro do submódulo) → **`sudo bash deploy/update.sh` rodou de ponta a ponta sem intervenção manual**
+(migration `0055` via `Dockerfile.migrate`/`ADMIN_DATABASE_URL` do `.env` + rebuild `backend`/`frontend`/
+`public` num só comando) — primeira vez que o script corrigido no D-93 é usado para um deploy real com
+migration nova, confirmando o fix. `scripts/sync_authz_catalog.py` rodado à parte (o script de deploy não
+sincroniza o catálogo de permissões): 73 permissões/9 papéis/302 vínculos, igual ao staging. Validado: 5
+containers healthy, `/health` 200, `/estoque/inventarios` e `/vendas/produtos-mais-vendidos` 401 sem token,
+migration head = `0055_inventory_counts`, `app.taylorethedy.com` e `taylorethedy.com` 200 por HTTPS externo,
+logs do backend sem erro.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

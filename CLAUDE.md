@@ -982,8 +982,8 @@ explícito por `-e` no `docker run`. Rebuild `backend`+`frontend` só com
 `app.`/apex 200 por HTTPS, `api./docs` 404 (V12 intacto), `/auth/login` responde 401 a senha errada
 (rota viva), logs do backend sem erro.
 
-**Produtos/Estoque/Vendas — Fase 6: inventário/contagem física (D-94, 2026-08-04 — implementado, só
-dev/staging):** `inventory_counts`/`inventory_count_items` (migration `0055`, molde `suppliers`/0054 —
+**Produtos/Estoque/Vendas — Fase 6: inventário/contagem física (D-94, 2026-08-04 — ✅ DEPLOYADO em prod
+2026-08-04, migration `0055` aplicada, head `0055`):** `inventory_counts`/`inventory_count_items` (migration `0055`, molde `suppliers`/0054 —
 RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — finalizar via `status`, nunca apagar linha). Abrir
 uma contagem (`POST /estoque/inventarios`) congela `stock_qty` corrente de toda variação
 rastreada/ativa em `expected_qty` (sem filtro de categoria/produto nesta fase — cobre o cardápio
@@ -1002,8 +1002,8 @@ igual a `inventory.manage`; ausente do papel barbeiro). Router: endpoints novos 
 `inventario` com o delta certo, item sem contagem é ignorado, PATCH/finalizar após finalizado→409,
 finalizar 2×→409). `tsc`/`eslint` limpos.
 
-**Produtos/Estoque/Vendas — Fase 7: relatórios avançados (D-94, 2026-08-04 — implementado, só
-dev/staging, sem migration):** duas funções novas em `app/services/management.py` (mesmo molde das
+**Produtos/Estoque/Vendas — Fase 7: relatórios avançados (D-94, 2026-08-04 — ✅ DEPLOYADO em prod
+2026-08-04, sem migration):** duas funções novas em `app/services/management.py` (mesmo molde das
 demais — `async (db, date_from, date_to)`, reusáveis por bot/dashboard/cron, D-52).
 `top_selling_products` soma `qty`/receita de `sale_items` de vendas `concluida` no período, agrupado
 por variação, ordenado por quantidade (exposto em `GET /vendas/produtos-mais-vendidos`, gated por
@@ -1040,8 +1040,11 @@ NÃO implementado, por decisão do plano original.** Documentado aqui para quand
   elabore-um-plano-completo-expressive-lovelace.md`).
 
 Com as Fases 6-8 encerradas (6/7 código, 8 só documentação), o plano completo de Produtos/Estoque/
-Vendas está com todas as 8 fases endereçadas. **Pendente:** deploy em produção das Fases 6/7 (migration
-`0055`, sync do catálogo de permissões, rebuild backend+frontend — molde D-90/D-91/D-93).
+Vendas está com todas as 8 fases endereçadas. **✅ DEPLOYADO em prod 2026-08-04** (backend `c273d0b` +
+frontend `34bd3d4`, molde D-90/D-91/D-93; migration `0055` aplicada via `deploy/update.sh` de ponta a
+ponta — primeiro deploy real usando o script corrigido no D-93 — + `sync_authz_catalog.py` rodado à
+parte, 73 permissões/9 papéis/302 vínculos; validado `/health` 200, rotas novas 401 sem token,
+`app.`/apex 200 por HTTPS). Ver D-94.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
