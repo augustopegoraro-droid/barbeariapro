@@ -190,6 +190,13 @@ class PurchaseOrderStatus(str, enum.Enum):
     cancelado = "cancelado"
 
 
+class InventoryCountStatus(str, enum.Enum):
+    """Estado de uma contagem física de estoque (Fase 6 de Produtos/Estoque/Vendas)."""
+
+    aberto = "aberto"
+    finalizado = "finalizado"
+
+
 class LeadStage(str, enum.Enum):
     """Estágios do funil/Kanban do CRM."""
 

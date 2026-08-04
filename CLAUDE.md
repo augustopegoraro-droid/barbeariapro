@@ -980,8 +980,68 @@ explícito por `-e` no `docker run`. Rebuild `backend`+`frontend` só com
 `-f docker-compose.app.yml` (nunca combinar com `docker-compose.yml`, lição do D-89). Validado:
 5 containers healthy, `/health` 200, `/fornecedores`/`/compras` 401 sem token (existiam, protegidos),
 `app.`/apex 200 por HTTPS, `api./docs` 404 (V12 intacto), `/auth/login` responde 401 a senha errada
-(rota viva), logs do backend sem erro. **Pendente:** Fases 6-8 do plano (inventário/contagem física,
-relatórios avançados, extensibilidade kits/combos/cupons).
+(rota viva), logs do backend sem erro.
+
+**Produtos/Estoque/Vendas — Fase 6: inventário/contagem física (D-94, 2026-08-04 — implementado, só
+dev/staging):** `inventory_counts`/`inventory_count_items` (migration `0055`, molde `suppliers`/0054 —
+RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — finalizar via `status`, nunca apagar linha). Abrir
+uma contagem (`POST /estoque/inventarios`) congela `stock_qty` corrente de toda variação
+rastreada/ativa em `expected_qty` (sem filtro de categoria/produto nesta fase — cobre o cardápio
+inteiro). A Raquel informa `counted_qty` por item (`PATCH .../itens/{item_id}`, aceita zero, rejeita
+negativo); finalizar (`POST .../finalizar`) gera `stock_movements` tipo `inventario` **só para os itens
+divergentes** (`qty_delta = counted_qty - expected_qty`) via `apply_stock_movement` — itens nunca
+contados (`counted_qty=null`) são ignorados, sem gerar movimentação nem zerar saldo. Toda escrita de
+saldo passa por `app/services/inventory.py::finalize_inventory_count` (nunca escreve `stock_qty`
+diretamente). Permissão nova `inventory.count.manage` (bloco `_OPERATIONS` → owner/manager/reception,
+igual a `inventory.manage`; ausente do papel barbeiro). Router: endpoints novos em `app/api/estoque.py`
+(mesmo arquivo da Fase 2 — inventário é parte do domínio Estoque). Frontend:
+`components/estoque/inventario-panel.tsx` (lista de contagens + botão "Nova contagem") +
+`inventario-dialog.tsx` (itens com input de contagem, auto-salva no blur, botão "Finalizar") em
+`/admin/estoque`. Suíte **+15 em `tests/test_inventario.py`** (RLS, RBAC, congelamento de
+`expected_qty`, finalizar sem divergência não gera movimentação, finalizar com divergência gera
+`inventario` com o delta certo, item sem contagem é ignorado, PATCH/finalizar após finalizado→409,
+finalizar 2×→409). `tsc`/`eslint` limpos.
+
+**Produtos/Estoque/Vendas — Fase 7: relatórios avançados (D-94, 2026-08-04 — implementado, só
+dev/staging, sem migration):** duas funções novas em `app/services/management.py` (mesmo molde das
+demais — `async (db, date_from, date_to)`, reusáveis por bot/dashboard/cron, D-52).
+`top_selling_products` soma `qty`/receita de `sale_items` de vendas `concluida` no período, agrupado
+por variação, ordenado por quantidade (exposto em `GET /vendas/produtos-mais-vendidos`, gated por
+`sales.view`). `stock_turnover` calcula o giro (unidades vendidas ÷ estoque médio) por variação
+**reconstruindo o saldo em cada ponta do período a partir do ledger append-only `stock_movements`**
+(nunca lido só de `stock_qty`, que é a foto de agora): saldo no fim do período = saldo atual −
+movimentações depois do período; saldo no início = saldo do fim − movimentações durante o período;
+`turnover = null` quando o estoque médio é zero (ainda não houve saldo positivo no período). Exposto em
+`GET /estoque/giro` (gated por `inventory.view`). Frontend: `components/vendas/
+produtos-mais-vendidos-panel.tsx` em `/admin/vendas` e `components/estoque/giro-panel.tsx` em
+`/admin/estoque`, ambos com janela fixa de 30 dias (sem seletor de período nesta fase — "polish sobre
+métricas básicas já expostas", como o plano original define o escopo). Suíte **+5 em
+`tests/test_relatorios_produtos.py`** (soma qty/receita, cálculo de giro com reconstrução do saldo,
+variante sem venda no período fica de fora, RBAC recepção vê/barbeiro não vê).
+
+**Produtos/Estoque/Vendas — Fase 8: extensibilidade (kits/combos/promoções/cupons) — só desenho,
+NÃO implementado, por decisão do plano original.** Documentado aqui para quando entrar em escopo real:
+- **Kit/combo de produtos:** `sale_items` já referencia `variant_id`; um kit futuro é (a) um produto
+  próprio cuja venda dispara baixa múltipla resolvida em N movimentações de `stock_movements` (uma por
+  componente, todas com `reference_type="sale"`/`reference_id` do kit), ou (b) uma tabela
+  `kit_components(kit_variant_id, component_variant_id, qty)` que a rota de venda expande antes de
+  chamar `apply_stock_movement` por componente. Nenhuma migration de `sales`/`sale_items` seria
+  necessária — o kit é só uma variação especial que participa da baixa de mais de uma linha de
+  estoque.
+- **Desconto simples:** já cabe sem mudança de schema — `SaleItem.unit_price_charged` já é um
+  snapshot livre (Decimal), pode divergir de `ProductVariant.price` no momento da venda (mesmo padrão
+  de `AppointmentItem.price_charged`).
+- **Cupom:** entraria como tabela nova (`coupons` já existe no billing SaaS — este seria um domínio
+  separado, cupom de desconto ao cliente final, não confundir) com FK opcional futura em `sales`
+  (`sales.coupon_id`, nullable), aplicado no momento da venda e sem retroagir em vendas passadas.
+- **Comissão de barbeiro sobre venda de produto** e **fidelidade por pontos em compra de produto**
+  seguem fora de escopo por decisão de negócio pendente (não técnica) — ver a tabela de regras de
+  negócio consolidada no plano original (`/Users/apleandro/.claude/plans/
+  elabore-um-plano-completo-expressive-lovelace.md`).
+
+Com as Fases 6-8 encerradas (6/7 código, 8 só documentação), o plano completo de Produtos/Estoque/
+Vendas está com todas as 8 fases endereçadas. **Pendente:** deploy em produção das Fases 6/7 (migration
+`0055`, sync do catálogo de permissões, rebuild backend+frontend — molde D-90/D-91/D-93).
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

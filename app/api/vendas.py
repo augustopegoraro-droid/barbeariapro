@@ -26,6 +26,7 @@ from app.authz import require_permission
 from app.deps import get_current_user, get_tenant_db
 from app.services.audit import record_event
 from app.services.inventory import apply_stock_movement
+from app.services.management import top_selling_products
 from models import (
     Client,
     Product,
@@ -121,6 +122,14 @@ class VendaListOut(BaseModel):
     created_at: datetime
 
 
+class ProdutoMaisVendidoOut(BaseModel):
+    variant_id: int
+    variant_name: str
+    product_name: str
+    qty_sold: float
+    revenue: float
+
+
 async def _load_sale(db: AsyncSession, sale_id: int) -> Sale:
     result = await db.execute(
         select(Sale)
@@ -208,6 +217,20 @@ async def listar_vendas(
         )
         for s in rows
     ]
+
+
+@router.get("/produtos-mais-vendidos", response_model=list[ProdutoMaisVendidoOut])
+async def produtos_mais_vendidos(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    limit: int = Query(10, ge=1, le=50),
+) -> list[ProdutoMaisVendidoOut]:
+    """Relatório de produtos mais vendidos no período (Fase 7)."""
+    await _require_view(db, current_user)
+    rows = await top_selling_products(db, date_from, date_to, limit=limit)
+    return [ProdutoMaisVendidoOut(**row) for row in rows]
 
 
 @router.get("/{id}", response_model=VendaOut)

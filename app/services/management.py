@@ -41,9 +41,13 @@ from models import (
     MembershipStatus,
     Organization,
     Payment,
+    Product,
+    ProductVariant,
     Sale,
     SaleItem,
     SaleStatus,
+    StockMovement,
+    StockMovementType,
     TimeOff,
     Unit,
     User,
@@ -245,6 +249,121 @@ async def product_sales_summary(db: AsyncSession, date_from: date, date_to: date
         "profit": float(revenue - cost),
         "sale_count": rows.sale_count,
     }
+
+
+async def top_selling_products(
+    db: AsyncSession, date_from: date, date_to: date, limit: int = 10
+) -> list[dict]:
+    """Variações mais vendidas no período (Fase 7), ordenadas por quantidade
+    vendida. Considera só `sales.status = concluida` (mesmo filtro de
+    `product_sales_summary`)."""
+    rows = (
+        await db.execute(
+            select(
+                SaleItem.variant_id,
+                ProductVariant.name.label("variant_name"),
+                Product.name.label("product_name"),
+                func.sum(SaleItem.qty).label("qty_sold"),
+                func.sum(SaleItem.qty * SaleItem.unit_price_charged).label("revenue"),
+            )
+            .select_from(SaleItem)
+            .join(Sale, Sale.id == SaleItem.sale_id)
+            .join(ProductVariant, ProductVariant.id == SaleItem.variant_id)
+            .join(Product, Product.id == ProductVariant.product_id)
+            .where(Sale.status == SaleStatus.concluida)
+            .where(local_date(Sale.created_at) >= date_from)
+            .where(local_date(Sale.created_at) <= date_to)
+            .group_by(SaleItem.variant_id, ProductVariant.name, Product.name)
+            .order_by(func.sum(SaleItem.qty).desc())
+            .limit(limit)
+        )
+    ).all()
+    return [
+        {
+            "variant_id": r.variant_id,
+            "variant_name": r.variant_name,
+            "product_name": r.product_name,
+            "qty_sold": float(r.qty_sold),
+            "revenue": float(r.revenue),
+        }
+        for r in rows
+    ]
+
+
+async def stock_turnover(db: AsyncSession, date_from: date, date_to: date) -> list[dict]:
+    """Giro de estoque por variação no período (Fase 7): unidades vendidas
+    (`saida_venda`) ÷ estoque médio. O saldo em cada ponta do período é
+    RECONSTRUÍDO a partir do ledger append-only `stock_movements` (nunca lido
+    só de `stock_qty`, que é a foto de agora): saldo no fim do período =
+    saldo atual − movimentações depois do período; saldo no início = saldo do
+    fim − movimentações durante o período. Só entram variações com alguma
+    venda no intervalo."""
+    sold_rows = (
+        await db.execute(
+            select(
+                StockMovement.variant_id,
+                func.sum(-StockMovement.qty_delta).label("qty_sold"),
+            )
+            .where(StockMovement.movement_type == StockMovementType.saida_venda)
+            .where(local_date(StockMovement.created_at) >= date_from)
+            .where(local_date(StockMovement.created_at) <= date_to)
+            .group_by(StockMovement.variant_id)
+        )
+    ).all()
+    if not sold_rows:
+        return []
+    variant_ids = [r.variant_id for r in sold_rows]
+    qty_sold_by_variant = {r.variant_id: Decimal(str(r.qty_sold)) for r in sold_rows}
+
+    after_rows = (
+        await db.execute(
+            select(StockMovement.variant_id, func.sum(StockMovement.qty_delta).label("delta"))
+            .where(StockMovement.variant_id.in_(variant_ids))
+            .where(local_date(StockMovement.created_at) > date_to)
+            .group_by(StockMovement.variant_id)
+        )
+    ).all()
+    after_by_variant = {r.variant_id: Decimal(str(r.delta)) for r in after_rows}
+
+    during_rows = (
+        await db.execute(
+            select(StockMovement.variant_id, func.sum(StockMovement.qty_delta).label("delta"))
+            .where(StockMovement.variant_id.in_(variant_ids))
+            .where(local_date(StockMovement.created_at) >= date_from)
+            .where(local_date(StockMovement.created_at) <= date_to)
+            .group_by(StockMovement.variant_id)
+        )
+    ).all()
+    during_by_variant = {r.variant_id: Decimal(str(r.delta)) for r in during_rows}
+
+    variant_rows = (
+        await db.execute(
+            select(ProductVariant.id, ProductVariant.name, ProductVariant.stock_qty, Product.name)
+            .join(Product, Product.id == ProductVariant.product_id)
+            .where(ProductVariant.id.in_(variant_ids))
+        )
+    ).all()
+
+    result: list[dict] = []
+    for variant_id, variant_name, current_stock, product_name in variant_rows:
+        current_stock = Decimal(str(current_stock))
+        stock_end = current_stock - after_by_variant.get(variant_id, Decimal("0"))
+        stock_start = stock_end - during_by_variant.get(variant_id, Decimal("0"))
+        avg_stock = (stock_start + stock_end) / 2
+        qty_sold = qty_sold_by_variant[variant_id]
+        turnover = float(qty_sold / avg_stock) if avg_stock > 0 else None
+        result.append(
+            {
+                "variant_id": variant_id,
+                "variant_name": variant_name,
+                "product_name": product_name,
+                "qty_sold": float(qty_sold),
+                "avg_stock": float(avg_stock),
+                "turnover": turnover,
+            }
+        )
+    result.sort(key=lambda r: r["qty_sold"], reverse=True)
+    return result
 
 
 async def financial_summary(db: AsyncSession, date_from: date, date_to: date) -> dict:

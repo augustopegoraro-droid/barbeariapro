@@ -17,6 +17,7 @@ from .enums import (
     DeliveryStatus,
     IntegrationProvider,
     IntegrationStatus,
+    InventoryCountStatus,
     LoyaltyCategoria,
     LoyaltyLedgerType,
     LoyaltyNivel,
@@ -66,6 +67,7 @@ from .product import Product, ProductCategory, ProductVariant
 from .stock_movement import StockMovement
 from .sale import Sale, SaleItem, SalePayment
 from .supplier import PurchaseOrder, PurchaseOrderItem, Supplier
+from .inventory_count import InventoryCount, InventoryCountItem
 from .billing import (
     BillingCredit,
     BillingCustomer,
@@ -196,6 +198,9 @@ __all__ = [
     "PurchaseOrder",
     "PurchaseOrderItem",
     "PurchaseOrderStatus",
+    "InventoryCount",
+    "InventoryCountItem",
+    "InventoryCountStatus",
     # integrações
     "IntegrationAccount",
     "CalendarSync",
