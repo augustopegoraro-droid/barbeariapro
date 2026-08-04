@@ -173,6 +173,13 @@ class StockMovementType(str, enum.Enum):
     inventario = "inventario"
 
 
+class SaleStatus(str, enum.Enum):
+    """Estado de uma venda de produto (Fase 3 de Produtos/Estoque/Vendas)."""
+
+    concluida = "concluida"
+    cancelada = "cancelada"
+
+
 class LeadStage(str, enum.Enum):
     """Estágios do funil/Kanban do CRM."""
 

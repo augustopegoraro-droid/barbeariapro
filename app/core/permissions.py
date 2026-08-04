@@ -83,6 +83,9 @@ CATALOG: tuple[Permission, ...] = (
     Permission("products.cost.view", "Ver custo/margem de produtos", "Produtos", sensitive_field=True),
     Permission("inventory.view", "Ver estoque e movimentações", "Produtos"),
     Permission("inventory.manage", "Lançar entradas/saídas/ajustes/perdas de estoque", "Produtos"),
+    Permission("sales.view", "Ver vendas de produtos", "Produtos"),
+    Permission("sales.create", "Realizar venda de produtos (balcão/comanda)", "Produtos"),
+    Permission("sales.cancel", "Cancelar venda de produtos", "Produtos"),
     # Fidelidade / Pacotes
     Permission("loyalty.view", "Ver fidelidade", "Fidelidade"),
     Permission("loyalty.manage", "Configurar fidelidade", "Fidelidade"),
@@ -160,6 +163,7 @@ _OPERATIONS: frozenset[str] = frozenset({
     "conversations.view", "conversations.send", "conversations.stream",
     "loyalty.view", "memberships.view", "memberships.sell",
     "services.view", "products.view", "inventory.view", "inventory.manage",
+    "sales.view", "sales.create",
     "reports.dashboard.view", "reports.operational.view",
     "integrations.view", "ai.assistant.use",
 })

@@ -41,6 +41,9 @@ from models import (
     MembershipStatus,
     Organization,
     Payment,
+    Sale,
+    SaleItem,
+    SaleStatus,
     TimeOff,
     Unit,
     User,
@@ -215,6 +218,35 @@ async def barber_ranking(db: AsyncSession, date_from: date, date_to: date) -> li
 
 # ─── resumo financeiro ────────────────────────────────────────────────────────
 
+async def product_sales_summary(db: AsyncSession, date_from: date, date_to: date) -> dict:
+    """Receita/custo/lucro de venda de produtos no período (Fase 4 de Produtos/
+    Estoque/Vendas) — fonte separada de `revenue`/`commissions` (serviço), NUNCA
+    somada a elas: estruturas de custo diferentes (comissão de barbeiro × CMV de
+    produto). Considera só `sales.status = concluida` (canceladas não contam)."""
+    rows = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(SaleItem.qty * SaleItem.unit_price_charged), 0).label("revenue"),
+                func.coalesce(func.sum(SaleItem.qty * SaleItem.unit_cost_snapshot), 0).label("cost"),
+                func.count(func.distinct(Sale.id)).label("sale_count"),
+            )
+            .select_from(Sale)
+            .join(SaleItem, SaleItem.sale_id == Sale.id)
+            .where(Sale.status == SaleStatus.concluida)
+            .where(local_date(Sale.created_at) >= date_from)
+            .where(local_date(Sale.created_at) <= date_to)
+        )
+    ).one()
+    revenue = Decimal(str(rows.revenue))
+    cost = Decimal(str(rows.cost))
+    return {
+        "revenue": float(revenue),
+        "cost": float(cost),
+        "profit": float(revenue - cost),
+        "sale_count": rows.sale_count,
+    }
+
+
 async def financial_summary(db: AsyncSession, date_from: date, date_to: date) -> dict:
     """Resumo financeiro do período.
 
@@ -224,6 +256,9 @@ async def financial_summary(db: AsyncSession, date_from: date, date_to: date) ->
     (`Expense.competence_month`): soma as despesas dos meses tocados pelo
     intervalo — por isso `net` só é plenamente significativo em janelas de mês
     fechado. `by_method` agrega `Payment` (valor + gorjeta) no período.
+
+    `products` é a receita/custo/lucro de venda de produtos (Fase 4) — **não**
+    entra em `revenue`/`net` (estrutura de custo diferente da de serviço).
     """
     barber_rows = await commissions_by_barber(db, date_from, date_to)
     revenue = sum((r["revenue"] for r in barber_rows), Decimal("0"))
@@ -263,6 +298,7 @@ async def financial_summary(db: AsyncSession, date_from: date, date_to: date) ->
     expenses = Decimal(str(expenses_total))
 
     net = revenue - commissions - expenses
+    products = await product_sales_summary(db, date_from, date_to)
     return {
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
@@ -272,6 +308,7 @@ async def financial_summary(db: AsyncSession, date_from: date, date_to: date) ->
         "net": float(net),
         "appointment_count": appt_count,
         "by_method": by_method,
+        "products": products,
     }
 
 

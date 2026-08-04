@@ -852,9 +852,74 @@ aos `Select` em `movimentacao-dialog.tsx` foram memoizados com `useMemo` (evita 
 render). **Não fechar** `components/ui/select.tsx`/`dialog.tsx` como pendência — não há ação a tomar.
 **✅ DEPLOYADO em prod 2026-08-03** (backend+frontend `a4835c7`; migration `0052` aplicada, head `0052`;
 backup `~/predeploy_d90_fase2_estoque_*.sql`; validado `/health` 200, `/estoque/movimentacoes` 401 sem
-auth, `app.taylorethedy.com` 200). **Pendente:** Fases 3-8 do plano (venda de balcão com baixa automática,
-integração com a comanda, fornecedores/compras, inventário, relatórios, extensibilidade kits/combos/
-cupons).
+auth, `app.taylorethedy.com` 200).
+
+**Produtos/Estoque/Vendas — Fase 3: venda de balcão com baixa automática (2026-08-03 — implementado, só
+dev/staging):** `sales`/`sale_items`/`sale_payments` (migration `0053`, molde `commission_transfers`/0050
+— RLS+FORCE+GRANT incl. UPDATE, sem DELETE — é registro financeiro, nunca se apaga, só `cancelar`), par
+paralelo a `Appointment`/`AppointmentItem`/`Payment` **sem alterar nenhuma delas**: `sales.appointment_id`
+é opcional (`NULL` = venda de balcão pura; preenchido = anexada a um atendimento, sem tocar em
+`AppointmentItem`) e `sale_payments` reaproveita o enum `payment_method` já existente. `SaleItem.
+unit_price_charged`/`unit_cost_snapshot` são snapshots (preço/custo da variante no momento da venda, molde
+`AppointmentItem.price_charged`/`CommissionTransfer.amount`). Baixa de estoque é **síncrona, na mesma
+transação da venda** (`app/api/vendas.py::criar_venda` chama `apply_stock_movement` com
+`movement_type=saida_venda`, `reference_type="sale"`) — produto sem `tracks_stock` não gera movimentação
+nenhuma. `POST /vendas` valida que a soma dos pagamentos bate com o total calculado (preço da variante ×
+qty de cada item) antes de gravar; saldo insuficiente estoura 409 vindo do próprio `apply_stock_movement`
+(sem duplicar a checagem). `PATCH /vendas/{id}/cancelar` reverte o estoque (`saida_ajuste` com quantidade
+positiva, motivo fixo "Estorno de venda cancelada") e marca `status="cancelada"` — nunca deleta linha;
+cancelar 2× devolve 409. Permissões novas `sales.view`/`sales.create` (bloco `_OPERATIONS` → owner/
+manager/reception) e `sales.cancel` (só owner/manager via `_ALL`/`_MANAGER` — a recepção vende mas não
+cancela). Frontend: `/admin/vendas` (`components/vendas/`: `venda-rapida-dialog.tsx` com carrinho
+multi-item antes de confirmar, `vendas-table.tsx` com badge de status + botão Cancelar gated por
+`sales.cancel`) + `hooks/use-vendas.ts` + item "Vendas" na sidebar (grupo GESTÃO, `perm="sales.view"`).
+Suíte **703 pass / 2 ambientais / 0 regressões** (+9 em `tests/test_vendas.py`: baixa de estoque, saldo
+insuficiente→409, pagamento não bate→422, produto sem controle de estoque→sem movimentação, cancelar
+estorna e cancelar 2×→409, venda anexada a atendimento sem alterar `Appointment`, RBAC, RLS). Validado
+end-to-end no browser (dev local) + via API: criar produto → dar entrada de estoque → `POST /vendas` →
+saldo desce na hora → tela `/admin/vendas` lista a venda → cancelar → estoque estorna e a UI atualiza
+sozinha (React Query invalida `vendas`/`estoque`/`produtos`). **Pendente:** Fases 4-8 do plano (venda
+integrada à comanda do `concluir-dialog.tsx`, fornecedores/compras, inventário, relatórios avançados,
+extensibilidade kits/combos/cupons).
+
+**Produtos/Estoque/Vendas — Fase 4: venda integrada à comanda + financeiro (2026-08-03 — implementado,
+só dev/staging, sem migration):** bloco opcional **"+ Produtos"** dentro de
+`components/agenda/concluir-dialog.tsx` (usado tanto pelo admin quanto pelo barbeiro, já que ambos
+compartilham `ConcluirDialog`/`useConcluirAtendimento`): ao confirmar, se o carrinho de produtos tiver
+itens, `POST /vendas` roda **antes** de `useConcluirAtendimento` (com `appointment_id`/`client_id` do
+atendimento), sem alterar esse hook nem `AppointmentItem`/`Payment` — exatamente o desenho do plano.
+Gated por `usePermissions().has("sales.create")`; forma de pagamento do produto é escolhida à parte
+(não precisa ser a mesma do serviço, e continua funcionando mesmo quando o atendimento é pago via
+assinatura, que não cobre produto). Extraído `components/vendas/produto-picker.tsx` (seletor produto→
+variação→quantidade+"Adicionar ao carrinho", sem estado de carrinho) para ser **compartilhado** entre
+`venda-rapida-dialog.tsx` (balcão) e o novo bloco da comanda — exatamente o "produto-picker
+compartilhado com a comanda" do plano original.
+
+**Backend:** `app/services/management.py::product_sales_summary(db, date_from, date_to)` — nova função
+pura (mesmo molde das demais do módulo, reusável por bot/dashboard/cron) que soma receita/custo/lucro de
+`sale_items` de vendas `concluida` no período (`revenue`, `cost`, `profit`, `sale_count`); vendas
+`cancelada` não entram. `financial_summary()` passa a incluir a chave **`products`** com esse resultado,
+**sem misturar** com `revenue`/`commissions`/`net` (estrutura de custo de produto — CMV — é diferente da
+de comissão de serviço, conforme o plano); consumidores existentes (`/financeiro/gestor` do bot,
+`/admin/gestor`, `kernel_ia_finance`, push diário) ignoram a chave nova sem quebrar (Pydantic default
+`extra="ignore"` ao desempacotar `**data`). Os endpoints `/financeiro`/`/financeiro/mensal` (dashboard
+do dia/mês) não usam `financial_summary()` — calculam receita de serviço inline — então **não** ganharam
+o card de produto nesta fase; ficará para quando o dashboard for revisado.
+
+Suíte **705 pass / 2 ambientais / 0 regressões** (+2 em `tests/test_product_sales_summary.py`: soma só
+vendas concluídas, `financial_summary` inclui `products` sem afetar `revenue`). Validado end-to-end no
+browser (dev local): agendamento real do Taylor → "Concluir atendimento" → "+ Produtos" → carrinho com
+Refrigerante lata → confirmar → `Sale` criada com `appointment_id`/`client_id` corretos, estoque baixou
+(50→49), `Payment`/`AppointmentItem` do atendimento intactos (R$ 50,00 de receita de serviço, sem
+mistura com o R$ 6,00 do produto). **Achado de sessão (não é bug, documentado para not repetir a
+investigação):** a mesma imprecisão de automação por coordenada/timing do achado do D-90 (Select+Dialog)
+apareceu de novo neste fluxo — cliques via clique-de-coordenada ou mesmo via `ref` do accessibility tree
+por vezes reabrem/fecham o popup do `Select` sem selecionar, e o `textContent` lido via JS logo após um
+clique pode não refletir ainda o estado renderizado (a leitura por `getElementById(...).textContent`
+mostrava "Selecione" um instante depois de o screenshot já mostrar a opção certa escolhida). A forma
+confiável de validar por automação foi disparar `element.click()` via `javascript_tool` direto no
+elemento `[role="option"]` já aberto, com uma pequena espera antes de ler o resultado — não há ação
+de código a tomar.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
