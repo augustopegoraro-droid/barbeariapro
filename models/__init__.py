@@ -27,6 +27,7 @@ from .enums import (
     MessageSenderType,
     MessageType,
     PaymentMethod,
+    PurchaseOrderStatus,
     SaleStatus,
     ServiceCategory,
     StockMovementType,
@@ -64,6 +65,7 @@ from .commission_transfer import CommissionTransfer
 from .product import Product, ProductCategory, ProductVariant
 from .stock_movement import StockMovement
 from .sale import Sale, SaleItem, SalePayment
+from .supplier import PurchaseOrder, PurchaseOrderItem, Supplier
 from .billing import (
     BillingCredit,
     BillingCustomer,
@@ -190,6 +192,10 @@ __all__ = [
     "SaleItem",
     "SalePayment",
     "SaleStatus",
+    "Supplier",
+    "PurchaseOrder",
+    "PurchaseOrderItem",
+    "PurchaseOrderStatus",
     # integrações
     "IntegrationAccount",
     "CalendarSync",

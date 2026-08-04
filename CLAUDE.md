@@ -930,6 +930,47 @@ própria) — validação em prod restrita a `/health`/rotas 401 (sem credencial
 smoke test autenticado); fluxo completo ("+ Produtos" na comanda) já validado end-to-end em dev local
 antes do deploy.
 
+**Produtos/Estoque/Vendas — Fase 5: fornecedores e compras (D-93, 2026-08-04 — implementado, só
+dev/staging):** `suppliers`/`purchase_orders`/`purchase_order_items` (migration `0054`, molde
+`sales`/0053 — RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — arquivar fornecedor via `active`,
+cancelar pedido via `status`, nunca apagar linha). `PurchaseOrder` nasce `rascunho` →
+`PATCH /compras/{id}/enviar` marca `enviado` → `POST /compras/{id}/receber` lança
+`stock_movements` tipo `entrada_compra` (já existia no enum desde a 0052) via
+`apply_stock_movement` **por item recebido** e recalcula `ProductVariant.cost_avg` por média
+ponderada (`(stock_atual×cost_atual + qty_recebida×unit_cost) / (stock_atual+qty_recebida)`) —
+validado round-trip: 1º recebimento de 5un a R$10 → `cost_avg=10`; 2º de 5un a R$20 →
+`cost_avg=15`. Recebimento é **parcial-capaz**: `qty_received` acumula por item, `status` deriva do
+total recebido × total pedido (`recebido_parcial`/`recebido`, `received_at` carimbado só quando
+100%); pedir mais do que o restante → 422. Cancelar só antes de qualquer recebimento (`rascunho`/
+`enviado`) → 409 depois. **Correção durante a implementação:** `criar_pedido` bloqueia variação de
+produto sem `tracks_stock` (422) — sem essa checagem seria possível comprar/receber estoque de um
+produto que declara não ter controle de estoque, quebrando a garantia da Fase 2
+(`products.tracks_stock=false` nunca gera `stock_movements`). Permissões novas
+`suppliers.{view,manage}`/`purchases.{view,manage}` (bloco `_OPERATIONS` → recepção só `view`;
+`manage` só owner/manager via `_ALL`/`_MANAGER`, ela vende/opera estoque mas não fecha compra com
+fornecedor). Router `app/api/fornecedores.py` (CRUD fornecedores + ciclo de vida do pedido),
+auditado (`suppliers.supplier.*`/`purchases.order.*`). Frontend: `/admin/fornecedores`
+(`components/fornecedores/`: `fornecedor-panel.tsx` molde `categoria-panel.tsx`,
+`pedido-form-dialog.tsx` com carrinho multi-item [produto→variação→qtd+custo unit., molde
+`produto-picker.tsx`], `pedido-receber-dialog.tsx` com quantidade por item pré-preenchida com o
+restante, `pedidos-table.tsx` com badge de status + ações Enviar/Receber/Cancelar gated por
+`purchases.manage`) + `hooks/use-fornecedores.ts` + item "Fornecedores" na sidebar (grupo GESTÃO,
+`perm="suppliers.view"`). Suíte **719 pass / 2 ambientais / 0 regressões** (+14 em
+`tests/test_fornecedores.py`: RLS, RBAC recepção-vê-mas-não-gerencia, ciclo rascunho→enviado→
+recebido, custo médio ponderado, recebimento parcial completa em 2 chamadas, receber além do
+pedido→422, cancelar após recebimento→409, produto sem controle de estoque→422). Validado
+end-to-end no browser (dev local): criar fornecedor → criar pedido (carrinho com Refrigerante
+lata, 10un a R$2,50) → Enviar → Receber (recebimento total) → `stock_movements` mostra "Entrada
+(compra) +10" ligada ao pedido, saldo do produto sobe corretamente. **Achado de sessão (mesma
+causa do D-90/D-91, não é bug — documentado para não repetir a investigação):** clique por
+coordenada de pixel no `Select` de dentro de um `Dialog` volta a resetar visualmente a seleção de
+um campo irmão ao interagir com outro; usar `element.click()` via `javascript_tool` direto no
+`[role="option"]` (com uma pequena espera) é a forma confiável de validar por automação — o valor
+real do estado React nunca se perdeu, só a leitura/clique por coordenada é que é não-confiável
+sob a ferramenta de automação. **Pendente:** deploy em produção (migration `0054` +
+`sync_authz_catalog.py`); Fases 6-8 do plano (inventário/contagem física, relatórios avançados,
+extensibilidade kits/combos/cupons).
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

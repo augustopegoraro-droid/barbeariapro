@@ -180,6 +180,16 @@ class SaleStatus(str, enum.Enum):
     cancelada = "cancelada"
 
 
+class PurchaseOrderStatus(str, enum.Enum):
+    """Estado de um pedido de compra a fornecedor (Fase 5 de Produtos/Estoque/Vendas)."""
+
+    rascunho = "rascunho"
+    enviado = "enviado"
+    recebido_parcial = "recebido_parcial"
+    recebido = "recebido"
+    cancelado = "cancelado"
+
+
 class LeadStage(str, enum.Enum):
     """Estágios do funil/Kanban do CRM."""
 
