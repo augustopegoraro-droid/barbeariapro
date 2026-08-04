@@ -930,8 +930,8 @@ própria) — validação em prod restrita a `/health`/rotas 401 (sem credencial
 smoke test autenticado); fluxo completo ("+ Produtos" na comanda) já validado end-to-end em dev local
 antes do deploy.
 
-**Produtos/Estoque/Vendas — Fase 5: fornecedores e compras (D-93, 2026-08-04 — implementado, só
-dev/staging):** `suppliers`/`purchase_orders`/`purchase_order_items` (migration `0054`, molde
+**Produtos/Estoque/Vendas — Fase 5: fornecedores e compras (D-93, 2026-08-04 — ✅ DEPLOYADO em
+prod 2026-08-04):** `suppliers`/`purchase_orders`/`purchase_order_items` (migration `0054`, molde
 `sales`/0053 — RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — arquivar fornecedor via `active`,
 cancelar pedido via `status`, nunca apagar linha). `PurchaseOrder` nasce `rascunho` →
 `PATCH /compras/{id}/enviar` marca `enviado` → `POST /compras/{id}/receber` lança
@@ -967,9 +967,21 @@ coordenada de pixel no `Select` de dentro de um `Dialog` volta a resetar visualm
 um campo irmão ao interagir com outro; usar `element.click()` via `javascript_tool` direto no
 `[role="option"]` (com uma pequena espera) é a forma confiável de validar por automação — o valor
 real do estado React nunca se perdeu, só a leitura/clique por coordenada é que é não-confiável
-sob a ferramenta de automação. **Pendente:** deploy em produção (migration `0054` +
-`sync_authz_catalog.py`); Fases 6-8 do plano (inventário/contagem física, relatórios avançados,
-extensibilidade kits/combos/cupons).
+sob a ferramenta de automação. **✅ DEPLOYADO em prod 2026-08-04** (backend `87fb7fe` + frontend
+`1eb6721`; backup `~/predeploy_d93_fornecedores_20260804_101940.sql` na VM; migration `0054`
+aplicada, head `0054`; `sync_authz_catalog.py` rodado — catálogo com 72 permissões/9 papéis/298
+vínculos, igual ao dev local). **Achado do próprio deploy (corrigido na hora, não é dívida):**
+`scripts/sync_authz_catalog.py` lê `ADMIN_DATABASE_URL` (não `DATABASE_URL`) e essa variável
+**não está** no `.env` da VM (dívida já documentada desde o D-46) — sem ela o script cai no
+fallback `localhost`, que não existe dentro do container, e falha com "connection refused". Migration
+`0054` e o sync rodados via container avulso do backend montando o repo do host, como superuser
+`postgres`, na rede `barbearia_network` (molde D-60/D-67/D-89), passando `ADMIN_DATABASE_URL`
+explícito por `-e` no `docker run`. Rebuild `backend`+`frontend` só com
+`-f docker-compose.app.yml` (nunca combinar com `docker-compose.yml`, lição do D-89). Validado:
+5 containers healthy, `/health` 200, `/fornecedores`/`/compras` 401 sem token (existiam, protegidos),
+`app.`/apex 200 por HTTPS, `api./docs` 404 (V12 intacto), `/auth/login` responde 401 a senha errada
+(rota viva), logs do backend sem erro. **Pendente:** Fases 6-8 do plano (inventário/contagem física,
+relatórios avançados, extensibilidade kits/combos/cupons).
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
