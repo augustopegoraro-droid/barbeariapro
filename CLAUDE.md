@@ -854,8 +854,8 @@ render). **Não fechar** `components/ui/select.tsx`/`dialog.tsx` como pendência
 backup `~/predeploy_d90_fase2_estoque_*.sql`; validado `/health` 200, `/estoque/movimentacoes` 401 sem
 auth, `app.taylorethedy.com` 200).
 
-**Produtos/Estoque/Vendas — Fase 3: venda de balcão com baixa automática (2026-08-03 — implementado, só
-dev/staging):** `sales`/`sale_items`/`sale_payments` (migration `0053`, molde `commission_transfers`/0050
+**Produtos/Estoque/Vendas — Fase 3: venda de balcão com baixa automática (D-91, 2026-08-03/04 —
+✅ DEPLOYADO em prod 2026-08-04, migration `0053` aplicada, head `0053`):** `sales`/`sale_items`/`sale_payments` (migration `0053`, molde `commission_transfers`/0050
 — RLS+FORCE+GRANT incl. UPDATE, sem DELETE — é registro financeiro, nunca se apaga, só `cancelar`), par
 paralelo a `Appointment`/`AppointmentItem`/`Payment` **sem alterar nenhuma delas**: `sales.appointment_id`
 é opcional (`NULL` = venda de balcão pura; preenchido = anexada a um atendimento, sem tocar em
@@ -878,12 +878,18 @@ insuficiente→409, pagamento não bate→422, produto sem controle de estoque�
 estorna e cancelar 2×→409, venda anexada a atendimento sem alterar `Appointment`, RBAC, RLS). Validado
 end-to-end no browser (dev local) + via API: criar produto → dar entrada de estoque → `POST /vendas` →
 saldo desce na hora → tela `/admin/vendas` lista a venda → cancelar → estoque estorna e a UI atualiza
-sozinha (React Query invalida `vendas`/`estoque`/`produtos`). **Pendente:** Fases 4-8 do plano (venda
-integrada à comanda do `concluir-dialog.tsx`, fornecedores/compras, inventário, relatórios avançados,
-extensibilidade kits/combos/cupons).
+sozinha (React Query invalida `vendas`/`estoque`/`produtos`). **✅ DEPLOYADO em prod 2026-08-04**
+(backend `4170ebb` + frontend `8581a8b`; backup `~/predeploy_d92_vendas_20260804_115032.sql` na VM;
+migration `0053` rodada montando o repo do host no container `barbeariapro-backend` como superuser
+`postgres`, molde D-60/D-90; `scripts/sync_authz_catalog.py` rodado — catálogo com 68 permissões/9
+papéis/284 vínculos; rebuild `backend`+`frontend` via `docker compose -f docker-compose.app.yml up -d
+--build`; validado `/health` 200, `/vendas` e `/estoque/movimentacoes` 401 sem auth,
+`app.taylorethedy.com` 307→login, `taylorethedy.com` 200, logs do backend limpos). **Pendente:** Fases
+5-8 do plano (fornecedores/compras, inventário, relatórios avançados, extensibilidade kits/combos/
+cupons).
 
-**Produtos/Estoque/Vendas — Fase 4: venda integrada à comanda + financeiro (2026-08-03 — implementado,
-só dev/staging, sem migration):** bloco opcional **"+ Produtos"** dentro de
+**Produtos/Estoque/Vendas — Fase 4: venda integrada à comanda + financeiro (D-91, 2026-08-03/04 —
+✅ DEPLOYADO em prod 2026-08-04, junto com a Fase 3, sem migration própria):** bloco opcional **"+ Produtos"** dentro de
 `components/agenda/concluir-dialog.tsx` (usado tanto pelo admin quanto pelo barbeiro, já que ambos
 compartilham `ConcluirDialog`/`useConcluirAtendimento`): ao confirmar, se o carrinho de produtos tiver
 itens, `POST /vendas` roda **antes** de `useConcluirAtendimento` (com `appointment_id`/`client_id` do
@@ -911,7 +917,7 @@ vendas concluídas, `financial_summary` inclui `products` sem afetar `revenue`).
 browser (dev local): agendamento real do Taylor → "Concluir atendimento" → "+ Produtos" → carrinho com
 Refrigerante lata → confirmar → `Sale` criada com `appointment_id`/`client_id` corretos, estoque baixou
 (50→49), `Payment`/`AppointmentItem` do atendimento intactos (R$ 50,00 de receita de serviço, sem
-mistura com o R$ 6,00 do produto). **Achado de sessão (não é bug, documentado para not repetir a
+mistura com o R$ 6,00 do produto). **Achado de sessão (não é bug, documentado para não repetir a
 investigação):** a mesma imprecisão de automação por coordenada/timing do achado do D-90 (Select+Dialog)
 apareceu de novo neste fluxo — cliques via clique-de-coordenada ou mesmo via `ref` do accessibility tree
 por vezes reabrem/fecham o popup do `Select` sem selecionar, e o `textContent` lido via JS logo após um
@@ -919,7 +925,10 @@ clique pode não refletir ainda o estado renderizado (a leitura por `getElementB
 mostrava "Selecione" um instante depois de o screenshot já mostrar a opção certa escolhida). A forma
 confiável de validar por automação foi disparar `element.click()` via `javascript_tool` direto no
 elemento `[role="option"]` já aberto, com uma pequena espera antes de ler o resultado — não há ação
-de código a tomar.
+de código a tomar. **✅ DEPLOYADO em prod 2026-08-04** junto com a Fase 3 (mesmo deploy, sem migration
+própria) — validação em prod restrita a `/health`/rotas 401 (sem credencial real de produção à mão para
+smoke test autenticado); fluxo completo ("+ Produtos" na comanda) já validado end-to-end em dev local
+antes do deploy.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
