@@ -30,6 +30,7 @@ def test_tools_por_papel():
     assert {t["name"] for t in kernel_ia._tools_for_role("owner")} == {
         "navegar",
         "consultar_financas",
+        "consultar_estoque",
     }
     assert {t["name"] for t in kernel_ia._tools_for_role("barber")} == {
         "navegar",
@@ -44,16 +45,28 @@ def test_tools_por_papel_financas_gestor():
 
 
 def test_tools_por_papel_financas_recepcao_bloqueada():
-    # regressão: FULL_ACCESS inclui reception (navegação), mas dados financeiros
-    # são MANAGER_ACCESS apenas — recepção não pode ganhar consultar_financas.
+    # regressão: FULL_ACCESS inclui reception (navegação + estoque), mas dados
+    # financeiros são MANAGER_ACCESS apenas — recepção não ganha consultar_financas.
     names = {t["name"] for t in kernel_ia._tools_for_role("reception")}
-    assert names == {"navegar"}
+    assert names == {"navegar", "consultar_estoque"}
     assert "consultar_financas" not in names
 
 
 def test_tools_por_papel_financas_barbeiro_bloqueado():
     names = {t["name"] for t in kernel_ia._tools_for_role("barber")}
     assert "consultar_financas" not in names
+
+
+def test_tools_por_papel_estoque_full_access():
+    # diferente do financeiro: recepção TEM consultar_estoque (opera estoque na UI).
+    for role in ("owner", "manager", "reception"):
+        names = {t["name"] for t in kernel_ia._tools_for_role(role)}
+        assert "consultar_estoque" in names
+
+
+def test_tools_por_papel_estoque_barbeiro_bloqueado():
+    names = {t["name"] for t in kernel_ia._tools_for_role("barber")}
+    assert "consultar_estoque" not in names
 
 
 @pytest.mark.asyncio
@@ -101,6 +114,38 @@ async def test_consultar_financas_dispatch_topico_desconhecido():
     )
     assert "erro" in out
     assert ctx.finance_data_block is None
+
+
+@pytest.mark.asyncio
+async def test_consultar_estoque_dispatch_barbeiro_bloqueado():
+    ctx = KernelCtx(role="barber", org_id=1, barber_id=5)
+    # db=None prova que o RBAC é checado ANTES de qualquer query.
+    out = await kernel_ia._dispatch("consultar_estoque", {"topico": "alertas"}, None, ctx)
+    assert "erro" in out
+    assert ctx.stock_data_block is None
+
+
+@pytest.mark.asyncio
+async def test_consultar_estoque_dispatch_topico_desconhecido():
+    ctx = KernelCtx(role="owner", org_id=1)
+    out = await kernel_ia._dispatch("consultar_estoque", {"topico": "bogus"}, None, ctx)
+    assert "erro" in out
+    assert ctx.stock_data_block is None
+
+
+@pytest.mark.asyncio
+async def test_consultar_estoque_dispatch_recepcao_passa_do_rbac(monkeypatch):
+    # regressão-chave: diferente do financeiro, recepção passa a checagem de
+    # RBAC (o erro, se houver, viria do fetch de dados — mockado aqui — não do RBAC).
+    async def _fake_fetch(db, topic, periodo):
+        return "bloco de estoque falso"
+
+    monkeypatch.setattr(kernel_ia.kernel_ia_stock, "fetch_and_format", _fake_fetch)
+    ctx = KernelCtx(role="reception", org_id=1)
+    out = await kernel_ia._dispatch("consultar_estoque", {"topico": "alertas"}, None, ctx)
+    assert out == {"ok": True}
+    assert ctx.stock_topic == "alertas"
+    assert ctx.stock_data_block == "bloco de estoque falso"
 
 
 # ─── endpoint ──────────────────────────────────────────────────────────────────

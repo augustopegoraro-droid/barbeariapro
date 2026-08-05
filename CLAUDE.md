@@ -1046,6 +1046,32 @@ ponta — primeiro deploy real usando o script corrigido no D-93 — + `sync_aut
 parte, 73 permissões/9 papéis/302 vínculos; validado `/health` 200, rotas novas 401 sem token,
 `app.`/apex 200 por HTTPS). Ver D-94.
 
+**Kernel IA ganha visão de estoque — tool `consultar_estoque` (D-95, 2026-08-05 — implementado,
+só dev/staging):** o Kernel IA (D-57/D-58) nunca tinha visibilidade sobre o módulo de Produtos/
+Estoque/Vendas (Fases 1-7, D-90/D-94); esta decisão fecha essa lacuna, no mesmo molde
+anti-alucinação do `consultar_financas`. **Só consulta/leitura** — sem lançar ajuste/perda/entrada
+via chat nesta fase (decisão de escopo, reduz risco de mutação por linguagem natural).
+**RBAC: `FULL_ACCESS`** (owner/manager/**recepção**) — diferente do financeiro, que é
+`MANAGER_ACCESS`-only: estoque é dado operacional que a Raquel já opera na UI normal
+(`inventory.view`/`inventory.manage`), não dado financeiro sensível; barbeiro continua fora.
+Novo módulo `app/services/kernel_ia_stock.py` (par de `kernel_ia_finance.py`): `TOPICS =
+("alertas", "niveis", "giro")` — `alertas` reaproveita `inventory.low_stock_alerts`; `niveis` é
+nova função `management.stock_overview(db)` (total de variantes ativas rastreadas, quantas no
+mínimo/abaixo, quantas zeradas, valor total em estoque a custo médio); `giro` reaproveita
+`management.stock_turnover`. Deixado fora de propósito: `movimentacoes` (lista granular do
+ledger, sem pergunta natural de chat óbvia — melhor resolvida navegando para `/admin/estoque`).
+`kernel_ia.py` ganha o branch `consultar_estoque` em `_tools_for_role`/`_dispatch`/`answer()`
+(checagem RBAC redundante no dispatch, mesmo padrão de defesa em profundidade do financeiro) e o
+`action="stock_answer"` novo no contrato do endpoint. **Sem insight de LLM nesta fase** (dado
+operacional, sem playbook curado ainda — fácil adicionar depois reaproveitando
+`kernel_ia_finance.guard_insight`). Frontend: nenhuma mudança funcional (`kernel-ia-launcher.tsx`
+já trata qualquer `action` desconhecido mostrando a mensagem), só o union type de `action` em
+`use-kernel-ia.ts` ganhou `"stock_answer"` por clareza. Suíte **748 pass / 2 ambientais / 0
+regressões** (+15 testes: `tests/test_kernel_ia_stock.py` formatação pura, extensão de
+`tests/test_kernel_ia.py` para RBAC/dispatch — recepção TEM `consultar_estoque` diferente do
+financeiro, barbeiro não tem —, `tests/test_relatorios_produtos.py` para `stock_overview`).
+**Pendente:** deploy prod (sem migration — é só leitura sobre tabelas existentes).
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

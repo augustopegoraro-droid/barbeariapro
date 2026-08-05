@@ -18,6 +18,7 @@ import pytest_asyncio
 from sqlalchemy import create_engine, delete, select, text
 
 from app.db.session import AsyncSessionLocal, set_current_org
+from app.services import management
 from tests.conftest import SEED_ORG_ID
 from models import Product, ProductCategory, ProductVariant
 
@@ -189,3 +190,49 @@ async def test_barber_nao_pode_ver_produtos_mais_vendidos_403(client, barber_hea
         params={"date_from": today, "date_to": today},
     )
     assert resp.status_code == 403
+
+
+async def _overview() -> dict:
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        return await management.stock_overview(session)
+
+
+@pytest.mark.asyncio
+async def test_stock_overview_conta_variantes_por_faixa(client, auth_headers):
+    before = await _overview()
+
+    zerada = await _criar_produto(client, auth_headers, price="5.00")
+    com_estoque_1 = await _criar_produto(client, auth_headers, price="5.00")
+    com_estoque_10 = await _criar_produto(client, auth_headers, price="5.00")
+    await _entrada(client, auth_headers, com_estoque_1, "1")
+    await _entrada(client, auth_headers, com_estoque_10, "10")
+
+    after = await _overview()
+    assert after["total_variants"] == before["total_variants"] + 3
+    # `min_stock` default é 0: `zerada` (qty=0) fica <= 0 → conta em
+    # below_min_count E zero_stock_count; as outras duas (qty=1 e qty=10)
+    # ficam ACIMA do mínimo (0) e não contam em nenhuma das duas faixas.
+    assert after["zero_stock_count"] == before["zero_stock_count"] + 1
+    assert after["below_min_count"] == before["below_min_count"] + 1
+    assert isinstance(after["total_value"], float)
+    assert zerada != com_estoque_1 != com_estoque_10
+
+
+@pytest.mark.asyncio
+async def test_stock_overview_ignora_produto_sem_controle_de_estoque(client, auth_headers):
+    before = await _overview()
+
+    resp = await client.post(
+        "/produtos",
+        headers=auth_headers,
+        json={
+            "name": f"Produto Relatorio Teste {_suf()}",
+            "tracks_stock": False,
+            "variants": [{"name": "Único", "price": "5.00"}],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    after = await _overview()
+    assert after["total_variants"] == before["total_variants"]

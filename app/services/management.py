@@ -366,6 +366,33 @@ async def stock_turnover(db: AsyncSession, date_from: date, date_to: date) -> li
     return result
 
 
+async def stock_overview(db: AsyncSession) -> dict:
+    """Visão geral do estoque (variantes ativas/rastreadas): total, quantas
+    no mínimo ou abaixo (mesmo critério de `inventory.low_stock_alerts`),
+    quantas zeradas, e valor total em estoque a custo médio."""
+    rows = (
+        await db.execute(
+            select(ProductVariant.stock_qty, ProductVariant.min_stock, ProductVariant.cost_avg)
+            .join(Product, Product.id == ProductVariant.product_id)
+            .where(
+                Product.tracks_stock.is_(True),
+                ProductVariant.active.is_(True),
+                Product.active.is_(True),
+            )
+        )
+    ).all()
+    total = len(rows)
+    below_min = sum(1 for qty, min_stock, _ in rows if qty <= min_stock)
+    zero = sum(1 for qty, _, _ in rows if qty == 0)
+    total_value = sum((qty * cost) for qty, _, cost in rows)
+    return {
+        "total_variants": total,
+        "below_min_count": below_min,
+        "zero_stock_count": zero,
+        "total_value": float(total_value),
+    }
+
+
 async def financial_summary(db: AsyncSession, date_from: date, date_to: date) -> dict:
     """Resumo financeiro do período.
 

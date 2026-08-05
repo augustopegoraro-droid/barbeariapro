@@ -20,11 +20,20 @@ passa por `kernel_ia_finance.guard_insight` — qualquer número citado que não
 esteja no relatório real nem no playbook de referência é descartado antes de
 chegar ao usuário. Recepção e barbeiro continuam sem acesso a dados financeiros.
 
+**Estoque (2026-08-05):** owner/manager/**recepção** (`FULL_ACCESS`, diferente
+do financeiro que é `MANAGER_ACCESS`-only — estoque é dado operacional que a
+recepção já opera na UI normal, não dado financeiro sensível) ganham a tool
+`consultar_estoque`, mesmo padrão anti-alucinação: dados 100% de
+`app.services.inventory`/`app.services.management` (formatados por
+`kernel_ia_stock`), sem insight de LLM nesta fase (não há playbook de estoque
+curado ainda — fácil adicionar depois reaproveitando `kernel_ia_finance.
+guard_insight`). Barbeiro continua fora.
+
 Provedor isolado (Anthropic/Claude — D-77, antes OpenAI). Sem/`ANTHROPIC_API_KEY`
 inválida → mensagem amigável.
 
 Contrato: `answer(...) -> {"intent", "message", "action", "route", "task_id"}`
-onde `action ∈ {navigate, reschedule, finance_answer, answer, config, erro}`.
+onde `action ∈ {navigate, reschedule, finance_answer, stock_answer, answer, config, erro}`.
 """
 from __future__ import annotations
 
@@ -39,6 +48,7 @@ from app.core.config import settings
 from app.core.rbac import FULL_ACCESS, MANAGER_ACCESS
 from app.data.finance_playbook import PLAYBOOK
 from app.services import kernel_ia_finance
+from app.services import kernel_ia_stock
 from app.services import reschedule as reschedule_svc
 
 logger = logging.getLogger(__name__)
@@ -80,8 +90,11 @@ _SYSTEM = (
     "barbeiros, MRR/assinaturas, folha de pagamento, cobertura da folha pela receita "
     "recorrente, faturamento gerado pela IA/WhatsApp, clientes inativos ou horários "
     "ociosos na agenda, use `consultar_financas` (os dados reais vêm do banco).\n"
-    "2) Para abrir uma tela/página, use `navegar`.\n"
-    "3) Se o usuário for barbeiro e pedir remarcação do próprio turno, use "
+    "2) Se o pedido for sobre estoque de produtos — o que está acabando/precisa "
+    "repor, quantas variações estão baixas, valor total em estoque, ou giro/"
+    "velocidade de venda de produtos — use `consultar_estoque`.\n"
+    "3) Para abrir uma tela/página, use `navegar`.\n"
+    "4) Se o usuário for barbeiro e pedir remarcação do próprio turno, use "
     "`solicitar_remarcacao_turno`.\n"
     "Seja muito breve. Se nada servir, diga em uma frase que não encontrou e sugira o "
     "que ele pode pedir."
@@ -109,6 +122,8 @@ class KernelCtx:
     task_id: Optional[str] = None      # preenchido pela tool de remarcação
     finance_topic: Optional[str] = None        # preenchido pela tool consultar_financas
     finance_data_block: Optional[str] = None   # texto determinístico (sem passagem do LLM)
+    stock_topic: Optional[str] = None          # preenchido pela tool consultar_estoque
+    stock_data_block: Optional[str] = None     # texto determinístico (sem passagem do LLM)
 
 
 def _tools_for_role(role: str) -> list[dict]:
@@ -174,6 +189,39 @@ def _tools_for_role(role: str) -> list[dict]:
                 },
             }
         )
+    if role in FULL_ACCESS:  # owner/manager/reception — mesma composição de inventory.view
+        tools.append(
+            {
+                "name": "consultar_estoque",
+                "description": (
+                    "Consulta a situação REAL do estoque (dados exatos vindos do banco — "
+                    "você nunca calcula ou inventa números). Use para perguntas sobre o "
+                    "que está acabando/precisa repor (alertas), visão geral do estoque — "
+                    "quantas variações ativas, quantas no mínimo, valor total em estoque "
+                    "(niveis), ou giro/velocidade de venda de produtos (giro)."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "topico": {
+                            "type": "string",
+                            "enum": list(kernel_ia_stock.TOPICS),
+                            "description": (
+                                "alertas: variações no mínimo ou abaixo, precisam repor\n"
+                                "niveis: visão geral — total de variações, quantas em alerta, valor total em estoque\n"
+                                "giro: unidades vendidas ÷ estoque médio no período, por produto"
+                            ),
+                        },
+                        "periodo": {
+                            "type": "string",
+                            "enum": ["hoje", "ontem", "semana", "mes"],
+                            "description": "Só usado em 'giro'; ignorado em 'alertas'/'niveis'.",
+                        },
+                    },
+                    "required": ["topico"],
+                },
+            }
+        )
     if role not in FULL_ACCESS:  # barbeiro
         tools.append(
             {
@@ -224,6 +272,21 @@ async def _dispatch(name: str, args: dict, db: AsyncSession, ctx: KernelCtx) -> 
             return {"erro": "falha ao buscar dados"}
         ctx.finance_topic = topic
         ctx.finance_data_block = data_block
+        return {"ok": True}
+    if name == "consultar_estoque":
+        if ctx.role not in FULL_ACCESS:  # defesa em profundidade — mesmo padrão do navegar
+            return {"erro": "acesso restrito a owner/manager/recepção"}
+        topic = (args.get("topico") or "").strip()
+        if topic not in kernel_ia_stock.TOPICS:
+            return {"erro": "topico desconhecido"}
+        periodo = (args.get("periodo") or "mes").strip()
+        try:
+            data_block = await kernel_ia_stock.fetch_and_format(db, topic, periodo)
+        except Exception:
+            logger.exception("consultar_estoque falhou (topico=%s)", topic)
+            return {"erro": "falha ao buscar dados"}
+        ctx.stock_topic = topic
+        ctx.stock_data_block = data_block
         return {"ok": True}
     return {"erro": f"ferramenta desconhecida: {name}"}
 
@@ -327,6 +390,13 @@ async def answer(
                     return {**base, "intent": "financeiro", "action": "erro",
                             "message": "Não consegui buscar esse indicador agora. Tenta de novo "
                                        "ou peça pra abrir o Financeiro."}
+                if tc.name == "consultar_estoque":
+                    if ctx.stock_data_block:
+                        return {**base, "intent": ctx.stock_topic, "action": "stock_answer",
+                                "message": ctx.stock_data_block}
+                    return {**base, "intent": "estoque", "action": "erro",
+                            "message": "Não consegui buscar essa informação de estoque agora. "
+                                       "Tenta de novo ou peça pra abrir o Estoque."}
                 tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
                                      "content": json.dumps(result, ensure_ascii=False)})
             messages.append({"role": "user", "content": tool_results})
