@@ -1046,8 +1046,8 @@ ponta — primeiro deploy real usando o script corrigido no D-93 — + `sync_aut
 parte, 73 permissões/9 papéis/302 vínculos; validado `/health` 200, rotas novas 401 sem token,
 `app.`/apex 200 por HTTPS). Ver D-94.
 
-**Kernel IA ganha visão de estoque — tool `consultar_estoque` (D-95, 2026-08-05 — implementado,
-só dev/staging):** o Kernel IA (D-57/D-58) nunca tinha visibilidade sobre o módulo de Produtos/
+**Kernel IA ganha visão de estoque — tool `consultar_estoque` (D-95, 2026-08-05 — ✅ DEPLOYADO em
+prod 2026-08-05, backend `8eb66df` + frontend `553f908`, sem migration):** o Kernel IA (D-57/D-58) nunca tinha visibilidade sobre o módulo de Produtos/
 Estoque/Vendas (Fases 1-7, D-90/D-94); esta decisão fecha essa lacuna, no mesmo molde
 anti-alucinação do `consultar_financas`. **Só consulta/leitura** — sem lançar ajuste/perda/entrada
 via chat nesta fase (decisão de escopo, reduz risco de mutação por linguagem natural).
@@ -1069,8 +1069,11 @@ já trata qualquer `action` desconhecido mostrando a mensagem), só o union type
 `use-kernel-ia.ts` ganhou `"stock_answer"` por clareza. Suíte **748 pass / 2 ambientais / 0
 regressões** (+15 testes: `tests/test_kernel_ia_stock.py` formatação pura, extensão de
 `tests/test_kernel_ia.py` para RBAC/dispatch — recepção TEM `consultar_estoque` diferente do
-financeiro, barbeiro não tem —, `tests/test_relatorios_produtos.py` para `stock_overview`).
-**Pendente:** deploy prod (sem migration — é só leitura sobre tabelas existentes).
+financeiro, barbeiro não tem —, `tests/test_relatorios_produtos.py` para `stock_overview`). **✅ DEPLOYADO em prod 2026-08-05**
+(molde D-93/D-94: `git pull` do backend + `git -C barbearia-frontend pull` [submódulo, deploy key
+própria] + rebuild `backend`+`frontend` via `docker compose -f docker-compose.app.yml up -d
+--build`; validado ambos `healthy`, `/health` 200, `/kernel-ia/query` e `/estoque/alertas` 401 sem
+token, `app.`/apex 200 por HTTPS, `/docs` 404 intacto, sem erros nos logs).
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
