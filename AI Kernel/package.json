@@ -1,0 +1,20 @@
+{
+  "name": "barbearia-pro",
+  "version": "0.1.0",
+  "description": "BarbeariaPro — Sistema Operacional de IA (AI Kernel) aplicado a uma barbearia",
+  "license": "MIT",
+  "scripts": {
+    "demo": "ts-node src/index.ts",
+    "cards": "ts-node src/cards.cli.ts",
+    "test": "node --require ts-node/register --test 'src/__tests__/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  }
+}
