@@ -1075,6 +1075,17 @@ própria] + rebuild `backend`+`frontend` via `docker compose -f docker-compose.a
 --build`; validado ambos `healthy`, `/health` 200, `/kernel-ia/query` e `/estoque/alertas` 401 sem
 token, `app.`/apex 200 por HTTPS, `/docs` 404 intacto, sem erros nos logs).
 
+**Site público — seção "Não é apenas um serviço. É uma experiência." (2026-08-13 — ✅ DEPLOYADO em
+prod, sem migration):** novo componente `barbearia-public/components/ritual.tsx` (server component,
+zero JS) inserido em `app/page.tsx` entre "Serviços" e "Nossa casa" — 6 cards (Consulta/Corte/Textura/
+Cor/Finalização/Cuidado) com foto still-life/macro editorial em `public/ritual/*.webp`, geradas
+propositalmente **sem rosto humano nem cena de atendimento "documentada"** (evita fingir ser registro
+real do salão), na paleta ouro/grafite do D-82. Reaproveita só tokens/padrões já existentes
+(`bg-superficie`, `border-borda-sutil`, `--sombra-1`, `font-display`) — nenhuma mudança em `globals.css`
+nem no backend. Deploy no molde D-79/D-80/D-82: `git pull --ff-only` + `docker compose -f
+docker-compose.app.yml up -d --build public` (backend recriado junto). **Rollback:** `git revert
+9031a37` (ou `git reset --hard 56067d8`) + repetir o rebuild — sem migration, reverter é seguro.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
