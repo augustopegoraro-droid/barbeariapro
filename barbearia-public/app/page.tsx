@@ -3,6 +3,7 @@ import { fetchInfo, type PublicInfo, type PublicService } from "@/lib/api";
 import { WEEKDAYS_PT } from "@/lib/format";
 import { SiteHeader } from "@/components/site-header";
 import { Hero } from "@/components/hero";
+import { Ritual } from "@/components/ritual";
 import {
   Depoimentos,
   NOTA_GOOGLE,
@@ -212,6 +213,8 @@ export default async function HomePage() {
             ))}
           </div>
         </section>
+
+        <Ritual />
 
         {/* A casa — fotos reais da fachada e da vista aérea */}
         <section
