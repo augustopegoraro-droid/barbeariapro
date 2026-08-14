@@ -20,3 +20,5 @@ user-agents>=2.2
 pillow>=10.3
 pillow-heif>=0.16
 python-multipart>=0.0.9
+# Notificações push (Web Push/VAPID) para profissionais e clientes finais.
+pywebpush>=2.0

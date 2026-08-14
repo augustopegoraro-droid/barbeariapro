@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SolidLink } from "@/components/ui/buttons";
 import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { Toast, type ToastData } from "@/components/ui/toast";
+import AtivarNotificacoes from "@/components/ativar-notificacoes";
 
 export default function MeusAgendamentosPage() {
   const [items, setItems] = useState<PublicAppointment[] | null>(null);
@@ -79,6 +80,8 @@ export default function MeusAgendamentosPage() {
         </Link>
         <h1 className="mt-4 font-display text-2xl">Meus agendamentos</h1>
       </header>
+
+      {items !== null && items.length > 0 && <AtivarNotificacoes />}
 
       {noSession && (
         <div className="mt-6">

@@ -1127,6 +1127,45 @@ frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i1
 
 ---
 
+**Notificações push no celular — profissionais e clientes (D-96, 2026-08-14 — implementado, só
+dev/staging; plano em `/Users/apleandro/.claude/plans/lazy-squishing-minsky.md`):** Web Push padrão
+(VAPID, `pywebpush`), sem Firebase/FCM — funciona em Android (Chrome) e iOS 16.4+ (exige o app
+**adicionado à Tela de Início**, limitação da Apple). Migration `0056` (molde `sales`/0053 —
+RLS+FORCE, GRANT SELECT/INSERT/UPDATE, sem DELETE): `push_subscriptions` (uma subscrição de
+navegador por dispositivo, ligada a `user_id` OU `client_id`, nunca os dois — CHECK) +
+`push_notification_log` (molde de `MessageLog`, mas genérico para os dois tipos de assinante;
+idempotência atômica por `idempotency_key`, canal independente do WhatsApp). `app/services/push.py`:
+`dispatch()` reserva a key e envia a todos os dispositivos ativos do assinante (revoga subscrição
+morta em 404/410); `notify_booking_confirmation` dispara a confirmação **imediata** do cliente ao
+agendar pelo site público (`BackgroundTasks`, molde `calendar_sync.push_appointment`);
+`run_near_reminders` cobre o lembrete "de última hora" (30min por padrão,
+`push_client_near_lead_minutes`/`push_professional_lead_minutes`) tanto do cliente quanto do
+profissional (via `UserUnit.barber_id`), numa janela de cron bem mais fina que o lembrete de 24h.
+`app/services/reminders.py::run()` (o cron de 24h existente) ganhou um segundo branch de push em
+paralelo ao WhatsApp — canais independentes, idempotência própria. Endpoints:
+`POST/DELETE /notificacoes/push/subscription` (equipe, JWT, self-service — sem permissão nova no
+catálogo) em `app/api/push.py`; `POST/DELETE /public/{subdomain}/push/subscription` (cliente final,
+cookie de sessão) em `app/api/public.py`; `POST /internal/push/near-reminders/run` (cron novo do
+n8n a cada ~10min, `X-Bot-Token`) — **pendência operacional:** este cron ainda não existe no n8n
+(molde `docs/GESTOR_CRON_N8N.md`). **Frontend:** `barbearia-public/` (já PWA) ganhou os listeners de
+`push`/`notificationclick` no `sw.js` (`SW_VERSION=v5-push-2026-08-14`) + `lib/push.ts` +
+`components/ativar-notificacoes.tsx` (tela de sucesso do agendamento + "meus agendamentos″).
+`barbearia-frontend/` (painel da equipe) **virou PWA pela primeira vez** — `manifest.webmanifest` +
+`sw.js` novos, reaproveitando os mesmos ícones "T" (`icon-192.png`/`icon-512.png`/
+`apple-touch-icon.png`, copiados do site público, D-82) — + `lib/push.ts` + `hooks/
+use-push-subscription.ts` + banner "Ativar notificações" no layout do barbeiro (`app/barbeiro/
+layout.tsx`, área que não usa o `AdminShell`, D-87). Env nova nos dois frontends:
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY`. Suíte **+7 em `tests/test_push.py`** (subscrição self-service,
+confirmação imediata dispara o claim, idempotência não duplica, revogação em 404/410 simulado, RLS
+entre orgs); build+tsc limpos nos dois frontends. **Pendências antes de produção:** gerar o par de
+chaves VAPID (`pywebpush`/`py_vapid` CLI) e provisionar `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` no
+`.env` da VM (sem elas o envio é ignorado com graça — `_vapid_configured()` retorna `False`); criar o
+cron de ~10min no n8n; aplicar a migration `0056` em prod (molde D-89 a D-95: montar o repo do host
+no container do backend, rodar como superuser via `ADMIN_DATABASE_URL`); validação visual/manual do
+fluxo de push num celular real (Android + iOS instalado).
+
+---
+
 ## 8. Roadmap de execução (decidido)
 
 - **Fase 0 — Memória técnica:** este `CLAUDE.md`. ✅

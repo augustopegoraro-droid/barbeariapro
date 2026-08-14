@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.dates import local_tz
 from app.services.whatsapp import send_text
+from app.services import push as push_svc
+from models import PushSubscriberType
 import app.services.conversation as _conv_svc
 from models import (
     Appointment,
@@ -211,5 +213,20 @@ async def run(org_id: int, session: AsyncSession) -> dict[str, int]:
                 .values(delivery_status=DeliveryStatus.failed, idempotency_key=None)
             )
             skipped += 1
+
+        # Push (canal independente do WhatsApp acima — falha de um não afeta o
+        # outro; idempotência própria em `push_notification_log`).
+        await push_svc.dispatch(
+            session,
+            org_id=org_id,
+            kind="reminder_24h",
+            idempotency_key=f"reminder_24h_push_v1:{appt.id}:{appt.start_at:%Y%m%dT%H%M}",
+            subscriber_type=PushSubscriberType.client,
+            user_id=None,
+            client_id=client.id,
+            appointment_id=appt.id,
+            title="Lembrete de agendamento ✂️",
+            body=message,
+        )
 
     return {"sent": sent, "skipped": skipped, "total_targets": len(rows)}

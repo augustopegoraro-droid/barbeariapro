@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status as http_status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -42,6 +43,7 @@ from app.services.availability import free_slots
 from app.services.consent import set_consent
 from app.services import media
 from app.services.calendar_sync import push_appointment
+from app.services import push as push_svc
 from app.services.public_cache import INFO_CACHE_TTL_SECONDS, info_cache_key
 from app.services.scheduling import barber_has_conflict
 from app.services.tenant import org_id_by_subdomain
@@ -59,6 +61,8 @@ from models import (
     ConsentStatus,
     ContactChannel,
     Organization,
+    PushSubscriberType,
+    PushSubscription,
     Service,
     Unit,
 )
@@ -571,6 +575,7 @@ async def book_appointment(
     await db.commit()
 
     background_tasks.add_task(push_appointment, appt_id, org_id, "upsert")
+    background_tasks.add_task(push_svc.notify_booking_confirmation, appt_id, org_id)
     record_event(
         organization_id=org_id,
         action="public.appointment_created",
@@ -717,3 +722,79 @@ async def logout(
     response.delete_cookie(
         SESSION_COOKIE, domain=settings.public_cookie_domain or None, path="/"
     )
+
+
+# ─── POST/DELETE /push/subscription ──────────────────────────────────────────
+
+
+class PublicSubscribeIn(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+    user_agent: Optional[str] = None
+
+
+@router.post("/push/subscription", status_code=http_status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def public_subscribe_push(
+    body: PublicSubscribeIn,
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> None:
+    await db.execute(
+        pg_insert(PushSubscription)
+        .values(
+            organization_id=org_id,
+            subscriber_type=PushSubscriberType.client,
+            user_id=None,
+            client_id=session.client_id,
+            endpoint=body.endpoint,
+            p256dh=body.p256dh,
+            auth_key=body.auth,
+            user_agent=body.user_agent,
+        )
+        .on_conflict_do_update(
+            index_elements=["endpoint"],
+            set_={
+                "client_id": session.client_id,
+                "user_id": None,
+                "subscriber_type": PushSubscriberType.client,
+                "p256dh": body.p256dh,
+                "auth_key": body.auth,
+                "user_agent": body.user_agent,
+                "revoked_at": None,
+            },
+        )
+    )
+    await db.commit()
+
+
+class PublicUnsubscribeIn(BaseModel):
+    endpoint: str
+
+
+@router.delete("/push/subscription", status_code=http_status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def public_unsubscribe_push(
+    body: PublicUnsubscribeIn,
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> None:
+    row = (
+        await db.execute(
+            select(PushSubscription).where(
+                PushSubscription.endpoint == body.endpoint,
+                PushSubscription.client_id == session.client_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Subscrição não encontrada.")
+    row.revoked_at = datetime.now(timezone.utc)
+    await db.commit()

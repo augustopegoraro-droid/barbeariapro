@@ -135,4 +135,11 @@ export const api = {
       method: "POST",
     }),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
+  subscribePush: (sub: { endpoint: string; p256dh: string; auth: string; user_agent?: string }) =>
+    request<void>("/push/subscription", { method: "POST", body: JSON.stringify(sub) }),
+  unsubscribePush: (endpoint: string) =>
+    request<void>("/push/subscription", {
+      method: "DELETE",
+      body: JSON.stringify({ endpoint }),
+    }),
 };

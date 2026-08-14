@@ -233,3 +233,8 @@ class AttachmentMediaType(str, enum.Enum):
     image = "image"
     document = "document"
     video = "video"
+
+
+class PushSubscriberType(str, enum.Enum):
+    user = "user"
+    client = "client"

@@ -29,6 +29,7 @@ from .enums import (
     MessageType,
     PaymentMethod,
     PurchaseOrderStatus,
+    PushSubscriberType,
     SaleStatus,
     ServiceCategory,
     StockMovementType,
@@ -105,6 +106,7 @@ from .audit import AuditLog
 from .client_visibility import ClientVisibilitySettings
 from .consent import ConsentRecord
 from .client_session import ClientSession
+from .push_notification import PushSubscription, PushNotificationLog
 
 __all__ = [
     "Base",
@@ -122,6 +124,7 @@ __all__ = [
     "MessageSenderType",
     "MessageType",
     "PaymentMethod",
+    "PushSubscriberType",
     "ServiceCategory",
     "SubscriptionStatus",
     "SyncStatus",
@@ -236,4 +239,6 @@ __all__ = [
     "ConsentRecord",
     # site público do cliente final (D-79)
     "ClientSession",
+    "PushSubscription",
+    "PushNotificationLog",
 ]

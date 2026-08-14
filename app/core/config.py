@@ -138,5 +138,15 @@ class Settings(BaseSettings):
     reminder_lead_hours: int = 24   # antecedência do lembrete
     reminder_window_hours: int = 2  # largura da janela (sobrepõe cron horário)
 
+    # Notificações push (Web Push/VAPID) — profissionais e clientes finais.
+    # Chaves geradas uma vez (CLI do `pywebpush`) e guardadas só no .env; vazias
+    # em dev/staging = envio desligado com graça (ver app/services/push.py).
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:contato@taylorethedy.com"
+    push_professional_lead_minutes: int = 30  # lembrete do profissional
+    push_client_near_lead_minutes: int = 30   # lembrete "de última hora" do cliente
+    push_near_window_minutes: int = 12        # janela do cron de ~10min (sobreposição)
+
 
 settings = Settings()  # type: ignore[call-arg]
