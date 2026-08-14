@@ -81,6 +81,7 @@ services:
         # Em produção: definir NEXT_PUBLIC_API_URL=https://api.taylorethedy.com.br no .env
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
         NEXT_PUBLIC_ORG_ID: ${NEXT_PUBLIC_ORG_ID:-3}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
     image: barbeariapro-frontend
     container_name: barbeariapro-app-frontend
     restart: unless-stopped
@@ -114,6 +115,7 @@ services:
         NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
         NEXT_PUBLIC_TENANT_SLUG: ${PUBLIC_TENANT_SLUG:-taylor}
         NEXT_PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://taylorethedy.com}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
     image: barbeariapro-public
     container_name: barbeariapro-app-public
     restart: unless-stopped
