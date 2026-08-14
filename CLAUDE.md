@@ -1085,6 +1085,11 @@ real do salão), na paleta ouro/grafite do D-82. Reaproveita só tokens/padrões
 nem no backend. Deploy no molde D-79/D-80/D-82: `git pull --ff-only` + `docker compose -f
 docker-compose.app.yml up -d --build public` (backend recriado junto). **Rollback:** `git revert
 9031a37` (ou `git reset --hard 56067d8`) + repetir o rebuild — sem migration, reverter é seguro.
+**Complemento (mesmo dia, commit `9f4d279`):** régua de estatísticas do `Hero` (`hero.tsx`) portou o
+acabamento visual do mesmo redesign — números passam de `font-display` (serifada) para sans-serif
+`font-semibold` (mais legível como dado), e a estatística "Nota Google" ganha 5 estrelas douradas ao
+lado do valor (`estrelas: boolean` novo no array `numeros`). Só CSS/JSX, sem mudança de dado/API.
+Rollback: `git revert 9f4d279` + rebuild `public`.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
