@@ -1127,8 +1127,9 @@ frontend · next-auth beta / sem refresh token · acessibilidade fraca · sem i1
 
 ---
 
-**Notificações push no celular — profissionais e clientes (D-96, 2026-08-14 — implementado, só
-dev/staging; plano em `/Users/apleandro/.claude/plans/lazy-squishing-minsky.md`):** Web Push padrão
+**Notificações push no celular — profissionais e clientes (D-96, 2026-08-14 — ✅ DEPLOYADO em prod
+2026-08-14, migration `0056` aplicada, head `0056`; plano em
+`/Users/apleandro/.claude/plans/lazy-squishing-minsky.md`):** Web Push padrão
 (VAPID, `pywebpush`), sem Firebase/FCM — funciona em Android (Chrome) e iOS 16.4+ (exige o app
 **adicionado à Tela de Início**, limitação da Apple). Migration `0056` (molde `sales`/0053 —
 RLS+FORCE, GRANT SELECT/INSERT/UPDATE, sem DELETE): `push_subscriptions` (uma subscrição de
@@ -1146,8 +1147,10 @@ paralelo ao WhatsApp — canais independentes, idempotência própria. Endpoints
 `POST/DELETE /notificacoes/push/subscription` (equipe, JWT, self-service — sem permissão nova no
 catálogo) em `app/api/push.py`; `POST/DELETE /public/{subdomain}/push/subscription` (cliente final,
 cookie de sessão) em `app/api/public.py`; `POST /internal/push/near-reminders/run` (cron novo do
-n8n a cada ~10min, `X-Bot-Token`) — **pendência operacional:** este cron ainda não existe no n8n
-(molde `docs/GESTOR_CRON_N8N.md`). **Frontend:** `barbearia-public/` (já PWA) ganhou os listeners de
+n8n a cada ~10min, `X-Bot-Token`) — **✅ cron criado e publicado no n8n** ("BarbeariaPro Cron - Push
+Lembrete Ultima Hora", clonado do workflow de 24h existente, mesma expressão de token
+`{{ $env.BOT_API_KEY }}`; `*/10 * * * *`; testado manualmente via "Execute workflow" →
+`{sent:0, skipped:0, total_targets:0}`, 200 OK). **Frontend:** `barbearia-public/` (já PWA) ganhou os listeners de
 `push`/`notificationclick` no `sw.js` (`SW_VERSION=v5-push-2026-08-14`) + `lib/push.ts` +
 `components/ativar-notificacoes.tsx` (tela de sucesso do agendamento + "meus agendamentos″).
 `barbearia-frontend/` (painel da equipe) **virou PWA pela primeira vez** — `manifest.webmanifest` +
@@ -1157,12 +1160,22 @@ use-push-subscription.ts` + banner "Ativar notificações" no layout do barbeiro
 layout.tsx`, área que não usa o `AdminShell`, D-87). Env nova nos dois frontends:
 `NEXT_PUBLIC_VAPID_PUBLIC_KEY`. Suíte **+7 em `tests/test_push.py`** (subscrição self-service,
 confirmação imediata dispara o claim, idempotência não duplica, revogação em 404/410 simulado, RLS
-entre orgs); build+tsc limpos nos dois frontends. **Pendências antes de produção:** gerar o par de
-chaves VAPID (`pywebpush`/`py_vapid` CLI) e provisionar `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` no
-`.env` da VM (sem elas o envio é ignorado com graça — `_vapid_configured()` retorna `False`); criar o
-cron de ~10min no n8n; aplicar a migration `0056` em prod (molde D-89 a D-95: montar o repo do host
-no container do backend, rodar como superuser via `ADMIN_DATABASE_URL`); validação visual/manual do
-fluxo de push num celular real (Android + iOS instalado).
+entre orgs); build+tsc limpos nos dois frontends.
+> **Achado do próprio deploy (corrigido antes de terminar, não é dívida):** o `proxy.ts` (middleware
+> de auth do painel) redirecionava `/sw.js`/`/manifest.webmanifest`/ícones para `/login` quando
+> deslogado — o navegador recebia HTML em vez de JS/JSON e o registro do service worker falhava em
+> silêncio (`RegisterSW` roda em toda página, inclusive `/login`). Fix: matcher do `proxy.ts` exclui
+> esses paths (commit `b6dbc01`), redeployado antes do smoke test final.
+**✅ DEPLOYADO em prod 2026-08-14** (backend `1f73716`→`700c8e2` + frontend `677bd24`→`b6dbc01`;
+migration `0056` rodada via `deploy/update.sh` de ponta a ponta; backup `~/predeploy_d96_push_
+20260814_174431.sql`): chaves VAPID geradas (`py_vapid`) e provisionadas no `.env` da VM; build args
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY` adicionados aos 2 Dockerfiles + `docker-compose.app.yml` (reaproveita
+`VAPID_PUBLIC_KEY` do backend, sem variável duplicada); cron `/internal/push/near-reminders/run`
+criado e publicado no n8n. Validado: 5 containers healthy, `/health` 200, `/notificacoes/push/
+subscription` 401 sem token, `sw.js`/`manifest.webmanifest`/ícones 200 sem login em
+`app.taylorethedy.com`, `/admin/agenda` ainda protegido (307), execução manual do cron novo retornou
+200 com o contrato esperado. **Falta só:** validação visual num celular real (Android + iOS
+instalado) — sem dispositivo físico disponível nesta sessão.
 
 ---
 

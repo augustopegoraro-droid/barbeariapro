@@ -3129,7 +3129,7 @@ logs do backend sem erro.
 
 ---
 
-### D-96 — Notificações push (Web Push/VAPID): profissionais e clientes — 2026-08-14 (implementado, só dev/staging)
+### D-96 — Notificações push (Web Push/VAPID): profissionais e clientes — 2026-08-14 (✅ DEPLOYADO em prod 2026-08-14)
 
 Pedido do dono: avisar no celular tanto **profissionais** (próximos atendimentos) quanto **clientes**
 (horário agendado). Perguntado diretamente na sessão: profissional recebe **lembrete antes do horário**
@@ -3166,11 +3166,29 @@ idempotência não duplica, revogação em 404/410 simulado, RLS entre orgs). Su
 (mesmas falhas pré-existentes de sempre + 1 flake de teste conhecido por ordem de execução, não regressão —
 ver dívida "Suíte depende do estado acumulado do staging"). `tsc`/`next build` limpos nos dois frontends.
 
-**Pendências antes de produção (nenhuma delas é código):** gerar o par de chaves VAPID
-(`pywebpush`/`py_vapid`) e provisionar `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` no `.env` da VM (sem elas o
-envio é ignorado com graça); criar o cron de ~10min no n8n chamando `/internal/push/near-reminders/run`;
-aplicar a migration `0056` em prod (molde D-89 a D-95); push do submódulo `barbearia-frontend` (repo
-privado — mudança local não sobe sozinha); validação manual num celular real (Android + iOS instalado).
+**Achado do próprio deploy (corrigido no mesmo commit antes de terminar):** o `proxy.ts` (middleware de
+auth do painel, `barbearia-frontend`) tinha um matcher que redirecionava `/sw.js`/`/manifest.webmanifest`/
+ícones para `/login` quando deslogado — o navegador recebia HTML em vez de JS/JSON e o registro do service
+worker falhava em silêncio (`RegisterSW` roda em toda página, inclusive `/login`, então o painel nunca teria
+conseguido registrar o SW). Fix: matcher exclui `sw\.js`, `manifest\.webmanifest`, `icon-.*\.png`,
+`apple-touch-icon\.png` (commit `b6dbc01`), validado com `curl` sem cookie de sessão retornando 200 antes do
+smoke test final.
+
+**✅ DEPLOYADO em prod 2026-08-14** (backend `1f73716`→`700c8e2`, frontend `677bd24`→`b6dbc01`, molde
+D-89 a D-95): backup `~/predeploy_d96_push_20260814_174431.sql` → `deploy/update.sh` rodado de ponta a
+ponta (migration `0056` + rebuild backend/frontend/public) → chaves VAPID geradas via `py_vapid` e
+provisionadas no `.env` da VM (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`) → build args
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY` adicionados aos Dockerfiles + `docker-compose.app.yml` (reaproveita
+`VAPID_PUBLIC_KEY` do backend) → rebuild do frontend com o fix do `proxy.ts`. Cron novo criado no editor do
+n8n via túnel SSH (`gcloud compute ssh ... -L 5678:localhost:5678`): duplicado do workflow "BarbeariaPro
+Cron - Lembrete 24h" existente (preserva a expressão `{{ $env.BOT_API_KEY }}` do header sem expor o valor),
+renomeado para "BarbeariaPro Cron - Push Lembrete Ultima Hora", cron trocado para `*/10 * * * *`, URL do
+nó HTTP trocada para `/internal/push/near-reminders/run`, publicado e testado manualmente ("Execute
+workflow") — resposta `{sent:0, skipped:0, total_targets:0}`, 200 OK (sem agendamentos na janela no momento
+do teste). Validado: 5 containers healthy, `/health` 200, `/notificacoes/push/subscription` 401 sem token,
+migration head `0056`, `sw.js`/`manifest.webmanifest`/ícones 200 sem sessão em `app.taylorethedy.com`,
+rotas protegidas do painel continuam 307 pro login. **Falta só:** validação visual do fluxo completo num
+celular real (Android + iOS instalado) — sem dispositivo físico disponível nesta sessão.
 
 ---
 
