@@ -29,13 +29,26 @@ export function Hero({
   endereco: string;
 }) {
   const numeros = [
-    { valor: ANOS_DE_CASA, rotulo: "Em Palmas" },
-    { valor: nota, rotulo: `${avaliacoes} avaliações · Google` },
+    { valor: ANOS_DE_CASA, rotulo: "Em Palmas", estrelas: false },
+    {
+      valor: nota,
+      rotulo: `${avaliacoes} avaliações · Google`,
+      estrelas: true,
+    },
     profissionais > 0
-      ? { valor: String(profissionais), rotulo: "Profissionais" }
+      ? {
+          valor: String(profissionais),
+          rotulo: "Profissionais",
+          estrelas: false,
+        }
       : null,
-    faixaHorario ? { valor: faixaHorario, rotulo: "Funcionamento" } : null,
-  ].filter((n): n is { valor: string; rotulo: string } => n !== null);
+    faixaHorario
+      ? { valor: faixaHorario, rotulo: "Funcionamento", estrelas: false }
+      : null,
+  ].filter(
+    (n): n is { valor: string; rotulo: string; estrelas: boolean } =>
+      n !== null,
+  );
 
   /* No mobile a régua quebra em 2 colunas; a partir de sm cada número ganha a
      sua, seja qual for a quantidade que sobreviveu aos dados da API. */
@@ -113,8 +126,16 @@ export function Hero({
             >
               {numeros.map((n) => (
                 <div key={n.rotulo} className="bg-fundo px-4 py-5 text-center">
-                  <dt className="font-display tnum text-2xl text-ouro">
+                  <dt className="tnum text-2xl font-semibold tracking-tight text-ouro">
                     {n.valor}
+                    {n.estrelas && (
+                      <span
+                        aria-hidden
+                        className="ml-1 align-middle text-[0.5em] tracking-[0.06em] text-ouro"
+                      >
+                        ★★★★★
+                      </span>
+                    )}
                   </dt>
                   <dd className="mt-1 text-xs text-tinta-fraca">{n.rotulo}</dd>
                 </div>
