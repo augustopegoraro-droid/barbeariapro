@@ -1177,7 +1177,7 @@ subscription` 401 sem token, `sw.js`/`manifest.webmanifest`/ícones 200 sem logi
 200 com o contrato esperado. **Falta só:** validação visual num celular real (Android + iOS
 instalado) — sem dispositivo físico disponível nesta sessão.
 
-**Alertas do gestor também por Web Push (D-97, 2026-08-20 — implementado, só dev/staging; sem
+**Alertas do gestor também por Web Push (D-97, 2026-08-20 — ✅ DEPLOYADO em prod 2026-08-20; sem
 migration):** os 2 alertas proativos já existentes (`management.py::revenue_alerts` — `meta` do mês
 projetada abaixo do objetivo, `queda` de receita >40% vs. média dos 7 dias anteriores), que só saíam
 por WhatsApp via `gestor_notify.py::send_alerts()` (cron n8n a cada 2h, 9h-19h,
@@ -1199,10 +1199,11 @@ dispara 1×/dia mesmo com 2 chamadas do cron, sem `org_id` não dispara push;
 `tests/test_gestor_unit.py`: `manager_user_ids` e `manager_phones` batem no mesmo conjunto de
 gestores) + ajuste de `tests/test_gestor_integration.py::test_internal_alertas_ok` (novas chaves
 `push_targets`/`push_sent`/`push_skipped`, com default `0` no response model). 758 pass / 2 ambientais
-/ 0 regressões. **Pendente:** deploy em prod (sem migration — é só rebuild do backend).
+/ 0 regressões. **✅ DEPLOYADO em prod 2026-08-20** (junto com o D-98, mesmo deploy — backend `58cccb0`;
+sem migration própria, ver detalhes no bloco do D-98 abaixo).
 
-**Delegar sem perder controle — sugestão de compra de produto (D-98, 2026-08-20 — implementado, só
-dev/staging; migration `0057`):** estende o único padrão de "solicitação pendente de aprovação" que
+**Delegar sem perder controle — sugestão de compra de produto (D-98, 2026-08-20 — ✅ DEPLOYADO em prod
+2026-08-20, migration `0057` aplicada, head `0057`):** estende o único padrão de "solicitação pendente de aprovação" que
 já existia (`solicitar_remarcacao_turno`, D-57) para um novo caso concreto: barbeiro/recepção notam
 estoque baixo (via `consultar_estoque`/D-95, tópico `alertas`, que reaproveita
 `management.low_stock_alerts`) e SUGEREM a compra sem executá-la — quem compra de fato continua
@@ -1231,8 +1232,14 @@ test_purchase_requests_integration.py`, molde `test_reschedule_integration.py` �
 também-sugere, ciclo pendente→aprovada, reaprovar→409, alvo ausente→422, quantidade zero→422, filtro
 de status, ordenação determinística no empate; `tests/test_kernel_ia.py` +5, incluindo o ajuste do
 teste de regressão de recepção que agora inclui a tool nova). 773 pass / 2 ambientais / 0 regressões;
-`tsc`/`eslint` do frontend limpos. **Pendente:** deploy em prod (aplicar `0057`, rodar
-`scripts/sync_authz_catalog.py`, rebuild backend+frontend); validação visual no browser.
+`tsc`/`eslint` do frontend limpos. **✅ DEPLOYADO em prod 2026-08-20** (backend `58cccb0` + frontend
+`675524d`, molde D-93/D-94: push dos 2 repos → backup `~/predeploy_d97_d98_20260820_200621.sql` na VM →
+`deploy/update.sh` de ponta a ponta [pull, migration `0057` via `Dockerfile.migrate`, rebuild dos 3
+serviços Next.js + backend] → `scripts/sync_authz_catalog.py` rodado à parte montando o repo do host
+no container do backend, mesmo padrão do D-93 [`scripts/` não vai na imagem] — catálogo com 74
+permissões/9 papéis/308 vínculos). Validado: 5 containers healthy, `/health` 200, `/compras-sugeridas`
+e `/internal/gestor/alertas` 401 sem auth, `/docs` 404 (V12 intacto), `app.`/apex/`api.` 200 por HTTPS,
+logs do backend sem erro. **Falta só:** validação visual do sino com as 2 seções no browser.
 
 ---
 
