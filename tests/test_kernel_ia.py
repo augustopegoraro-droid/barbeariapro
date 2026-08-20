@@ -35,6 +35,7 @@ def test_tools_por_papel():
     assert {t["name"] for t in kernel_ia._tools_for_role("barber")} == {
         "navegar",
         "solicitar_remarcacao_turno",
+        "solicitar_compra_produto",
     }
 
 
@@ -47,8 +48,9 @@ def test_tools_por_papel_financas_gestor():
 def test_tools_por_papel_financas_recepcao_bloqueada():
     # regressão: FULL_ACCESS inclui reception (navegação + estoque), mas dados
     # financeiros são MANAGER_ACCESS apenas — recepção não ganha consultar_financas.
+    # Recepção TAMBÉM não é MANAGER_ACCESS → ganha solicitar_compra_produto (D-98).
     names = {t["name"] for t in kernel_ia._tools_for_role("reception")}
-    assert names == {"navegar", "consultar_estoque"}
+    assert names == {"navegar", "consultar_estoque", "solicitar_compra_produto"}
     assert "consultar_financas" not in names
 
 
@@ -67,6 +69,20 @@ def test_tools_por_papel_estoque_full_access():
 def test_tools_por_papel_estoque_barbeiro_bloqueado():
     names = {t["name"] for t in kernel_ia._tools_for_role("barber")}
     assert "consultar_estoque" not in names
+
+
+def test_tools_por_papel_solicitar_compra_nao_gestor():
+    # barbeiro e recepção (não são MANAGER_ACCESS) ganham a tool de sugestão.
+    for role in ("barber", "reception", "intern"):
+        names = {t["name"] for t in kernel_ia._tools_for_role(role)}
+        assert "solicitar_compra_produto" in names
+
+
+def test_tools_por_papel_solicitar_compra_gestor_bloqueado():
+    # owner/manager compram direto — não recebem a tool de sugestão.
+    for role in ("owner", "manager"):
+        names = {t["name"] for t in kernel_ia._tools_for_role(role)}
+        assert "solicitar_compra_produto" not in names
 
 
 @pytest.mark.asyncio
@@ -146,6 +162,25 @@ async def test_consultar_estoque_dispatch_recepcao_passa_do_rbac(monkeypatch):
     assert out == {"ok": True}
     assert ctx.stock_topic == "alertas"
     assert ctx.stock_data_block == "bloco de estoque falso"
+
+
+@pytest.mark.asyncio
+async def test_solicitar_compra_dispatch_gestor_bloqueado():
+    ctx = KernelCtx(role="owner", org_id=1)
+    # db=None prova que o RBAC é checado ANTES de qualquer query.
+    out = await kernel_ia._dispatch(
+        "solicitar_compra_produto", {"produto": "Shampoo"}, None, ctx
+    )
+    assert "erro" in out
+    assert ctx.purchase_request_id is None
+
+
+@pytest.mark.asyncio
+async def test_solicitar_compra_sem_produto_da_erro():
+    ctx = KernelCtx(role="barber", org_id=1, barber_id=5)
+    out = await kernel_ia._dispatch("solicitar_compra_produto", {}, None, ctx)
+    assert "erro" in out
+    assert ctx.purchase_request_id is None
 
 
 # ─── endpoint ──────────────────────────────────────────────────────────────────

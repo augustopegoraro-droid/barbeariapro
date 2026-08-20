@@ -19,7 +19,13 @@ from app.core.config import settings
 from app.core.dates import today_local
 from app.authz import require_permission
 from app.core.rbac import require_manager_access
-from app.deps import get_bot_db, get_current_user, get_tenant_db, resolve_current_role
+from app.deps import (
+    get_bot_db,
+    get_bot_org_id,
+    get_current_user,
+    get_tenant_db,
+    resolve_current_role,
+)
 from app.services import gestor_notify as _notify
 from app.services import reactivation as _reactivation
 from app.services.management import (
@@ -38,6 +44,7 @@ from models import Unit, User
 router = APIRouter(prefix="/admin/gestor", tags=["gestor"])
 internal_router = APIRouter(prefix="/internal/gestor", tags=["gestor-internal"])
 BotDB = Annotated[AsyncSession, Depends(get_bot_db)]
+BotOrgId = Annotated[int, Depends(get_bot_org_id)]
 
 
 async def _require_manager(db: AsyncSession, user: User) -> None:
@@ -322,10 +329,14 @@ class AlertsRunOut(BaseModel):
     alerts: int
     recipients: int
     sent: int
+    push_targets: int = 0
+    push_sent: int = 0
+    push_skipped: int = 0
 
 
 @internal_router.post("/alertas", response_model=AlertsRunOut)
-async def run_alerts(db: BotDB) -> AlertsRunOut:
-    """Avalia alertas de meta/queda e envia se houver. Cron do n8n em horário comercial."""
-    result = await _notify.send_alerts(db, today_local())
+async def run_alerts(db: BotDB, org_id: BotOrgId) -> AlertsRunOut:
+    """Avalia alertas de meta/queda e envia se houver, por WhatsApp e Web Push
+    (1 push por tipo de alerta por gestor por dia). Cron do n8n em horário comercial."""
+    result = await _notify.send_alerts(db, today_local(), org_id=org_id)
     return AlertsRunOut(**result)

@@ -54,6 +54,13 @@ async def _cleanup():
                 ),
                 {"org": SEED_ORG_ID},
             )
+            conn.execute(
+                text(
+                    "DELETE FROM push_notification_log WHERE kind = 'gestor_alert' "
+                    "AND organization_id = :org"
+                ),
+                {"org": SEED_ORG_ID},
+            )
             conn.execute(text("DELETE FROM push_subscriptions WHERE endpoint LIKE '%teste-%'"))
         eng.dispose()
 
@@ -218,6 +225,89 @@ async def test_dispatch_idempotency_nao_duplica():
             )
         ).scalars().all()
         assert len(rows) == 1
+
+
+# ─── alertas do gestor (D-97) — Web Push além do WhatsApp ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_alertas_gestor_dispara_push_uma_vez_por_dia(monkeypatch):
+    """`gestor_notify.send_alerts` deve disparar 1 push por tipo de alerta por
+    gestor por dia — a 2ª chamada no mesmo dia (molde do cron a cada 2h) não
+    duplica, graças à `idempotency_key` incluindo a data."""
+    from datetime import date as _date
+
+    from app.services import gestor_notify as _notify
+    from app.services import management
+    from models import User
+
+    endpoint = _endpoint()
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        owner = (
+            await session.execute(
+                select(User).where(User.organization_id == SEED_ORG_ID).limit(1)
+            )
+        ).scalar_one()
+        session.add(
+            PushSubscription(
+                organization_id=SEED_ORG_ID,
+                subscriber_type=PushSubscriberType.user,
+                user_id=owner.id,
+                endpoint=endpoint,
+                p256dh="p",
+                auth_key="a",
+            )
+        )
+        await session.commit()
+        await set_current_org(session, SEED_ORG_ID)
+
+        fake_alerts = [{"type": "meta", "message": "teste de alerta"}]
+
+        async def _fake_revenue_alerts(db, target_date):
+            return fake_alerts
+
+        monkeypatch.setattr(management, "revenue_alerts", _fake_revenue_alerts)
+
+        target = _date.today()
+        first = await _notify.send_alerts(session, target, org_id=SEED_ORG_ID)
+        await session.commit()
+        await set_current_org(session, SEED_ORG_ID)
+        second = await _notify.send_alerts(session, target, org_id=SEED_ORG_ID)
+        await session.commit()
+
+    assert first["push_targets"] >= 1
+    assert first["push_sent"] + first["push_skipped"] == first["push_targets"]
+    # 2ª execução no mesmo dia: mesma idempotency_key → tudo "skipped" (dedup).
+    assert second["push_sent"] == 0
+
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        rows = (
+            await session.execute(
+                select(PushNotificationLog).where(
+                    PushNotificationLog.kind == "gestor_alert",
+                    PushNotificationLog.organization_id == SEED_ORG_ID,
+                )
+            )
+        ).scalars().all()
+        # 1 alerta × N gestores × 1 dia — a 2ª chamada não deve criar linha nova.
+        assert len(rows) == first["push_targets"]
+
+
+@pytest.mark.asyncio
+async def test_alertas_gestor_sem_org_id_nao_dispara_push():
+    """Sem `org_id` (comportamento anterior ao D-97), o push fica de fora e o
+    contrato antigo do WhatsApp segue intacto — nenhum chamador existente quebra."""
+    from datetime import date as _date
+
+    from app.services import gestor_notify as _notify
+
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        result = await _notify.send_alerts(session, _date.today())
+    assert result["push_targets"] == 0
+    assert result["push_sent"] == 0
 
 
 @pytest.mark.asyncio

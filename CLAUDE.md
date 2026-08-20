@@ -1177,6 +1177,63 @@ subscription` 401 sem token, `sw.js`/`manifest.webmanifest`/ícones 200 sem logi
 200 com o contrato esperado. **Falta só:** validação visual num celular real (Android + iOS
 instalado) — sem dispositivo físico disponível nesta sessão.
 
+**Alertas do gestor também por Web Push (D-97, 2026-08-20 — implementado, só dev/staging; sem
+migration):** os 2 alertas proativos já existentes (`management.py::revenue_alerts` — `meta` do mês
+projetada abaixo do objetivo, `queda` de receita >40% vs. média dos 7 dias anteriores), que só saíam
+por WhatsApp via `gestor_notify.py::send_alerts()` (cron n8n a cada 2h, 9h-19h,
+`POST /internal/gestor/alertas`), agora também disparam Web Push (D-96) para owner/manager com
+subscrição ativa — canal **independente** do WhatsApp (falha de um nunca afeta o outro).
+`management.py::manager_user_ids()` (par de `manager_phones()`, mas sem o filtro de telefone —
+push endereça por `user_id`, não por telefone) resolve os destinatários; `gestor_notify.py::
+_broadcast_push()` chama `push_svc.dispatch()` por alerta × gestor com `idempotency_key` incluindo
+**data + `user_id`** (`alert_push_v1:{tipo}:{org}:{data}:{user_id}`) — no máximo **1 push por tipo de
+alerta, por gestor, por dia**, mesmo com o cron rodando 6×/dia (decisão deliberada contra fadiga de
+notificação; nenhum gatilho novo foi criado). O mesmo endpoint `/internal/gestor/alertas` foi
+reaproveitado (ganhou `Depends(get_bot_org_id)`, molde `app/api/push.py`) em vez de criar um endpoint
+novo — mesmo gatilho/cadência, sem exigir mudança no n8n. `send_alerts()` ganhou `org_id: int | None
+= None` opcional e retrocompatível (sem `org_id`, comportamento idêntico ao anterior). O resumo diário
+(`send_daily_digest`) **não** ganhou push nesta entrega (fica só WhatsApp; é um digest, não um alerta
+que exige ação). **Zero trabalho de frontend** — a subscrição PWA da equipe já existe desde o D-96 e
+o `sw.js` já trata `data.url` no `notificationclick`. Suíte **+4 testes** (`tests/test_push.py`:
+dispara 1×/dia mesmo com 2 chamadas do cron, sem `org_id` não dispara push;
+`tests/test_gestor_unit.py`: `manager_user_ids` e `manager_phones` batem no mesmo conjunto de
+gestores) + ajuste de `tests/test_gestor_integration.py::test_internal_alertas_ok` (novas chaves
+`push_targets`/`push_sent`/`push_skipped`, com default `0` no response model). 758 pass / 2 ambientais
+/ 0 regressões. **Pendente:** deploy em prod (sem migration — é só rebuild do backend).
+
+**Delegar sem perder controle — sugestão de compra de produto (D-98, 2026-08-20 — implementado, só
+dev/staging; migration `0057`):** estende o único padrão de "solicitação pendente de aprovação" que
+já existia (`solicitar_remarcacao_turno`, D-57) para um novo caso concreto: barbeiro/recepção notam
+estoque baixo (via `consultar_estoque`/D-95, tópico `alertas`, que reaproveita
+`management.low_stock_alerts`) e SUGEREM a compra sem executá-la — quem compra de fato continua
+sendo só owner/manager (`purchases.manage`, D-93). **Tabela dedicada, não uma `pending_requests`
+genérica:** o payload tem FK real (`variant_id`) + quantidade numérica, e o sino do frontend já era
+hardcoded por domínio — generalizar só o backend não eliminaria trabalho de frontend nenhum.
+`product_purchase_requests` (migration `0057`, molde de `appointment_reschedule_requests`/0024 —
+workflow `pendente/aprovada/recusada` — com `FORCE ROW LEVEL SECURITY` do `commission_transfers`/0050,
+mais forte que a 0024). Alvo é `variant_id` (quando conhecido) OU `product_name` livre (o Kernel IA não
+inventa IDs — CHECK garante pelo menos um dos dois); `purchase_order_id` nullable nasce já no schema
+para quando o gestor materializar a sugestão num pedido formal (D-93), sem exigir migration nova.
+Permissão nova `purchases.request` (bloco `_OPERATIONS` → barbeiro/recepção/estagiário; aprovação
+reaproveita `purchases.manage` já existente, só owner/manager). `app/services/purchase_requests.py`
+(espelho de `reschedule.py`: `create_request`/`list_requests`/`count_pending`/`review_request` +
+`resolve_variant_by_name`, que só casa nome→variação quando há EXATAMENTE UMA correspondência — sem
+isso o pedido fica só com `product_name`, nunca um `variant_id` alucinado). Router
+`app/api/purchase_requests.py` (`/compras-sugeridas`, molde `reschedule.py`, RBAC por endpoint,
+auditado `purchases.request.create`/`purchases.request.review`). Kernel IA: tool
+`solicitar_compra_produto` só para `role not in MANAGER_ACCESS` (barbeiro/recepção/estagiário — owner/
+manager compram direto), dispatch com defesa em profundidade + branch terminal `action=
+"purchase_request"` (mensagem templada, sem texto livre do LLM). Frontend: `hooks/
+use-compras-sugeridas.ts` (molde `use-remarcacoes.ts`) + `NotificationBell` ganhou 2 seções
+("Remarcação" / "Sugestão de compra") somando os 2 badges — sem generalizar o componente (2 seções
+explícitas custam pouco e mantêm tipos fortes). Suíte **+20 testes** (`tests/
+test_purchase_requests_integration.py`, molde `test_reschedule_integration.py` — RLS, RBAC recepção-
+também-sugere, ciclo pendente→aprovada, reaprovar→409, alvo ausente→422, quantidade zero→422, filtro
+de status, ordenação determinística no empate; `tests/test_kernel_ia.py` +5, incluindo o ajuste do
+teste de regressão de recepção que agora inclui a tool nova). 773 pass / 2 ambientais / 0 regressões;
+`tsc`/`eslint` do frontend limpos. **Pendente:** deploy em prod (aplicar `0057`, rodar
+`scripts/sync_authz_catalog.py`, rebuild backend+frontend); validação visual no browser.
+
 ---
 
 ## 8. Roadmap de execução (decidido)

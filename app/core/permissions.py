@@ -91,6 +91,7 @@ CATALOG: tuple[Permission, ...] = (
     Permission("suppliers.manage", "Cadastrar/editar fornecedores", "Produtos"),
     Permission("purchases.view", "Ver pedidos de compra", "Produtos"),
     Permission("purchases.manage", "Criar/enviar/receber/cancelar pedidos de compra", "Produtos"),
+    Permission("purchases.request", "Sugerir compra de produto (pendente de aprovação)", "Produtos"),
     # Fidelidade / Pacotes
     Permission("loyalty.view", "Ver fidelidade", "Fidelidade"),
     Permission("loyalty.manage", "Configurar fidelidade", "Fidelidade"),
@@ -169,7 +170,7 @@ _OPERATIONS: frozenset[str] = frozenset({
     "loyalty.view", "memberships.view", "memberships.sell",
     "services.view", "products.view", "inventory.view", "inventory.manage",
     "inventory.count.manage",
-    "sales.view", "sales.create", "suppliers.view", "purchases.view",
+    "sales.view", "sales.create", "suppliers.view", "purchases.view", "purchases.request",
     "reports.dashboard.view", "reports.operational.view",
     "integrations.view", "ai.assistant.use",
 })
@@ -206,11 +207,12 @@ _RECEPTION: frozenset[str] = _OPERATIONS | frozenset({
 # recebia a Inbox inteira pelo SSE).
 _BARBER: frozenset[str] = frozenset({
     "schedule.own.view", "schedule.own.manage", "schedule.reschedule.request",
-    "ai.assistant.use",
+    "purchases.request", "ai.assistant.use",
 })
 
 _INTERN: frozenset[str] = frozenset({
-    "schedule.own.view", "schedule.reschedule.request", "ai.assistant.use",
+    "schedule.own.view", "schedule.reschedule.request", "purchases.request",
+    "ai.assistant.use",
 })
 
 _FINANCE_ROLE: frozenset[str] = _FINANCE | frozenset({

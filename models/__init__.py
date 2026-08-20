@@ -86,6 +86,7 @@ from .billing import (
     WebhookEvent,
 )
 from .appointment_reschedule import AppointmentRescheduleRequest
+from .product_purchase_request import PURCHASE_REQUEST_STATUSES, ProductPurchaseRequest
 from .integration import CalendarSync, IntegrationAccount, MessageLog
 from .loyalty import (
     ClientLoyalty,
@@ -187,6 +188,8 @@ __all__ = [
     "DreMonthlyLine",
     "CommissionTransfer",
     "AppointmentRescheduleRequest",
+    "ProductPurchaseRequest",
+    "PURCHASE_REQUEST_STATUSES",
     # produtos / estoque / vendas
     "ProductCategory",
     "Product",

@@ -912,6 +912,26 @@ async def manager_phones(db: AsyncSession) -> list[str]:
     return phones
 
 
+async def manager_user_ids(db: AsyncSession) -> list[int]:
+    """`user_id` dos usuários owner/manager ativos, na org da sessão. Par de
+    `manager_phones()` para o canal Web Push (que endereça por `user_id`, não
+    por telefone — sem filtrar `phone_e164`, que é só relevante ao WhatsApp)."""
+    rows = (
+        await db.execute(
+            select(User.id, UserUnit.role)
+            .join(UserUnit, UserUnit.user_id == User.id)
+            .join(Unit, Unit.id == UserUnit.unit_id)
+            .where(User.is_active.is_(True))
+        )
+    ).all()
+    ids: list[int] = []
+    for user_id, role in rows:
+        if is_manager_role(role.value if hasattr(role, "value") else role):
+            if user_id not in ids:
+                ids.append(user_id)
+    return ids
+
+
 async def _noshow_count(db: AsyncSession, date_from: date, date_to: date) -> int:
     return (
         await db.execute(

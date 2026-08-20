@@ -29,11 +29,20 @@ recepção já opera na UI normal, não dado financeiro sensível) ganham a tool
 curado ainda — fácil adicionar depois reaproveitando `kernel_ia_finance.
 guard_insight`). Barbeiro continua fora.
 
+**Sugestão de compra (D-98):** quem NÃO é gestor (`role not in MANAGER_ACCESS`
+— barbeiro e recepção) ganha `solicitar_compra_produto`, mesmo padrão de
+"solicitação pendente de aprovação" do `solicitar_remarcacao_turno` (D-57):
+só registra uma sugestão pendente (`app.services.purchase_requests`), nunca
+executa a compra — quem compra é owner/manager (`purchases.manage`, D-93). O
+LLM nunca inventa um `variant_id`: a resolução nome→variação é feita pela
+service (`resolve_variant_by_name`), que só casa quando há EXATAMENTE UMA
+correspondência.
+
 Provedor isolado (Anthropic/Claude — D-77, antes OpenAI). Sem/`ANTHROPIC_API_KEY`
 inválida → mensagem amigável.
 
 Contrato: `answer(...) -> {"intent", "message", "action", "route", "task_id"}`
-onde `action ∈ {navigate, reschedule, finance_answer, stock_answer, answer, config, erro}`.
+onde `action ∈ {navigate, reschedule, finance_answer, stock_answer, purchase_request, answer, config, erro}`.
 """
 from __future__ import annotations
 
@@ -49,6 +58,7 @@ from app.core.rbac import FULL_ACCESS, MANAGER_ACCESS
 from app.data.finance_playbook import PLAYBOOK
 from app.services import kernel_ia_finance
 from app.services import kernel_ia_stock
+from app.services import purchase_requests as purchase_requests_svc
 from app.services import reschedule as reschedule_svc
 
 logger = logging.getLogger(__name__)
@@ -96,6 +106,9 @@ _SYSTEM = (
     "3) Para abrir uma tela/página, use `navegar`.\n"
     "4) Se o usuário for barbeiro e pedir remarcação do próprio turno, use "
     "`solicitar_remarcacao_turno`.\n"
+    "5) Se o usuário (barbeiro ou recepção) disser que um produto está acabando e "
+    "pedir para comprar/repor, use `solicitar_compra_produto`. Você NUNCA faz a "
+    "compra — só registra a sugestão.\n"
     "Seja muito breve. Se nada servir, diga em uma frase que não encontrou e sugira o "
     "que ele pode pedir."
 )
@@ -124,6 +137,7 @@ class KernelCtx:
     finance_data_block: Optional[str] = None   # texto determinístico (sem passagem do LLM)
     stock_topic: Optional[str] = None          # preenchido pela tool consultar_estoque
     stock_data_block: Optional[str] = None     # texto determinístico (sem passagem do LLM)
+    purchase_request_id: Optional[str] = None  # preenchido pela tool de sugestão de compra
 
 
 def _tools_for_role(role: str) -> list[dict]:
@@ -233,6 +247,31 @@ def _tools_for_role(role: str) -> list[dict]:
                 },
             }
         )
+    if role not in MANAGER_ACCESS:  # barbeiro/recepção/estagiário — owner/manager compram direto
+        tools.append(
+            {
+                "name": "solicitar_compra_produto",
+                "description": (
+                    "Registra uma SUGESTÃO de compra de um produto para o gestor avaliar "
+                    "(pendente até aprovação). Você NUNCA compra nada."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "produto": {
+                            "type": "string",
+                            "description": "Nome do produto como o usuário falou.",
+                        },
+                        "quantidade_sugerida": {
+                            "type": "number",
+                            "description": "Quantidade sugerida para repor (opcional).",
+                        },
+                        "motivo": {"type": "string", "description": "Motivo do pedido (opcional)."},
+                    },
+                    "required": ["produto"],
+                },
+            }
+        )
     return tools
 
 
@@ -288,6 +327,25 @@ async def _dispatch(name: str, args: dict, db: AsyncSession, ctx: KernelCtx) -> 
         ctx.stock_topic = topic
         ctx.stock_data_block = data_block
         return {"ok": True}
+    if name == "solicitar_compra_produto":
+        if ctx.role in MANAGER_ACCESS:  # defesa em profundidade — gestor compra direto
+            return {"erro": "gestor compra direto, sem solicitação"}
+        produto = (args.get("produto") or "").strip()
+        if not produto:
+            return {"erro": "produto não informado"}
+        variant = await purchase_requests_svc.resolve_variant_by_name(db, produto)
+        req = await purchase_requests_svc.create_request(
+            db,
+            organization_id=ctx.org_id,
+            requested_by_user_id=ctx.user_id,
+            variant_id=variant.id if variant else None,
+            product_name=produto,
+            qty_suggested=args.get("quantidade_sugerida"),
+            reason=args.get("motivo"),
+            source="kernel_ia",
+        )
+        ctx.purchase_request_id = str(req.id)
+        return {"ok": True, "pedido_id": req.id}
     return {"erro": f"ferramenta desconhecida: {name}"}
 
 
@@ -397,6 +455,10 @@ async def answer(
                     return {**base, "intent": "estoque", "action": "erro",
                             "message": "Não consegui buscar essa informação de estoque agora. "
                                        "Tenta de novo ou peça pra abrir o Estoque."}
+                if tc.name == "solicitar_compra_produto" and ctx.purchase_request_id:
+                    return {**base, "intent": "solicitar_compra_produto", "action": "purchase_request",
+                            "task_id": ctx.purchase_request_id,
+                            "message": "Pedido de compra registrado — o gestor vai avaliar."}
                 tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
                                      "content": json.dumps(result, ensure_ascii=False)})
             messages.append({"role": "user", "content": tool_results})

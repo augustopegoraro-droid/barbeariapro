@@ -158,7 +158,7 @@ async def test_internal_alertas_ok(client):
     headers = _bot_headers()
     r = await client.post("/internal/gestor/alertas", headers=headers)
     assert r.status_code == 200, r.text
-    assert body_keys(r) >= {"alerts", "recipients", "sent"}
+    assert body_keys(r) >= {"alerts", "recipients", "sent", "push_targets", "push_sent", "push_skipped"}
 
 
 def body_keys(resp):

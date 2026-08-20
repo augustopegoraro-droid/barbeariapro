@@ -1,11 +1,24 @@
-"""Testes unitários das tools de gestão (D-52) — lógica pura, sem DB."""
+"""Testes unitários das tools de gestão (D-52) — lógica pura, sem DB.
+
+A seção "destinatários do push" (D-97) é exceção deliberada — precisa de sessão
+com RLS para ler `User`/`UserUnit`, mesmo padrão de `tests/test_push.py`."""
 
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
+import pytest
+
 from app.core.dates import today_local
-from app.services.management import _free_windows, is_manager_role, resolve_period
+from app.db.session import AsyncSessionLocal, set_current_org
+from app.services.management import (
+    _free_windows,
+    is_manager_role,
+    manager_phones,
+    manager_user_ids,
+    resolve_period,
+)
+from tests.conftest import SEED_ORG_ID
 
 
 # ─── is_manager_role ──────────────────────────────────────────────────────────
@@ -130,3 +143,22 @@ def test_build_alert_text_junta_mensagens():
     txt = build_alert_text(alerts)
     assert "Alerta de gestão" in txt
     assert "abaixo da meta" in txt and "movimento caiu" in txt
+
+
+# ─── destinatários do push (D-97) — par de manager_phones ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_manager_user_ids_e_manager_phones_mesmos_destinatarios():
+    """`manager_user_ids` (Web Push) e `manager_phones` (WhatsApp) devem apontar
+    para o mesmo conjunto de gestores — só o "endereço" (id vs. telefone) muda."""
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        ids = await manager_user_ids(session)
+        phones = await manager_phones(session)
+
+    assert isinstance(ids, list)
+    assert len(ids) == len(set(ids))  # sem duplicado (vínculo em >1 unidade)
+    # manager_phones filtra quem tem telefone cadastrado — é um subconjunto
+    # (possivelmente igual) dos gestores identificados por manager_user_ids.
+    assert len(phones) <= len(ids)
