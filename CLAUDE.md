@@ -201,6 +201,20 @@ dentro do frontend de tenant.
   permanece o sistema de registro (funil/agenda/financeiro). Raquel vira Agent Bot do Chatwoot. Plano em
   `CHATWOOT_CLOUD_API_ARQUITETURA.md`. **Status: plano — nada implementado.**
 
+**Kernel IA — DRE + gastos/despesas de um mês específico em `consultar_financas` (D-100, 2026-08-21
+— código pronto, aguardando deploy):** faltava o Demonstrativo de Resultado (DRE mensal migrado da
+Trinks, D-65) no catálogo de `consultar_financas` e nenhum tópico aceitava um mês específico do
+passado — "Qual foi o DRE de março de 2026?"/"quanto gastei em maio?" caíam no fallback genérico de
+erro ("Tive um problema ao processar agora"). `management.py::dre_month_summary(db, month)` (nova,
+molde D-52) agrega `dre_monthly_lines` de um mês específico; `kernel_ia_finance.py` ganha o tópico
+`dre` + `_format_dre` e o helper `_month_bounds(mes)` (mês de calendário completo, capado em hoje se
+for o mês corrente) que o tópico `financeiro` passa a usar quando `mes` vem preenchido — cobre
+"gastos/despesas/faturamento de [mês]" sem precisar do DRE. A tool `consultar_financas` ganha o
+parâmetro opcional `mes` (`YYYY-MM`, o LLM preenche quando o usuário cita um mês — "março de 2026" →
+`"2026-03"`; sem `mes`, usa o período/mês corrente), válido para os tópicos `financeiro` e `dre`. Sem
+migration. Suíte 798 pass / 3 ambientais (mesmas falhas de seed já conhecidas). Detalhes em
+DECISIONS.md D-100.
+
 ### IA — diretriz vigente
 - **Decisão (2026-06-26): evoluir a IA dentro do n8n** (AI Agent node + OpenAI), expandindo as *tools*
   REST do backend (`/bot/*`). **Não** construir camada de agentes no backend por ora.

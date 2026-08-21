@@ -53,6 +53,7 @@ from models import (
     User,
     UserUnit,
 )
+from models.dre import DreMonthlyLine
 
 # Períodos nomeados aceitos pelas tools (pull/dashboard).
 VALID_PERIODS = ("hoje", "ontem", "semana", "mes")
@@ -455,6 +456,51 @@ async def financial_summary(db: AsyncSession, date_from: date, date_to: date) ->
         "appointment_count": appt_count,
         "by_method": by_method,
         "products": products,
+    }
+
+
+async def dre_month_summary(db: AsyncSession, month: date) -> Optional[dict]:
+    """DRE (competência, migrado da Trinks — D-65) de UM mês específico.
+
+    `month` é qualquer data dentro do mês desejado (só o ano/mês importam).
+    Retorna `None` quando não há linha nenhuma de `dre_monthly_lines` para o mês
+    (fora do histórico importado) — o caller decide a mensagem. Mesma semântica
+    de `GET /financeiro/dre` (`app/api/financeiro.py`), mas para um único mês.
+    """
+    competence = month.replace(day=1)
+    rows = (
+        await db.execute(
+            select(
+                DreMonthlyLine.section,
+                DreMonthlyLine.subgroup,
+                func.sum(DreMonthlyLine.amount).label("total"),
+            )
+            .where(DreMonthlyLine.competence_month == competence)
+            .group_by(DreMonthlyLine.section, DreMonthlyLine.subgroup)
+        )
+    ).all()
+    if not rows:
+        return None
+
+    receita = despesa = Decimal("0")
+    subgroups: dict[str, Decimal] = {}
+    for r in rows:
+        if r.section == "receita":
+            receita += r.total
+        else:
+            despesa += r.total
+            key = r.subgroup or "outros"
+            subgroups[key] = subgroups.get(key, Decimal("0")) + r.total
+
+    resultado = receita - despesa
+    margem = (resultado / receita * 100) if receita else Decimal("0")
+    return {
+        "month": competence.strftime("%Y-%m"),
+        "receita": float(receita),
+        "despesa": float(despesa),
+        "resultado": float(resultado),
+        "margem_pct": round(float(margem), 2),
+        "despesa_por_subgrupo": {k: float(v) for k, v in sorted(subgroups.items())},
     }
 
 

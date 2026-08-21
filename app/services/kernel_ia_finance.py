@@ -11,6 +11,7 @@ playbook usado como referência é descartado (fail closed).
 """
 from __future__ import annotations
 
+import calendar
 import re
 from datetime import date, timedelta
 from typing import Optional
@@ -20,7 +21,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dates import today_local
 from app.services import management
 
-TOPICS = ("financeiro", "ranking", "mrr", "folha", "ia_faturamento", "inativos", "buracos")
+TOPICS = ("financeiro", "ranking", "mrr", "folha", "ia_faturamento", "inativos", "buracos", "dre")
+
+_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+_MONTH_LABELS = (
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+)
 
 _INATIVOS_LIMIT = 15
 _BURACOS_LIMIT = 15
@@ -40,10 +48,15 @@ def _minutes_label(idle_min: int) -> str:
 # ─── busca + formatação por tópico ─────────────────────────────────────────────
 
 async def fetch_and_format(
-    db: AsyncSession, topic: str, periodo: str, unit_id: Optional[int]
+    db: AsyncSession, topic: str, periodo: str, unit_id: Optional[int], mes: Optional[str] = None
 ) -> str:
+    if topic == "dre":
+        return await _fetch_dre(db, mes)
     if topic == "financeiro":
-        df, dt, label = management.resolve_period(periodo)
+        if mes and _MONTH_RE.match(mes):
+            df, dt, label = _month_bounds(mes)
+        else:
+            df, dt, label = management.resolve_period(periodo)
         data = await management.financial_summary(db, df, dt)
         return _format_financeiro(data, label)
     if topic == "ranking":
@@ -72,6 +85,35 @@ async def fetch_and_format(
         data = await management.agenda_gaps(db, target, unit_id)
         return _format_buracos(data, target, note)
     raise ValueError(f"tópico desconhecido: {topic}")
+
+
+def _month_bounds(mes: str) -> tuple[date, date, str]:
+    """Mês de calendário completo ('2026-05' → 01/05..31/05), capado em hoje
+    quando o mês pedido é o corrente/futuro (mesma semântica de `resolve_period`
+    para 'mes' — nunca soma dias que ainda não aconteceram)."""
+    year, month = int(mes[:4]), int(mes[5:7])
+    start = date(year, month, 1)
+    last_day = calendar.monthrange(year, month)[1]
+    end = date(year, month, last_day)
+    today = today_local()
+    if end > today:
+        end = max(start, today)
+    label = f"{_MONTH_LABELS[month - 1]}/{year}"
+    return start, end, label
+
+
+async def _fetch_dre(db: AsyncSession, mes: Optional[str]) -> str:
+    """DRE de um mês específico ('março de 2026' → mes='2026-03'). Sem `mes`
+    válido, usa o mês corrente. `dre_month_summary` só cobre o histórico
+    migrado da Trinks (D-65) — mês fora desse período não tem dados."""
+    today = today_local()
+    if mes and _MONTH_RE.match(mes):
+        year, month = int(mes[:4]), int(mes[5:7])
+        target = date(year, month, 1)
+    else:
+        target = today.replace(day=1)
+    data = await management.dre_month_summary(db, target)
+    return _format_dre(data, target)
 
 
 def _buracos_date(periodo: str) -> tuple[date, Optional[str]]:
@@ -159,6 +201,27 @@ def _format_ia_faturamento(data: dict, label: str) -> str:
     lines.append(f"Atendimentos via WhatsApp: {data['appointments']}")
     lines.append(f"Receita: {_brl(data['revenue'])}")
     lines.append(f"Leads capturados fora do horário comercial: {data['leads_after_hours']}")
+    return "\n".join(lines)
+
+
+def _format_dre(data: Optional[dict], month: date) -> str:
+    label = f"{_MONTH_LABELS[month.month - 1]}/{month.year}"
+    lines = [f"📑 DRE (Demonstrativo de Resultado) — {label}"]
+    if data is None:
+        lines.append(
+            "Não há DRE importado para esse mês (histórico cobre só o período "
+            "migrado da Trinks)."
+        )
+        return "\n".join(lines)
+    lines.append(f"Receita: {_brl(data['receita'])}")
+    lines.append(f"Despesa: {_brl(data['despesa'])}")
+    lines.append(f"Resultado: {_brl(data['resultado'])} (margem {data['margem_pct']}%)")
+    subgroups = data.get("despesa_por_subgrupo") or {}
+    if subgroups:
+        lines.append("")
+        lines.append("Despesa por subgrupo:")
+        for k, v in subgroups.items():
+            lines.append(f"• {k}: {_brl(v)}")
     return "\n".join(lines)
 
 

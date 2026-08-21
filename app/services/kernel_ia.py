@@ -96,10 +96,12 @@ def _routes_for_role(role: str) -> dict[str, tuple[str, str]]:
 _SYSTEM = (
     "Você é o Kernel IA do BarbeariaPro. Você NUNCA calcula, soma ou inventa números — "
     "só escolhe entre ferramentas de catálogo fechado:\n"
-    "1) Se o pedido for sobre faturamento, receita, despesas, comissões, ranking de "
-    "barbeiros, MRR/assinaturas, folha de pagamento, cobertura da folha pela receita "
-    "recorrente, faturamento gerado pela IA/WhatsApp, clientes inativos ou horários "
-    "ociosos na agenda, use `consultar_financas` (os dados reais vêm do banco).\n"
+    "1) Se o pedido for sobre faturamento, receita, despesas/gastos (inclusive de um "
+    "mês específico do passado), comissões, ranking de barbeiros, MRR/assinaturas, "
+    "folha de pagamento, cobertura da folha pela receita recorrente, faturamento "
+    "gerado pela IA/WhatsApp, clientes inativos, horários ociosos na agenda, ou o "
+    "DRE/Demonstrativo de Resultado (de um mês específico ou do mês atual), use "
+    "`consultar_financas` (os dados reais vêm do banco).\n"
     "2) Se o pedido for sobre estoque de produtos — o que está acabando/precisa "
     "repor, quantas variações estão baixas, valor total em estoque, ou giro/"
     "velocidade de venda de produtos — use `consultar_estoque`.\n"
@@ -171,8 +173,9 @@ def _tools_for_role(role: str) -> list[dict]:
                     "(financeiro), produção por profissional (ranking), receita recorrente "
                     "de assinaturas (mrr), custo de equipe e se a receita recorrente cobre "
                     "a folha (folha), resultado atribuível ao WhatsApp/IA (ia_faturamento), "
-                    "clientes parados/candidatos a reativação (inativos), ou horários "
-                    "ociosos na agenda de um dia (buracos)."
+                    "clientes parados/candidatos a reativação (inativos), horários "
+                    "ociosos na agenda de um dia (buracos), ou o DRE/Demonstrativo de "
+                    "Resultado de competência de um mês (dre)."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -187,15 +190,26 @@ def _tools_for_role(role: str) -> list[dict]:
                                 "folha: custo da equipe (fixo+comissão+aluguel) e cobertura pela receita recorrente\n"
                                 "ia_faturamento: atendimentos/receita atribuíveis ao WhatsApp/IA\n"
                                 "inativos: clientes parados, candidatos a reativação\n"
-                                "buracos: horários ociosos na agenda de um dia"
+                                "buracos: horários ociosos na agenda de um dia\n"
+                                "dre: Demonstrativo de Resultado (receita/despesa/margem) de um mês de competência"
                             ),
                         },
                         "periodo": {
                             "type": "string",
                             "enum": ["hoje", "ontem", "semana", "mes"],
                             "description": (
-                                "Período do indicador. Ignorado em 'mrr' e 'inativos' "
-                                "(sempre atuais); em 'buracos' só 'hoje'/'ontem' têm efeito."
+                                "Período do indicador. Ignorado em 'mrr'/'inativos'/'dre' (usam "
+                                "'mes' ou são sempre atuais) e em 'financeiro' quando 'mes' for "
+                                "informado; em 'buracos' só 'hoje'/'ontem' têm efeito."
+                            ),
+                        },
+                        "mes": {
+                            "type": "string",
+                            "description": (
+                                "Mês específico no formato YYYY-MM quando o usuário citar um mês/ano "
+                                "do passado (ex.: 'gastos de maio', 'DRE de março de 2026' → "
+                                "'2026-03'). Vale para os tópicos 'financeiro' (receita/despesas do "
+                                "mês inteiro) e 'dre'. Deixe vazio para usar o período/mês atual."
                             ),
                         },
                     },
@@ -304,8 +318,11 @@ async def _dispatch(name: str, args: dict, db: AsyncSession, ctx: KernelCtx) -> 
         if topic not in kernel_ia_finance.TOPICS:
             return {"erro": "topico desconhecido"}
         periodo = (args.get("periodo") or "mes").strip()
+        mes = (args.get("mes") or "").strip() or None
         try:
-            data_block = await kernel_ia_finance.fetch_and_format(db, topic, periodo, ctx.unit_id)
+            data_block = await kernel_ia_finance.fetch_and_format(
+                db, topic, periodo, ctx.unit_id, mes
+            )
         except Exception:
             logger.exception("consultar_financas falhou (topico=%s)", topic)
             return {"erro": "falha ao buscar dados"}

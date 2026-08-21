@@ -131,6 +131,52 @@ def test_format_buracos_com_dados():
     assert "Pablo" in out and "1h30" in out and "14:00-15:30" in out
 
 
+def test_format_dre_sem_dados_nao_quebra():
+    out = kf._format_dre(None, date(2026, 3, 1))
+    assert "março/2026" in out
+    assert "Não há DRE importado" in out
+
+
+def test_format_dre_com_dados():
+    data = {
+        "month": "2026-03",
+        "receita": 50000.0,
+        "despesa": 32000.0,
+        "resultado": 18000.0,
+        "margem_pct": 36.0,
+        "despesa_por_subgrupo": {"fixa": 10000.0, "pessoal": 22000.0},
+    }
+    out = kf._format_dre(data, date(2026, 3, 1))
+    assert "março/2026" in out
+    assert "R$ 50.000,00" in out
+    assert "margem 36.0%" in out
+    assert "fixa: R$ 10.000,00" in out
+
+
+# ─── mapeamento de mês (financeiro/dre com 'mes' explícito) ──────────────────
+
+def test_month_bounds_mes_passado_mes_completo():
+    df, dt, label = kf._month_bounds("2026-05")
+    assert df == date(2026, 5, 1)
+    assert dt == date(2026, 5, 31)
+    assert label == "maio/2026"
+
+
+def test_month_bounds_mes_atual_capa_em_hoje():
+    today = today_local()
+    mes = today.strftime("%Y-%m")
+    df, dt, _ = kf._month_bounds(mes)
+    assert df == today.replace(day=1)
+    assert dt == today
+
+
+def test_month_bounds_mes_futuro_nao_gera_intervalo_invertido():
+    future = today_local().replace(year=today_local().year + 1)
+    mes = future.strftime("%Y-%m")
+    df, dt, _ = kf._month_bounds(mes)
+    assert df <= dt
+
+
 # ─── mapeamento de período (buracos) ──────────────────────────────────────────
 
 def test_buracos_date_hoje_ontem_mapeiam_direto():

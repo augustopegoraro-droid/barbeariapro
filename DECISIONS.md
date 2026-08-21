@@ -3276,6 +3276,54 @@ browser/dispositivo real ainda; `barbearia-app/` (Capacitor) segue só como buil
 
 ---
 
+### D-100 — Kernel IA: tópico DRE + gastos/despesas de um mês específico em `consultar_financas` — 2026-08-21 (código pronto, aguardando deploy)
+
+Achado do dono: perguntar ao Kernel IA "Qual foi o Demonstrativo de resultado de março de 2026?" respondia
+com o fallback genérico de erro ("Tive um problema ao processar agora"). Causa: `kernel_ia_finance.TOPICS`
+(D-58) nunca incluiu `dre` — o DRE mensal migrado da Trinks (`dre_monthly_lines`, D-65) só era consumido
+por `GET /financeiro/dre`, nunca pelo Kernel IA; e mesmo os tópicos existentes só aceitam períodos relativos
+(`hoje/ontem/semana/mes`), sem forma de pedir um mês específico do passado — incluindo perguntas gerais de
+"gastos/despesas de [mês]" (tópico `financeiro`), não só o DRE propriamente dito.
+
+**Fix — tópico `dre`:** `management.py::dre_month_summary(db, month)` — nova função pura (mesmo molde D-52,
+reusável por bot/dashboard/cron) que agrega `dre_monthly_lines` de UM mês de competência (receita/despesa/
+resultado/margem/subgrupos), devolvendo `None` quando o mês não tem dado importado (fora do histórico da
+Trinks). `kernel_ia_finance.py` ganha o tópico `dre` (`TOPICS` += `"dre"`) + `_format_dre` (mesmo padrão
+pt-BR dos demais formatadores) + `_fetch_dre`.
+
+**Fix — gastos de um mês específico (tópico `financeiro`):** `kernel_ia_finance.py::_month_bounds(mes)`
+converte `"YYYY-MM"` num mês de calendário completo (1º dia ao último dia), capado em hoje quando o mês
+pedido é o corrente/futuro (mesma semântica que `management.resolve_period` já usa para `"mes"` — nunca soma
+dias que ainda não aconteceram). `fetch_and_format` usa esse intervalo em vez de `resolve_period(periodo)`
+quando `mes` vem preenchido, chamando `management.financial_summary` normalmente (que já suporta qualquer
+intervalo de datas — a limitação sempre foi só o roteamento do Kernel IA, não o cálculo em si). Cobre tanto
+"gastos de maio" quanto "faturamento de maio" pelo mesmo tópico, sem precisar do DRE.
+
+**`kernel_ia.py`:** a tool `consultar_financas` ganha a propriedade `mes` no schema (`YYYY-MM`, o LLM
+preenche quando o usuário cita um mês/ano do passado — "março de 2026" → `"2026-03"`), válida para os
+tópicos `financeiro` e `dre`; `_dispatch` repassa o valor adiante. `_SYSTEM` e as descrições das tools
+passam a mencionar "despesas/gastos de um mês específico" e "DRE" explicitamente para o roteador escolher a
+tool certa. RBAC inalterado (ambos são só mais tópicos de `MANAGER_ACCESS`, mesma tool/guardrails de sempre
+— sem insight de LLM extra além do já existente).
+
+**Testes:** `tests/test_kernel_ia_finance.py` +5 (`_format_dre` com/sem dados; `_month_bounds` para mês
+passado completo, mês atual capado em hoje, e mês futuro sem gerar intervalo invertido — todos puros, sem
+DB/LLM). Suíte completa rodada: 798 pass / 3 fail — as 3 são as falhas ambientais já conhecidas (seed de
+staging: link barbeiro↔serviço do `test_e2e_flow`, `bypass_hours` do workflow n8n em `test_bot_unit`, e
+`test_membership_corrections` que passa isolado — flake de ordem de execução, não regressão desta mudança).
+
+**Achado à parte (não relacionado, isolado sem tocar):** o diretório de trabalho tinha `models/__init__.py`
+modificado localmente (não commitado) importando um `models/feed.py` **não versionado e corrompido**
+(conteúdo com um `</content>` literal no meio do Python — resíduo de alguma sessão anterior interrompida) +
+uma migration `alembic/versions/0061_feed_posts.py` também não versionada. Isso quebrava a importação do
+pacote `models` inteiro e impedia rodar a suíte. Como não fazia parte desta tarefa e HEAD (o que o deploy
+usa) nunca teve esse import, foi isolado com `git stash push -u` (reversível, nada apagado) só para liberar
+os testes — segue no stash, sem decisão tomada sobre continuar ou descartar esse trabalho de "feed".
+
+**Deploy:** sem migration — só código de `management.py`/`kernel_ia_finance.py`/`kernel_ia.py`.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
