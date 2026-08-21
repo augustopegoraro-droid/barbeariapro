@@ -35,6 +35,15 @@ export type Contato = {
   facebookUrl: string;
 };
 
+const GOOGLE_MAPS_URL = "https://maps.app.goo.gl/8QKLfpgmMgsr5CVMA";
+
+/** Função pura — mora fora de qualquer módulo "use client" para poder ser
+ * chamada tanto de Server Components (`app/page.tsx`) quanto de Client
+ * Components (`components/ui/endereco.tsx`). */
+export function mapsUrl(_endereco: string) {
+  return GOOGLE_MAPS_URL;
+}
+
 export function resolverContato(info: PublicInfo): Contato {
   const p = info.public_info;
   const whatsapp = p.whatsapp || VERIFICADO.whatsapp;

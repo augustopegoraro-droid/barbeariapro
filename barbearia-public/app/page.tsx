@@ -12,13 +12,13 @@ import {
 import { Wordmark } from "@/components/wordmark";
 import { ServiceLinkRow } from "@/components/ui/service-row";
 import { ProfessionalAvatar } from "@/components/ui/professional";
-import { EnderecoLegenda, mapsUrl } from "@/components/ui/endereco";
+import { EnderecoLegenda } from "@/components/ui/endereco";
 import {
   ContatoBotoes,
   IconeFacebook,
   IconeInstagram,
 } from "@/components/ui/contato-botoes";
-import { resolverContato } from "@/lib/contato";
+import { resolverContato, mapsUrl } from "@/lib/contato";
 import StickyCta from "@/components/sticky-cta";
 
 export const revalidate = 300;

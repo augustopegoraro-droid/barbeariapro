@@ -8,12 +8,7 @@
    Maps carregaria dentro do app sem como voltar. */
 
 import { handleExternalLink } from "@/lib/native";
-
-const GOOGLE_MAPS_URL = "https://maps.app.goo.gl/8QKLfpgmMgsr5CVMA";
-
-export function mapsUrl(_endereco: string) {
-  return GOOGLE_MAPS_URL;
-}
+import { mapsUrl } from "@/lib/contato";
 
 export function EnderecoLegenda({
   endereco,
