@@ -6,8 +6,11 @@ import Link from "next/link";
 import { Wordmark } from "@/components/wordmark";
 import { IconeFacebook, IconeInstagram } from "@/components/ui/contato-botoes";
 
+/* Âncoras da própria home, exceto "Novidades", que é rota própria
+   (`/novidades`) — o mural completo não cabe na landing. */
 const SECOES = [
   { href: "#servicos", label: "Serviços" },
+  { href: "/novidades", label: "Novidades" },
   { href: "#equipe", label: "Equipe" },
   { href: "#visite", label: "Horários" },
 ];
@@ -33,15 +36,25 @@ export function SiteHeader({
         </Link>
 
         <nav aria-label="Seções" className="hidden items-center gap-7 sm:flex">
-          {SECOES.map((s) => (
-            <a
-              key={s.href}
-              href={s.href}
-              className="rotulo flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
-            >
-              {s.label}
-            </a>
-          ))}
+          {SECOES.map((s) =>
+            s.href.startsWith("#") ? (
+              <a
+                key={s.href}
+                href={s.href}
+                className="rotulo flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+              >
+                {s.label}
+              </a>
+            ) : (
+              <Link
+                key={s.href}
+                href={s.href}
+                className="rotulo flex min-h-11 items-center text-tinta-suave transition-colors hover:text-marfim"
+              >
+                {s.label}
+              </Link>
+            ),
+          )}
         </nav>
 
         <div className="flex items-center gap-1">

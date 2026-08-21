@@ -36,6 +36,7 @@ PUBLIC_PATHS = {
     # desenho (escopados por subdomínio + RLS); criar sessão É o login.
     "/public/{subdomain}/info",
     "/public/{subdomain}/slots",
+    "/public/{subdomain}/feed",  # mural de novidades: conteúdo de vitrine, sem sessão
     "/public/{subdomain}/auth/session",
 }
 

@@ -129,6 +129,39 @@ async function raw<T>(path: string, init?: RequestInit): Promise<T> {
    (D-84) — o `revalidate` abaixo é só o teto de segurança. */
 export const INFO_TAG = "public-info";
 
+/* Tag do cache do feed de novidades, invalidada pelo painel a cada
+   publicação/edição/arquivamento de post. */
+export const FEED_TAG = "public-feed";
+
+export type FeedPost = {
+  /* `public_id` (uuid) — o id sequencial não sai do painel. */
+  id: string;
+  title: string;
+  body: string;
+  image_url: string | null;
+  published_at: string;
+  pinned: boolean;
+};
+
+/* Feed de novidades. Paginação por CURSOR (`before` = `published_at` do último
+   item recebido), não por offset: um post novo entrando no topo entre duas
+   páginas não empurra itens para frente. */
+export async function fetchFeed(
+  opts: { limit?: number; before?: string } = {},
+  revalidateSeconds = 300,
+): Promise<FeedPost[]> {
+  const qs = new URLSearchParams();
+  if (opts.limit != null) qs.set("limit", String(opts.limit));
+  if (opts.before) qs.set("before", opts.before);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  const resp = await fetch(`${base()}/feed${suffix}`, {
+    next: { revalidate: revalidateSeconds, tags: [FEED_TAG] },
+  });
+  if (!resp.ok) throw new ApiError(resp.status, "Falha ao carregar novidades.");
+  const data: { posts: FeedPost[] } = await resp.json();
+  return data.posts;
+}
+
 export async function fetchInfo(revalidateSeconds = 300): Promise<PublicInfo> {
   // Server-side (home SSR/ISR): usa o cache do Next.
   const resp = await fetch(`${base()}/info`, {
@@ -140,6 +173,15 @@ export async function fetchInfo(revalidateSeconds = 300): Promise<PublicInfo> {
 
 export const api = {
   info: () => request<PublicInfo>("/info"),
+  /* Página seguinte do feed, no browser (botão "Carregar mais"). O SSR da
+     primeira página usa `fetchFeed`, que passa pelo cache do Next. */
+  feed: (opts: { limit?: number; before?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.limit != null) qs.set("limit", String(opts.limit));
+    if (opts.before) qs.set("before", opts.before);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<{ posts: FeedPost[] }>(`/feed${suffix}`);
+  },
   slots: (serviceId: number, barberId: number, day: string) =>
     request<{ slots: string[] }>(
       `/slots?service_id=${serviceId}&barber_id=${barberId}&day=${day}`,

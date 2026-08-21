@@ -118,6 +118,9 @@ CATALOG: tuple[Permission, ...] = (
     Permission("security.site_visibility.manage", "Configurar a visibilidade do site público", "Segurança"),
     Permission("analytics.view", "Ver analytics/insights", "Segurança"),
     Permission("privacy.lgpd.manage", "Gerenciar consentimento e dados do titular (LGPD)", "Segurança"),
+    # Conteúdo (feed de novidades/promoções do site público)
+    Permission("content.feed.view", "Ver o feed de novidades", "Conteúdo"),
+    Permission("content.feed.manage", "Publicar/editar/arquivar novidades", "Conteúdo"),
     # IA
     Permission("ai.assistant.use", "Usar o assistente (Kernel IA) para navegar", "IA"),
     Permission("ai.finance.query", "Consultar finanças no chat da IA", "IA"),
@@ -173,6 +176,10 @@ _OPERATIONS: frozenset[str] = frozenset({
     "sales.view", "sales.create", "suppliers.view", "purchases.view", "purchases.request",
     "reports.dashboard.view", "reports.operational.view",
     "integrations.view", "ai.assistant.use",
+    # Feed de novidades: a recepção LÊ o mural (para responder o cliente que
+    # perguntou da promoção), mas publicar é do gestor — a vitrine pública é a
+    # marca. `content.feed.manage` fica só em `_MANAGER`/`_ALL`.
+    "content.feed.view",
 })
 
 _FINANCE: frozenset[str] = frozenset({

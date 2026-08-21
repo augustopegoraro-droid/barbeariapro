@@ -11,9 +11,23 @@
 
 import { revalidateTag } from "next/cache";
 import { timingSafeEqual } from "node:crypto";
-import { INFO_TAG } from "@/lib/api";
+import { FEED_TAG, INFO_TAG } from "@/lib/api";
 
 export const runtime = "nodejs";
+
+/* Allowlist: só estas tags podem ser invalidadas de fora. Um corpo com tag
+   desconhecida é ignorado — nunca há "revalidar tudo". */
+const ALLOWED_TAGS = [INFO_TAG, FEED_TAG] as const;
+
+function parseTags(body: unknown): string[] {
+  if (!body || typeof body !== "object") return [];
+  const raw = (body as { tags?: unknown }).tags;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (t): t is string =>
+      typeof t === "string" && (ALLOWED_TAGS as readonly string[]).includes(t),
+  );
+}
 
 function secretOk(provided: string | null): boolean {
   const expected = process.env.REVALIDATE_SECRET;
@@ -32,8 +46,15 @@ export async function POST(request: Request) {
     return new Response("Não autorizado.", { status: 401 });
   }
 
+  /* Corpo sem `tags` = backend antigo (que só sabia revalidar a vitrine):
+     fallback para `public-info`, para que os dois lados possam ser deployados
+     em qualquer ordem sem janela de site desatualizado. */
+  const body = await request.json().catch(() => null);
+  const tags = parseTags(body);
+  const targets = tags.length > 0 ? tags : [INFO_TAG];
+
   /* Next 16 exige o profile de cacheLife: "seconds" é o mais curto embutido —
      a entrada antiga deixa de ser servida praticamente na hora. */
-  revalidateTag(INFO_TAG, "seconds");
-  return Response.json({ revalidated: INFO_TAG });
+  for (const tag of targets) revalidateTag(tag, "seconds");
+  return Response.json({ revalidated: targets });
 }

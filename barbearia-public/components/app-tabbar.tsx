@@ -47,9 +47,20 @@ function IconePerfil() {
   );
 }
 
+function IconeNovidades() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
+      <path d="M3 10.5v3a1.5 1.5 0 0 0 1.5 1.5H7l6 4V6.5l-6 4H4.5A1.5 1.5 0 0 0 3 12Z" />
+      <path d="M17 9.5a4 4 0 0 1 0 5" />
+      <path d="M7 15v4h3" />
+    </svg>
+  );
+}
+
 const ABAS: { href: string; label: string; icon: ReactNode }[] = [
   { href: "/inicio", label: "Início", icon: <IconeInicio /> },
   { href: "/agendar", label: "Agendar", icon: <IconeAgendar /> },
+  { href: "/novidades", label: "Novidades", icon: <IconeNovidades /> },
   { href: "/meus-agendamentos", label: "Histórico", icon: <IconeHistorico /> },
   { href: "/perfil", label: "Perfil", icon: <IconePerfil /> },
 ];

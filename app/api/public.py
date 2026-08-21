@@ -31,6 +31,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     Response,
     UploadFile,
@@ -54,7 +55,12 @@ from app.services.consent import set_consent
 from app.services import media
 from app.services.calendar_sync import push_appointment
 from app.services import push as push_svc
-from app.services.public_cache import INFO_CACHE_TTL_SECONDS, info_cache_key
+from app.services.public_cache import (
+    FEED_CACHE_TTL_SECONDS,
+    INFO_CACHE_TTL_SECONDS,
+    feed_cache_key,
+    info_cache_key,
+)
 from app.services.scheduling import barber_has_conflict
 from app.services.tenant import org_id_by_subdomain
 from models import (
@@ -71,6 +77,7 @@ from models import (
     ClientVisibilitySettings,
     ConsentStatus,
     ContactChannel,
+    FeedPost,
     Organization,
     PushChannel,
     PushSubscriberType,
@@ -83,6 +90,9 @@ router = APIRouter(prefix="/public/{subdomain}", tags=["public"])
 logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "tt_session"
+
+FEED_DEFAULT_LIMIT = 10
+FEED_MAX_LIMIT = 30
 
 
 def _client_ip(request: Request) -> str:
@@ -191,6 +201,19 @@ class PublicInfoOut(BaseModel):
     hours: list[PublicHourOut]
     banner: dict
     public_info: dict
+
+
+class FeedPostOut(BaseModel):
+    id: str  # `public_id` (uuid) — o id sequencial não sai do painel
+    title: str
+    body: str
+    image_url: Optional[str] = None
+    published_at: datetime
+    pinned: bool
+
+
+class FeedOut(BaseModel):
+    posts: list[FeedPostOut]
 
 
 class SessionCreateIn(BaseModel):
@@ -398,6 +421,75 @@ async def public_info(
         await get_redis().setex(cache_key, INFO_CACHE_TTL_SECONDS, out.model_dump_json())
     except Exception:
         pass
+    return out
+
+
+# ─── GET /feed ───────────────────────────────────────────────────────────────
+
+@router.get("/feed", response_model=FeedOut)
+@limiter.limit("60/minute")
+async def public_feed(
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    limit: int = Query(FEED_DEFAULT_LIMIT, ge=1, le=FEED_MAX_LIMIT),
+    before: Optional[datetime] = Query(
+        None, description="Cursor: devolve só posts com `published_at` anterior a este."
+    ),
+) -> FeedOut:
+    """Mural de novidades da barbearia. Público — não exige sessão de cliente.
+
+    Paginação por **cursor** (`before`), não por offset: um post novo entrando
+    no topo entre duas páginas não empurra itens para frente (o offset
+    duplicaria/pularia). O cliente manda de volta o `published_at` do último
+    item recebido.
+    """
+    is_first_page = before is None
+    cache_key = feed_cache_key(org_id)
+    if is_first_page and limit == FEED_DEFAULT_LIMIT:
+        try:
+            cached = await get_redis().get(cache_key)
+            if cached:
+                return FeedOut(**json.loads(cached))
+        except Exception:
+            pass  # cache é otimização; Redis fora não derruba o feed
+
+    now = datetime.now(timezone.utc)
+    stmt = (
+        select(FeedPost)
+        .where(FeedPost.is_published.is_(True))
+        .where(FeedPost.deleted_at.is_(None))
+        .where(FeedPost.published_at <= now)
+        # `id DESC` desempata posts com o mesmo instante (import/seed em lote):
+        # sem ele a ordem seria indefinida e a paginação poderia repetir itens.
+        .order_by(FeedPost.pinned.desc(), FeedPost.published_at.desc(), FeedPost.id.desc())
+        .limit(limit)
+    )
+    if before is not None:
+        stmt = stmt.where(FeedPost.published_at < before)
+
+    rows = (await db.execute(stmt)).scalars().all()
+    out = FeedOut(
+        posts=[
+            FeedPostOut(
+                id=str(p.public_id),
+                title=p.title,
+                body=p.body,
+                image_url=media.public_url(p.image_path),
+                published_at=p.published_at,
+                pinned=p.pinned,
+            )
+            for p in rows
+        ]
+    )
+    if is_first_page and limit == FEED_DEFAULT_LIMIT:
+        try:
+            await get_redis().setex(
+                cache_key, FEED_CACHE_TTL_SECONDS, out.model_dump_json()
+            )
+        except Exception:
+            pass
     return out
 
 

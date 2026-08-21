@@ -110,6 +110,7 @@ from .consent import ConsentRecord
 from .client_session import ClientSession
 from .push_notification import PushSubscription, PushNotificationLog
 from .appointment_rating import AppointmentRating
+from .feed import FeedPost
 
 __all__ = [
     "Base",
@@ -248,4 +249,5 @@ __all__ = [
     "PushSubscription",
     "PushNotificationLog",
     "AppointmentRating",
+    "FeedPost",
 ]

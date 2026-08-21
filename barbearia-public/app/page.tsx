@@ -4,6 +4,7 @@ import { WEEKDAYS_PT } from "@/lib/format";
 import { SiteHeader } from "@/components/site-header";
 import { Hero } from "@/components/hero";
 import { Ritual } from "@/components/ritual";
+import { NovidadesHome } from "@/components/novidades-home";
 import {
   Depoimentos,
   NOTA_GOOGLE,
@@ -281,6 +282,9 @@ export default async function HomePage() {
             </figure>
           </div>
         </section>
+
+        {/* Novidades — mural do painel; some sozinho quando não há post */}
+        <NovidadesHome />
 
         {/* Prova social — avaliações públicas do Google */}
         <section
