@@ -1092,7 +1092,8 @@ lado do valor (`estrelas: boolean` novo no array `numeros`). Só CSS/JSX, sem mu
 Rollback: `git revert 9f4d279` + rebuild `public`.
 
 **App nativo do cliente final (iOS/Android) via Capacitor + avaliação/perfil/remarcação (D-99,
-2026-08-21 — implementado, NÃO deployado em prod, sem validação em dispositivo real):** casca
+2026-08-21 — ✅ DEPLOYADO em prod: backend + site público; sem validação em dispositivo real e sem
+compilar o app ainda):** casca
 Capacitor (`barbearia-app/`, novo diretório irmão de `barbearia-public/`, nunca deployado na VM)
 empacotando o site público já em produção via `server.url` remoto (`https://taylorethedy.com/inicio`,
 não bundle estático — reaproveita o cookie de sessão `tt_session` do D-79 sem tocar em CORS/auth).

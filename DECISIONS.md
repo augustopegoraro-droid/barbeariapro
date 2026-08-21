@@ -3255,10 +3255,24 @@ Nutrition Labels declarando nome/telefone/email/foto); conta de teste para revis
 nome+telefone); risco de rejeição por Guideline 4.2 (wrapper de site — mitigado por `/inicio` dedicado +
 push/câmera nativos, não é garantia).
 
-**Pendente para ir a produção:** aplicar migrations `0058`-`0060` na VM (backup antes, molde D-96/D-98);
-rebuild backend+`public` (frontend web); **depois disso**, e só depois, `barbearia-app/` pode ser
-compilado localmente (`server.url` aponta pro site vivo) e a Fase D (contas/Firebase/lojas) começa. Nenhum
-teste manual no browser/dispositivo real foi feito nesta sessão.
+**✅ DEPLOYADO em prod 2026-08-21** (backend+`public` `95ec50d`→`f18f65d`, molde D-96/D-98): backup
+`~/predeploy_d99_20260821_144644.sql` na VM (`docker exec barbeariapro-postgres pg_dump`) → `deploy/
+update.sh` de ponta a ponta (migration `0058`-`0060` aplicada, head `0060`, confirmado por
+`alembic_version`; rebuild backend+frontend+`public`). **Achado do próprio deploy, corrigido no mesmo
+ciclo:** `app/page.tsx` (Server Component) chamava `mapsUrl()` importado de
+`components/ui/endereco.tsx`, que o D-99 tinha marcado `"use client"` (por causa do
+`handleExternalLink` do modo app) — todo export de um módulo `"use client"` vira referência de client
+boundary, então a chamada direta no server derrubava a home com **500 em produção** (`Attempted to
+call mapsUrl() from the server`). `/` só ficou fora do ISR (300s do D-84) nesta rodada porque o
+`headers()` no root layout (detecção de modo app) tornou a rota dinâmica — por isso o erro só
+apareceu em runtime, não no `next build` local. Fix: `mapsUrl` (função pura) migrou para `lib/
+contato.ts` (módulo comum, sem `"use client"`); commit `f18f65d`, redeployado no mesmo ciclo, validado
+com `tsc`/`next build` local antes de subir de novo. Validado em prod: 5 containers healthy,
+`/health` 200, `/`/`/agendar`/`/meus-agendamentos`/`/inicio`/`/perfil` 200, `GET /public/app/me/
+profile` 401 sem sessão (confirmado o subdomínio real da org 1 é `app`, não `taylor`), apex HTTPS
+200 (103KB, título correto), `app.`/`api.`/`docs` intactos. **Pendente:** nenhum teste manual no
+browser/dispositivo real ainda; `barbearia-app/` (Capacitor) segue só como build local, Fase D
+(contas de loja/Firebase/APNs) não iniciada.
 
 ---
 
@@ -3293,4 +3307,5 @@ teste manual no browser/dispositivo real foi feito nesta sessão.
 | Backups `.sql` da VM com PII, sem cifra nem prazo | `~/predeploy_*.sql` na VM | Médio | D-86: anonimizar um titular não o remove dos dumps. Inventariar e descartar os antigos. |
 | `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Baixo | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas LLM. Severidade caiu de Médio para Baixo no **D-88** (modelo passou a `claude-haiku-4-5`, $1/$5 por MTok) — o item continua aberto, só o custo do abuso encolheu. |
 | ~~Select dentro de Dialog pode fechar o Dialog inteiro~~ | `components/ui/select.tsx` + `components/ui/dialog.tsx` | ✅ Descartado | Investigado a fundo em 2026-08-03: não é bug — era a ferramenta de automação clicando duas vezes no trigger (abre/fecha) em vez de clicar na opção, mais um descompasso de escala screenshot×viewport. Clique correto na opção seleciona e mantém o Dialog aberto, confirmado no `MovimentacaoDialog` e no `ProdutoFormDialog`. Nada a corrigir. |
-| App nativo (D-99) sem deploy/validação real | `barbearia-app/`, migrations `0058`-`0060` | ⚠️ Alto | Implementado 2026-08-21, não deployado em prod nem testado no browser/dispositivo real. Falta: aplicar migrations na VM, rebuild backend+`public`, depois compilar o app Capacitor local e só então iniciar a Fase D (contas de loja/Firebase/APNs). |
+| App nativo (D-99) sem validação em dispositivo real | `barbearia-app/` | Médio | **DEPLOYADO em prod 2026-08-21** (backend+site público). Falta: teste manual no browser/celular, compilar o Capacitor local, Fase D (contas de loja/Firebase/APNs) — nada disso começou. |
+| `next start` do `public` loga `EACCES` no fetch-cache | container `barbeariapro-app-public` | Baixo | Achado no deploy do D-99 (2026-08-21): `Failed to update prerender cache ... EACCES: permission denied` em `.next/cache/fetch-cache/*`, provavelmente dono do diretório ≠ usuário não-root da imagem (mesma classe de pegadinha do D-85 com `uploads/`). Não fatal — página responde 200 normalmente, é só ruído de log/perda de cache. Não corrigido nesta sessão. |
