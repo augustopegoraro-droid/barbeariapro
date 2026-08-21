@@ -1124,6 +1124,21 @@ avaliação/remarcação em `/meus-agendamentos`, tab bar inferior só em modo a
 Fase D de contas de loja/Firebase/APNs é responsabilidade manual do dono, documentada em
 `barbearia-app/README.md`).
 
+**Feed de novidades/promoções (D-100, 2026-08-21 — ✅ DEPLOYADO em prod):** gestor posta (título +
+texto + foto opcional) em `/admin/novidades`; cliente final vê no site público (seção na home que
+some se vazio + rota `/novidades` paginada por cursor — primeiro lugar do site com paginação).
+Migration `0061` (`feed_posts`, append-only via `deleted_at`). `app/services/public_cache.py`
+generalizado (`invalidate_public_tags`) — base reaproveitada pela Feature 2 abaixo. Permissões
+`content.feed.view`/`content.feed.manage` (catálogo com 76 permissões). Ver D-100 em
+`DECISIONS.md` para detalhes e o achado sobre `deploy/update.sh` não atualizar submódulos.
+
+**Assinatura online via Stripe Connect (D-100, Feature 2 — em implementação nesta sessão):**
+cliente final vai poder comprar mensalidade/pacote pelo site pagando com cartão; o dinheiro é da
+barbearia (Stripe Connect, direct charges + dashboard Express + onboarding embutido), a plataforma
+retém uma taxa % configurável por org. Deploy fica **explicitamente adiado** até o dono validar o
+onboarding em modo de teste da Stripe. Ver D-100 em `DECISIONS.md` para o desenho completo assim
+que a implementação terminar.
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

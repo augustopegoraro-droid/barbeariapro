@@ -3330,6 +3330,54 @@ normal), logs do backend sem erro, `barbeariapro-app-backend` healthy.
 
 ---
 
+**D-100 (2026-08-21) — Feed de novidades (Feature 1) ✅ DEPLOYADO em prod; Assinatura online via Stripe
+Connect (Feature 2) planejada, implementação em andamento na mesma sessão — ver bloco próprio
+quando concluída.** Continuação do D-99: o dono
+pediu que o site público chegasse mais perto de apps de agendamento tipo "Bunker Club" — faltavam
+mensalidade paga pelo próprio cliente e um mural de novidades. Plano completo em
+`/Users/apleandro/.claude/plans/zany-waddling-lark.md`.
+
+**Feed de novidades — migration `0061` (head `0061`):** `feed_posts` (RLS+FORCE, GRANT
+`SELECT,INSERT,UPDATE`, sem DELETE — arquiva por `deleted_at`, molde produtos/equipe). Permissões
+novas `content.feed.view` (`_OPERATIONS`, recepção lê) / `content.feed.manage` (`_MANAGER`, fora de
+recepção/barbeiro por padrão — catálogo 74→76 permissões). `app/api/feed.py` (CRUD+upload, molde
+`produtos.py`); `app/services/media.py` ganhou `save_image_keep_ratio`/`save_feed_image` (preserva
+proporção, ao contrário do crop quadrado de foto de rosto). `app/services/public_cache.py`
+generalizado: `invalidate_public_tags(org_id, tags)` substitui o corpo de `invalidate_public_info`
+(que virou wrapper fino, ~10 call-sites intactos) — abre caminho para a tag `public-plans` da
+Feature 2 sem migration nem refactor novo. Rota pública `GET /public/{sub}/feed?limit=&before=`
+(sem sessão, paginação por cursor em `published_at` — primeiro lugar do site com paginação, cache
+Redis só da 1ª página). `barbearia-public/app/api/revalidate/route.ts` passa a aceitar `{tags:[]}`
+com allowlist, fallback para `public-info` se vazio (retrocompat durante deploy).
+Painel: `/admin/novidades` (`barbearia-frontend`, commit `58a4a33`) — CRUD com upload, publicar/
+arquivar, fixar no topo. Site público: seção "Novidades" na home (some se vazio — sem seção
+fantasma), rota `/novidades` paginada ("carregar mais"), link no header, aba nova na tab bar do
+modo app (D-99, 5ª aba, coube no `max-w-md`). Suíte **819 pass / 2 ambientais / 0 regressões**
+(+17 `tests/test_feed.py`). `tsc`/`next build` limpos nos dois frontends.
+**✅ DEPLOYADO em prod 2026-08-21** (backend+`public` `e6eba39`, frontend submódulo bump `58a4a33`):
+backup `~/predeploy_d100_20260821_231841.sql` → `deploy/update.sh` (migration `0061` aplicada) →
+**achado do próprio deploy:** o script não roda `git submodule update`, então o serviço `frontend`
+buildou com o ponteiro ANTIGO do submódulo na primeira passada — corrigido rodando
+`git submodule update --init --recursive` manualmente e rebuildando só o `frontend` em seguida
+(`docker compose -f docker-compose.app.yml up -d --build frontend`). **Considerar adicionar
+`git submodule update --init --recursive` ao `deploy/update.sh`**, logo após o `git pull` — sem
+isso, todo deploy que bump a `barbearia-frontend` precisa desse passo manual. Validado: 5
+containers healthy, head `0061`, `GET /feed` 401 sem auth, `GET /public/app/feed` 200 `{"posts":[]}`,
+`/`/`/novidades` 200, `/admin/novidades` 307 sem sessão, apex+`/novidades` HTTPS 200, `app.` 307,
+logs limpos (só o warning `EACCES` de cache do `public`, já conhecido/não-fatal desde o D-99).
+
+**Assinatura online via Stripe Connect (Feature 2) — EM IMPLEMENTAÇÃO nesta mesma sessão, ainda sem
+código.** Arquitetura já decidida com o usuário (não reabrir): Direct charges + dashboard Express +
+onboarding embutido no painel do tenant (Stripe embedded components, Accounts v2) +
+`application_fee_amount` configurável por org — conta Stripe da plataforma confirmada como
+brasileira (pré-requisito legal). Dinheiro registrado em tabela nova `membership_orders` (não em
+`payments`, que exige `Appointment`). Checkout `mode=payment` único; `ClientMembership` só nasce na
+confirmação do webhook, nunca no `POST /checkout` (evita pacote fantasma). Deploy em produção fica
+**explicitamente adiado** até o dono validar o onboarding em modo de teste da Stripe — atualizar
+este bloco quando a implementação terminar.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -3362,4 +3410,5 @@ normal), logs do backend sem erro, `barbeariapro-app-backend` healthy.
 | `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Baixo | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas LLM. Severidade caiu de Médio para Baixo no **D-88** (modelo passou a `claude-haiku-4-5`, $1/$5 por MTok) — o item continua aberto, só o custo do abuso encolheu. |
 | ~~Select dentro de Dialog pode fechar o Dialog inteiro~~ | `components/ui/select.tsx` + `components/ui/dialog.tsx` | ✅ Descartado | Investigado a fundo em 2026-08-03: não é bug — era a ferramenta de automação clicando duas vezes no trigger (abre/fecha) em vez de clicar na opção, mais um descompasso de escala screenshot×viewport. Clique correto na opção seleciona e mantém o Dialog aberto, confirmado no `MovimentacaoDialog` e no `ProdutoFormDialog`. Nada a corrigir. |
 | App nativo (D-99) sem validação em dispositivo real | `barbearia-app/` | Médio | **DEPLOYADO em prod 2026-08-21** (backend+site público). Falta: teste manual no browser/celular, compilar o Capacitor local, Fase D (contas de loja/Firebase/APNs) — nada disso começou. |
+| `deploy/update.sh` não atualiza submódulos | `deploy/update.sh` | Médio | Achado no D-100 (2026-08-21): o script faz `git pull` no repo principal mas não `git submodule update`, então um deploy que bump o ponteiro de `barbearia-frontend` builda com o conteúdo ANTIGO na 1ª passada — precisa rodar `git submodule update --init --recursive` manualmente e rebuildar `frontend` de novo. Adicionar a linha ao script logo após o `git pull`. |
 | `next start` do `public` loga `EACCES` no fetch-cache | container `barbeariapro-app-public` | Baixo | Achado no deploy do D-99 (2026-08-21): `Failed to update prerender cache ... EACCES: permission denied` em `.next/cache/fetch-cache/*`, provavelmente dono do diretório ≠ usuário não-root da imagem (mesma classe de pegadinha do D-85 com `uploads/`). Não fatal — página responde 200 normalmente, é só ruído de log/perda de cache. Não corrigido nesta sessão. |
