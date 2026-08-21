@@ -3276,7 +3276,7 @@ browser/dispositivo real ainda; `barbearia-app/` (Capacitor) segue só como buil
 
 ---
 
-### D-100 — Kernel IA: tópico DRE + gastos/despesas de um mês específico em `consultar_financas` — 2026-08-21 (código pronto, aguardando deploy)
+### D-100 — Kernel IA: tópico DRE + gastos/despesas de um mês específico em `consultar_financas` — 2026-08-21 (✅ DEPLOYADO em prod 2026-08-21)
 
 Achado do dono: perguntar ao Kernel IA "Qual foi o Demonstrativo de resultado de março de 2026?" respondia
 com o fallback genérico de erro ("Tive um problema ao processar agora"). Causa: `kernel_ia_finance.TOPICS`
@@ -3320,7 +3320,13 @@ pacote `models` inteiro e impedia rodar a suíte. Como não fazia parte desta ta
 usa) nunca teve esse import, foi isolado com `git stash push -u` (reversível, nada apagado) só para liberar
 os testes — segue no stash, sem decisão tomada sobre continuar ou descartar esse trabalho de "feed".
 
-**Deploy:** sem migration — só código de `management.py`/`kernel_ia_finance.py`/`kernel_ia.py`.
+**Deploy:** sem migration — só código de `management.py`/`kernel_ia_finance.py`/`kernel_ia.py`. Commit
+`82db67b` (só os 6 arquivos desta mudança — o resto do working tree tinha trabalho de "feed" em
+andamento, não commitado, deixado intocado). **✅ DEPLOYADO em prod 2026-08-21** via `deploy/update.sh`
+(precisou `sudo` — `/opt/barbeariapro/.git` é `root:root` na VM): pull + rebuild dos 3 serviços Next.js
++ backend (sem migration a aplicar). Validado por SSH na própria VM (curl externo do Mac deu timeout,
+sem relação com o deploy): `/health` 200, `/kernel-ia/query` 401 sem auth, `app.`/apex 301 (nginx→HTTPS,
+normal), logs do backend sem erro, `barbeariapro-app-backend` healthy.
 
 ---
 

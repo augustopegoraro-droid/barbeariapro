@@ -202,7 +202,7 @@ dentro do frontend de tenant.
   `CHATWOOT_CLOUD_API_ARQUITETURA.md`. **Status: plano — nada implementado.**
 
 **Kernel IA — DRE + gastos/despesas de um mês específico em `consultar_financas` (D-100, 2026-08-21
-— código pronto, aguardando deploy):** faltava o Demonstrativo de Resultado (DRE mensal migrado da
+— ✅ DEPLOYADO em prod 2026-08-21):** faltava o Demonstrativo de Resultado (DRE mensal migrado da
 Trinks, D-65) no catálogo de `consultar_financas` e nenhum tópico aceitava um mês específico do
 passado — "Qual foi o DRE de março de 2026?"/"quanto gastei em maio?" caíam no fallback genérico de
 erro ("Tive um problema ao processar agora"). `management.py::dre_month_summary(db, month)` (nova,
