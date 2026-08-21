@@ -238,3 +238,15 @@ class AttachmentMediaType(str, enum.Enum):
 class PushSubscriberType(str, enum.Enum):
     user = "user"
     client = "client"
+
+
+class PushChannel(str, enum.Enum):
+    """Canal de entrega da subscrição de push.
+
+    `webpush` = navegador (VAPID, D-96). `fcm` = app nativo (Capacitor), onde
+    Web Push não existe dentro do WebView — a subscrição guarda o device token
+    em `endpoint` na forma `fcm:<token>`.
+    """
+
+    webpush = "webpush"
+    fcm = "fcm"

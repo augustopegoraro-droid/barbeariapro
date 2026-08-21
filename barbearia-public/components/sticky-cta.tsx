@@ -8,9 +8,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useIsApp } from "@/components/app-mode";
 
 export default function StickyCta() {
   const [show, setShow] = useState(false);
+  // No app a conversão mora na barra inferior fixa — duas barras no mesmo
+  // lugar competiriam pelo polegar.
+  const isApp = useIsApp();
 
   useEffect(() => {
     const sentinel = document.getElementById("fim-do-hero");
@@ -23,6 +27,8 @@ export default function StickyCta() {
     io.observe(sentinel);
     return () => io.disconnect();
   }, []);
+
+  if (isApp) return null;
 
   return (
     <div

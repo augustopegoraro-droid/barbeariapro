@@ -1,6 +1,13 @@
+"use client";
+
 /* Legenda de localização — mora colada à foto da fachada, que é onde a
    pergunta "onde fica?" nasce. Repete o endereço da seção "Onde e quando" de
-   propósito: quem reconhece a fachada quer o mapa ali, não 3 seções abaixo. */
+   propósito: quem reconhece a fachada quer o mapa ali, não 3 seções abaixo.
+
+   No app o mapa abre FORA da WebView (`handleExternalLink`), senão o Google
+   Maps carregaria dentro do app sem como voltar. */
+
+import { handleExternalLink } from "@/lib/native";
 
 const GOOGLE_MAPS_URL = "https://maps.app.goo.gl/8QKLfpgmMgsr5CVMA";
 
@@ -22,6 +29,7 @@ export function EnderecoLegenda({
         href={mapsUrl(endereco)}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={(e) => handleExternalLink(e, mapsUrl(endereco))}
         className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ouro transition-colors hover:text-ouro-claro"
       >
         <svg

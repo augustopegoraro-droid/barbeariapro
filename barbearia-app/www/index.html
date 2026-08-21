@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Taylor e Thedy</title>
+    <!--
+      Este arquivo praticamente não é visto pelo usuário: o Capacitor exige um
+      `webDir` válido mesmo quando `server.url` aponta para um site remoto
+      (ver capacitor.config.ts). A WebView troca para taylorethedy.com/inicio
+      assim que a splash screen termina. Mantido simples de propósito.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0a0b0d;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      .marca {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        color: #f2efe9;
+      }
+
+      .marca strong {
+        letter-spacing: 0.08em;
+        font-size: 14px;
+        text-transform: uppercase;
+        color: #c9a86a;
+      }
+
+      .spinner {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid rgba(201, 168, 106, 0.25);
+        border-top-color: #c9a86a;
+        animation: girar 0.9s linear infinite;
+      }
+
+      @keyframes girar {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="marca">
+      <div class="spinner" role="status" aria-label="Carregando"></div>
+      <strong>Taylor &amp; Thedy</strong>
+    </div>
+  </body>
+</html>

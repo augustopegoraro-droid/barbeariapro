@@ -65,6 +65,10 @@ class Client(Base):
     )
     last_photo_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_photo_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Foto de perfil enviada pelo próprio cliente no site/app (migration 0059).
+    # Caminho RELATIVO no storage de mídia (`app/services/media.py`), nunca URL.
+    # Semântica distinta de `last_photo_url` (foto recebida pelo bot/Trinks).
+    photo_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

@@ -81,12 +81,20 @@ def public_url(relative_path: Optional[str]) -> Optional[str]:
     return f"{base}/{relative_path.lstrip('/')}"
 
 
-def _target(org_id: int, barber_id: int) -> Path:
-    return media_root() / f"org{org_id}" / f"barber-{barber_id}.webp"
+def _relative(org_id: int, slug: str) -> str:
+    return f"org{org_id}/{slug}.webp"
 
 
-def save_barber_photo(org_id: int, barber_id: int, raw: bytes, content_type: str | None) -> str:
+def _target(org_id: int, slug: str) -> Path:
+    return media_root() / f"org{org_id}" / f"{slug}.webp"
+
+
+def save_photo(org_id: int, slug: str, raw: bytes, content_type: str | None) -> str:
     """Normaliza e grava a foto; devolve o caminho relativo a gravar no banco.
+
+    `slug` é o nome do arquivo (sem extensão), sempre derivado de identificador
+    do próprio sistema — nunca do nome enviado pelo cliente. Ver os wrappers
+    `save_barber_photo`/`save_client_photo` para o porquê de cada escolha.
 
     Levanta `MediaError` para tudo que é culpa do arquivo (tipo, tamanho, bytes
     corrompidos) — o chamador traduz em 422.
@@ -115,7 +123,7 @@ def save_barber_photo(org_id: int, barber_id: int, raw: bytes, content_type: str
     except OSError as exc:  # arquivo truncado/corrompido no meio do decode
         raise MediaError("Imagem corrompida ou incompleta.") from exc
 
-    path = _target(org_id, barber_id)
+    path = _target(org_id, slug)
     path.parent.mkdir(parents=True, exist_ok=True)
     # Escreve em temporário e renomeia: um upload concorrente (ou um erro no
     # meio da escrita) nunca deixa a foto meio gravada sendo servida.
@@ -126,14 +134,42 @@ def save_barber_photo(org_id: int, barber_id: int, raw: bytes, content_type: str
     # mtime em NANOssegundos: dois uploads dentro do mesmo segundo ainda geram
     # `?v=` distintos (com segundos inteiros, a 2ª troca não furaria o cache).
     version = path.stat().st_mtime_ns
-    return f"org{org_id}/barber-{barber_id}.webp?v={version}"
+    return f"{_relative(org_id, slug)}?v={version}"
+
+
+def delete_photo(org_id: int, slug: str) -> None:
+    """Remove o arquivo. Ausente = sucesso (idempotente)."""
+    try:
+        _target(org_id, slug).unlink(missing_ok=True)
+    except OSError:  # pragma: no cover — disco/permissão: o campo já foi limpo
+        logger.warning(
+            "media: falha ao remover mídia %s (org %s)", slug, org_id, exc_info=True
+        )
+
+
+# ─── profissional (D-85) ──────────────────────────────────────────────────────
+# Slug pelo id numérico: a foto do profissional é conteúdo de vitrine, aparece
+# na listagem pública de qualquer jeito — enumerar não revela nada novo.
+
+def save_barber_photo(org_id: int, barber_id: int, raw: bytes, content_type: str | None) -> str:
+    return save_photo(org_id, f"barber-{barber_id}", raw, content_type)
 
 
 def delete_barber_photo(org_id: int, barber_id: int) -> None:
-    """Remove o arquivo. Ausente = sucesso (idempotente)."""
-    try:
-        _target(org_id, barber_id).unlink(missing_ok=True)
-    except OSError:  # pragma: no cover — disco/permissão: o campo já foi limpo
-        logger.warning(
-            "media: falha ao remover foto do barbeiro %s (org %s)", barber_id, org_id, exc_info=True
-        )
+    delete_photo(org_id, f"barber-{barber_id}")
+
+
+# ─── cliente final (app nativo, Fase A) ───────────────────────────────────────
+# Slug pelo `clients.public_id` (UUID), NUNCA pelo id numérico: `/media` é
+# `StaticFiles` público sem autenticação, e id sequencial tornaria o acervo de
+# fotos de rosto de clientes enumerável (`org1/client-1.webp`, `-2`, ...) —
+# vazamento de dado pessoal sensível (LGPD). UUID não é adivinhável.
+
+def save_client_photo(
+    org_id: int, client_public_id, raw: bytes, content_type: str | None
+) -> str:
+    return save_photo(org_id, f"client-{client_public_id}", raw, content_type)
+
+
+def delete_client_photo(org_id: int, client_public_id) -> None:
+    delete_photo(org_id, f"client-{client_public_id}")

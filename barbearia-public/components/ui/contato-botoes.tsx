@@ -1,11 +1,18 @@
+"use client";
+
 /* Botões de contato (UI_SPEC_V3 §4, nível 3): contorno que vira ouro no hover.
    Ficam abaixo do CTA na hierarquia — quem quer marcar horário usa o botão
    dourado; estes são para quem quer falar com a barbearia ou ver o trabalho.
 
    Ícones inline (o CSP do site não carrega nada de fora e não há lib de
-   ícones no projeto). */
+   ícones no projeto).
+
+   Dentro do app (Capacitor) estes links saem da WebView (`openExternalUrl`):
+   abrir o Instagram/WhatsApp na própria WebView prenderia o usuário numa tela
+   sem barra de navegação, sem como voltar. No browser nada muda. */
 
 import type { Contato } from "@/lib/contato";
+import { handleExternalLink } from "@/lib/native";
 
 function IconeWhatsApp() {
   return (
@@ -77,12 +84,16 @@ export function ContatoBotoes({
   contato: Contato;
   className?: string;
 }) {
+  const whatsappUrl = `https://wa.me/${contato.whatsappDigits}`;
+  const telUrl = `tel:${contato.phoneDigits}`;
+
   return (
     <div className={`flex flex-wrap gap-3 ${className}`}>
       <a
-        href={`https://wa.me/${contato.whatsappDigits}`}
+        href={whatsappUrl}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={(e) => handleExternalLink(e, whatsappUrl)}
         className={BOTAO}
       >
         <IconeWhatsApp />
@@ -92,6 +103,7 @@ export function ContatoBotoes({
         href={contato.instagramUrl}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={(e) => handleExternalLink(e, contato.instagramUrl)}
         className={BOTAO}
       >
         <IconeInstagram />@{contato.instagram}
@@ -100,12 +112,17 @@ export function ContatoBotoes({
         href={contato.facebookUrl}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={(e) => handleExternalLink(e, contato.facebookUrl)}
         className={BOTAO}
       >
         <IconeFacebook />
         Facebook
       </a>
-      <a href={`tel:${contato.phoneDigits}`} className={BOTAO}>
+      <a
+        href={telUrl}
+        onClick={(e) => handleExternalLink(e, telUrl)}
+        className={BOTAO}
+      >
         <IconeTelefone />
         {contato.phone}
       </a>

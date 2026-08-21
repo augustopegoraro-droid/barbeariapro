@@ -58,11 +58,34 @@ export type PublicAppointment = {
   public_id: string;
   service_name: string;
   barber_name: string;
+  /* ids explícitos (Fase A): destravam o deep-link de remarcação, que antes
+     só recebia os NOMES e não conseguia pré-selecionar nada. */
+  service_id: number;
+  barber_id: number;
   start_at: string;
   end_at: string;
   status: string;
   total_amount: number;
   cancelable: boolean;
+  /* Avaliação já enviada (definitiva, sem edição) — null = ainda não avaliou. */
+  rating: number | null;
+  /* Concluído, sem avaliação e dentro da janela do backend. */
+  can_rate: boolean;
+};
+
+export type PublicProfile = {
+  name: string;
+  /* Somente leitura enquanto não houver OTP (D-79): vem MASCARADO da API. */
+  phone_masked: string;
+  email: string | null;
+  photo_url: string | null;
+  member_since: string;
+};
+
+export type PublicRating = {
+  rating: number;
+  comment: string | null;
+  created_at: string;
 };
 
 export class ApiError extends Error {
@@ -74,9 +97,17 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return raw<T>(path, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+}
+
+/* Sem `Content-Type` fixo: o upload de foto vai como multipart e o boundary
+   só é montado corretamente quando o browser escreve o header sozinho. */
+async function raw<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(`${base()}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
     ...init,
   });
   if (!resp.ok) {
@@ -135,6 +166,49 @@ export const api = {
       method: "POST",
     }),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
+
+  /* ─── Perfil do cliente (Fase A) ─────────────────────────────────────── */
+  profile: () => request<PublicProfile>("/me/profile"),
+  updateProfile: (data: { name?: string; email?: string }) =>
+    request<PublicProfile>("/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  uploadPhoto: (file: File) => {
+    const form = new FormData();
+    // Nome do campo = `file`, igual ao parâmetro do endpoint.
+    form.append("file", file, file.name || "foto.jpg");
+    return raw<PublicProfile>("/me/profile/foto", { method: "PUT", body: form });
+  },
+  deletePhoto: () =>
+    request<PublicProfile>("/me/profile/foto", { method: "DELETE" }),
+
+  /* ─── Avaliação e remarcação ──────────────────────────────────────────── */
+  rate: (publicId: string, data: { rating: number; comment?: string }) =>
+    request<PublicRating>(`/me/appointments/${publicId}/rating`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  reschedule: (
+    publicId: string,
+    data: { service_id: number; barber_id: number; start_at: string },
+  ) =>
+    request<PublicAppointment>(`/me/appointments/${publicId}/reschedule`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /* ─── Push nativo (FCM, app Capacitor) ────────────────────────────────── */
+  subscribeDevicePush: (token: string, platform: "ios" | "android") =>
+    request<void>("/push/device", {
+      method: "POST",
+      body: JSON.stringify({ token, platform }),
+    }),
+  unsubscribeDevicePush: (token: string) =>
+    request<void>("/push/device", {
+      method: "DELETE",
+      body: JSON.stringify({ token }),
+    }),
   subscribePush: (sub: { endpoint: string; p256dh: string; auth: string; user_agent?: string }) =>
     request<void>("/push/subscription", { method: "POST", body: JSON.stringify(sub) }),
   unsubscribePush: (endpoint: string) =>

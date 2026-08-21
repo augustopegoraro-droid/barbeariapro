@@ -29,6 +29,7 @@ from .enums import (
     MessageType,
     PaymentMethod,
     PurchaseOrderStatus,
+    PushChannel,
     PushSubscriberType,
     SaleStatus,
     ServiceCategory,
@@ -108,6 +109,7 @@ from .client_visibility import ClientVisibilitySettings
 from .consent import ConsentRecord
 from .client_session import ClientSession
 from .push_notification import PushSubscription, PushNotificationLog
+from .appointment_rating import AppointmentRating
 
 __all__ = [
     "Base",
@@ -125,6 +127,7 @@ __all__ = [
     "MessageSenderType",
     "MessageType",
     "PaymentMethod",
+    "PushChannel",
     "PushSubscriberType",
     "ServiceCategory",
     "SubscriptionStatus",
@@ -244,4 +247,5 @@ __all__ = [
     "ClientSession",
     "PushSubscription",
     "PushNotificationLog",
+    "AppointmentRating",
 ]

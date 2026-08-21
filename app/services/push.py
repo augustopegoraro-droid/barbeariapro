@@ -14,10 +14,12 @@ nada: é só um disparo perdido para quem ainda não ativou notificação.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +34,7 @@ from models import (
     Barber,
     Client,
     DeliveryStatus,
+    PushChannel,
     PushNotificationLog,
     PushSubscriberType,
     PushSubscription,
@@ -48,9 +51,36 @@ def _vapid_configured() -> bool:
     return bool(settings.vapid_public_key and settings.vapid_private_key)
 
 
+def _fcm_configured() -> bool:
+    return bool(settings.fcm_project_id and settings.fcm_credentials_json)
+
+
+_FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
+
+# Erros do FCM que significam "este token morreu" — equivalentes ao 404/410 do
+# Web Push. Qualquer outro erro é falha transitória: só loga, não revoga.
+_FCM_DEAD_TOKEN = {"UNREGISTERED", "INVALID_ARGUMENT", "NOT_FOUND", "SENDER_ID_MISMATCH"}
+
+
 def _fmt_when(start_local: datetime) -> str:
     weekday = _WEEKDAY_PT[start_local.weekday()]
     return f"{weekday}, {start_local.strftime('%d/%m')} às {start_local.strftime('%H:%M')}"
+
+
+async def _touch(db: AsyncSession, subscription_id: int) -> None:
+    await db.execute(
+        update(PushSubscription)
+        .where(PushSubscription.id == subscription_id)
+        .values(last_used_at=datetime.now(timezone.utc))
+    )
+
+
+async def _revoke(db: AsyncSession, subscription_id: int) -> None:
+    await db.execute(
+        update(PushSubscription)
+        .where(PushSubscription.id == subscription_id)
+        .values(revoked_at=datetime.now(timezone.utc))
+    )
 
 
 async def send_push(
@@ -62,7 +92,113 @@ async def send_push(
     url: str | None = None,
     tag: str | None = None,
 ) -> bool:
-    """Envia para UM dispositivo. Revoga a subscrição em 404/410 (morta)."""
+    """Envia para UM dispositivo, pelo canal da própria subscrição.
+
+    Web Push (navegador) e FCM (app nativo) coexistem na mesma tabela: o
+    chamador nunca escolhe canal, só o dispositivo. Revoga a subscrição quando
+    o serviço de push diz que ela morreu.
+    """
+    if subscription.channel == PushChannel.fcm:
+        return await _send_fcm(db, subscription, title=title, body=body, url=url, tag=tag)
+    return await _send_webpush(db, subscription, title=title, body=body, url=url, tag=tag)
+
+
+async def _send_fcm(
+    db: AsyncSession,
+    subscription: PushSubscription,
+    *,
+    title: str,
+    body: str,
+    url: str | None = None,
+    tag: str | None = None,
+) -> bool:
+    """FCM HTTP v1 (app nativo Capacitor). Sem config → nunca levanta."""
+    if not _fcm_configured():
+        _logger.warning("push: FCM_PROJECT_ID/FCM_CREDENTIALS_JSON ausentes — envio ignorado")
+        return False
+
+    token = subscription.endpoint.split("fcm:", 1)[-1]
+    try:
+        access_token = await asyncio.to_thread(_fcm_access_token)
+    except Exception:  # credencial inválida/expirada: falha do servidor, não do token
+        _logger.warning("push: falha ao obter access token do FCM", exc_info=True)
+        return False
+
+    payload = {
+        "message": {
+            "token": token,
+            "notification": {"title": title, "body": body},
+            # `data` é o que o app lê no handler: mesmo contrato do Web Push.
+            "data": {k: v for k, v in (("url", url), ("tag", tag)) if v},
+        }
+    }
+    endpoint = (
+        f"https://fcm.googleapis.com/v1/projects/{settings.fcm_project_id}/messages:send"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            resp = await http.post(
+                endpoint,
+                json=payload,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except httpx.HTTPError as exc:
+        _logger.warning("push: erro de rede no FCM (subscription_id=%s): %s", subscription.id, exc)
+        return False
+
+    if resp.status_code < 300:
+        await _touch(db, subscription.id)
+        return True
+
+    detail = _fcm_error_code(resp)
+    if detail in _FCM_DEAD_TOKEN:
+        await _revoke(db, subscription.id)
+    else:
+        _logger.warning(
+            "push: falha no FCM (subscription_id=%s, status=%s, code=%s)",
+            subscription.id, resp.status_code, detail,
+        )
+    return False
+
+
+def _fcm_access_token() -> str:
+    """OAuth2 de service account (bloqueante — chamado via `to_thread`)."""
+    # Import tardio, como o `pywebpush` abaixo: dep opcional, ausente em dev.
+    import json as _json
+
+    from google.oauth2 import service_account  # type: ignore[import-not-found]
+    from google.auth.transport.requests import Request  # type: ignore[import-not-found]
+
+    creds = service_account.Credentials.from_service_account_info(
+        _json.loads(settings.fcm_credentials_json), scopes=[_FCM_SCOPE]
+    )
+    creds.refresh(Request())
+    return creds.token
+
+
+def _fcm_error_code(resp: "httpx.Response") -> str | None:
+    """Extrai o `errorCode` do corpo de erro do FCM (best-effort)."""
+    try:
+        error = resp.json().get("error", {})
+    except ValueError:
+        return None
+    for detail in error.get("details", []) or []:
+        code = detail.get("errorCode")
+        if code:
+            return code
+    return error.get("status")
+
+
+async def _send_webpush(
+    db: AsyncSession,
+    subscription: PushSubscription,
+    *,
+    title: str,
+    body: str,
+    url: str | None = None,
+    tag: str | None = None,
+) -> bool:
+    """Envia para UM navegador. Revoga a subscrição em 404/410 (morta)."""
     if not _vapid_configured():
         _logger.warning("push: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY ausentes — envio ignorado")
         return False
@@ -80,20 +216,12 @@ async def send_push(
             vapid_private_key=settings.vapid_private_key,
             vapid_claims={"sub": settings.vapid_subject},
         )
-        await db.execute(
-            update(PushSubscription)
-            .where(PushSubscription.id == subscription.id)
-            .values(last_used_at=datetime.now(timezone.utc))
-        )
+        await _touch(db, subscription.id)
         return True
     except WebPushException as exc:
         status_code = getattr(exc.response, "status_code", None)
         if status_code in (404, 410):
-            await db.execute(
-                update(PushSubscription)
-                .where(PushSubscription.id == subscription.id)
-                .values(revoked_at=datetime.now(timezone.utc))
-            )
+            await _revoke(db, subscription.id)
         else:
             _logger.warning(
                 "push: falha ao enviar (subscription_id=%s, status=%s): %s",

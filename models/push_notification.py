@@ -31,7 +31,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
-from .enums import DeliveryStatus, PushSubscriberType, pg_enum
+from .enums import DeliveryStatus, PushChannel, PushSubscriberType, pg_enum
 
 
 class PushSubscription(Base):
@@ -41,6 +41,11 @@ class PushSubscription(Base):
             "(subscriber_type = 'user' AND user_id IS NOT NULL AND client_id IS NULL) OR "
             "(subscriber_type = 'client' AND client_id IS NOT NULL AND user_id IS NULL)",
             name="push_subscriptions_subscriber_exclusive",
+        ),
+        CheckConstraint(
+            "(channel = 'webpush' AND p256dh IS NOT NULL AND auth_key IS NOT NULL) OR "
+            "(channel = 'fcm' AND p256dh IS NULL AND auth_key IS NULL)",
+            name="push_subscriptions_channel_keys",
         ),
         UniqueConstraint("endpoint", name="push_subscriptions_endpoint_uq"),
         Index("idx_push_subscriptions_org_user", "organization_id", "user_id"),
@@ -60,9 +65,16 @@ class PushSubscription(Base):
     client_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("clients.id", ondelete="CASCADE")
     )
+    # Web Push: URL do push service. FCM: "fcm:<device_token>" (migration 0060)
+    # — mantém o upsert/revogação por `endpoint` valendo nos dois canais.
     endpoint: Mapped[str] = mapped_column(Text, nullable=False)
-    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
-    auth_key: Mapped[str] = mapped_column(Text, nullable=False)
+    channel: Mapped[PushChannel] = mapped_column(
+        pg_enum(PushChannel, "push_channel"), nullable=False, server_default="webpush"
+    )
+    # Chaves do protocolo Web Push — não existem no FCM (CHECK amarra ao canal).
+    p256dh: Mapped[Optional[str]] = mapped_column(Text)
+    auth_key: Mapped[Optional[str]] = mapped_column(Text)
+    device_platform: Mapped[Optional[str]] = mapped_column(Text)
     user_agent: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()

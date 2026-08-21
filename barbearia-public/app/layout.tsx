@@ -1,7 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Cormorant_Garamond, Jost } from "next/font/google";
 import "./globals.css";
 import RegisterSW from "@/components/register-sw";
+import AppTabBar from "@/components/app-tabbar";
+import { AppModeProvider } from "@/components/app-mode";
+import { isAppUserAgent } from "@/lib/native";
 
 /* Tipografia da landing (UI_SPEC_V3): Cormorant Garamond nas palavras da marca
    e nos títulos — o serifado de alto contraste do letreiro; Jost no texto e nos
@@ -66,12 +70,20 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  /* Modo app pelo User-Agent (`appendUserAgent: "TTApp/1"` do Capacitor).
+     Ler `headers()` aqui torna a renderização dinâmica — o custo é aceitável
+     porque o dado caro (a vitrine) continua vindo do cache de fetch com tag
+     `public-info` (D-84), não do cache de página. */
+  const isApp = isAppUserAgent((await headers()).get("user-agent"));
+
   return (
     <html lang="pt-BR" className={`${cormorant.variable} ${jost.variable}`}>
-      <body>
+      {/* `data-app` deixa o CSS esconder o que é marketing sem transformar as
+          páginas server em client (ver `globals.css`). */}
+      <body data-app={isApp ? "1" : undefined}>
         {/* Primeiro alvo de tabulação: pula o cabeçalho e o hero direto para a
             ação principal. Só aparece quando recebe foco. */}
         <a
@@ -80,8 +92,9 @@ export default function RootLayout({
         >
           Agendar horário
         </a>
-        {children}
+        <AppModeProvider isApp={isApp}>{children}</AppModeProvider>
         <RegisterSW />
+        <AppTabBar isApp={isApp} />
       </body>
     </html>
   );

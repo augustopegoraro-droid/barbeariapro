@@ -1,0 +1,19 @@
+# Dependências
+node_modules/
+
+# Projetos nativos gerados por `npx cap add ios/android` (cada dev gera localmente)
+ios/App/Pods/
+ios/App/build/
+ios/App/DerivedData/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Assinatura / credenciais de loja — nunca versionar
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+
+.DS_Store

@@ -3192,6 +3192,76 @@ celular real (Android + iOS instalado) — sem dispositivo físico disponível n
 
 ---
 
+**D-99 (2026-08-21) — App nativo do cliente final (iOS/Android) via Capacitor + avaliação/perfil/remarcação —
+implementado, NÃO deployado em prod.** Usuário pediu um app inspirado no "Bunker Club" (app de agendamento
+de barbearia na App Store): agendar, histórico com avaliação/remarcação/cancelamento, perfil com foto/email/
+telefone. Decisão de arquitetura: **Capacitor empacotando o site público já em produção** (não React
+Native/Flutter) — o WebView do app aponta via `server.url` direto para `https://taylorethedy.com/inicio`
+(SSR remoto, não bundle estático), reaproveitando cookie de sessão `tt_session` (D-79) sem tocar em CORS/
+auth. Plano completo em `/Users/apleandro/.claude/plans/zany-waddling-lark.md`.
+
+**Backend (migrations `0058`-`0060`, head `0060`):** `appointment_ratings` (append-only — GRANT só
+`SELECT, INSERT`, sem UPDATE/DELETE; avaliação é definitiva por decisão do dono, uma por atendimento,
+`rating` 1-5 + `comment` opcional, só após `status=concluido` e dentro de `public_rating_window_days`
+[default 30]); `clients.photo_path` (molde `0045_barber_photo`, mas com slug = `clients.public_id` [UUID],
+não o id numérico — `/media` é `StaticFiles` público sem auth, id sequencial seria enumerável e vazaria
+foto de rosto); `push_subscriptions` ganha canal `fcm` ao lado do `webpush` existente (D-96) via CHECK
+`(channel='webpush' AND p256dh/auth_key NOT NULL) OR (channel='fcm' AND ambos NULL)` — Web Push comum
+(`pywebpush`) e o novo `_send_fcm` (FCM HTTP v1 + `google-auth`, import tardio) coexistem no mesmo
+`app/services/push.py::send_push()`, que virou um dispatcher por `channel`. Endpoints novos em
+`app/api/public.py`, todos sob a sessão de cookie existente (sem RBAC/permissão nova):
+`GET/PATCH /public/{sub}/me/profile` (**telefone somente leitura** — decisão do dono: sem OTP ainda,
+D-79, editar sem verificação abriria sondagem de base e sequestro de lembrete), `PUT/DELETE
+/me/profile/foto`, `POST /me/appointments/{id}/rating`, `POST /me/appointments/{id}/reschedule`
+(**atômico**: cancela o antigo e cria o novo na mesma transação, reaproveitando a validação/lock de
+`book_appointment` via helper `_place_appointment()` extraído — se o novo horário conflitar, o rollback
+devolve o antigo a `agendado`), `POST/DELETE /push/device` (registro/revogação de token FCM).
+`PublicAppointmentOut` ganhou `service_id`/`barber_id`/`rating`/`can_rate` — destrava o deep-link de
+reagendamento que estava comentado como pendente no frontend. `app/services/media.py` generalizado
+(`save_photo`/`delete_photo` genéricos por trás de `save_barber_photo`/`save_client_photo`, sem mudar a
+assinatura pública usada pelo D-85). Suíte: **796 pass** (+ falhas flaky/ambientais pré-existentes,
+confirmadas via `git stash` como não relacionadas — ver dívida "Suíte depende do estado acumulado do
+staging"); `tests/test_barber_photo.py` 16/16 intacto (gate do refactor do `media.py`).
+
+**Frontend (`barbearia-public/`):** `lib/native.ts` (porta única do bridge Capacitor — `isNativeApp()`,
+câmera nativa, links externos, háptico, push nativo — tudo por dynamic import, fora do bundle de quem
+acessa pelo browser normal); `app/inicio/page.tsx` (home do "modo app", sem landing de marketing);
+`app/perfil/page.tsx` (foto/nome/email editáveis, telefone read-only com link de WhatsApp, "Sair");
+`components/rating-sheet.tsx` (5 estrelas + comentário, molde do bottom sheet de cancelamento já
+existente); `app/meus-agendamentos/page.tsx` ganha botões "Avaliar"/"Remarcar"; `booking-flow.tsx` lê
+`?profissional=`/`?remarcar=` além do `?servico=` já existente e chama `api.reschedule()` quando aplicável;
+`components/app-tabbar.tsx` (barra inferior, só em modo app, detectado no server via header
+`User-Agent: TTApp/1` — casa com `appendUserAgent` do `capacitor.config.ts`). `tsc --noEmit` e `next build`
+limpos (`next lint` já estava quebrado antes desta sessão, sem config ESLint — não é regressão).
+**Efeito colateral aceito:** `headers()` no root layout torna `/` e `/agendar` dinâmicas (perdem o ISR de
+300s/60s do D-84) — o fetch de `public-info` continua cacheado por tag, só a renderização da página deixa
+de ser estática; se incomodar SEO/TTFB, mover a detecção de modo app para dentro das rotas.
+
+**Capacitor (`barbearia-app/`, novo, irmão de `barbearia-public/`):** `capacitor.config.ts` com `server.url
+= https://taylorethedy.com/inicio`, `appendUserAgent: 'TTApp/1'`; ícone real da marca (símbolo "T",
+D-82) copiado de `barbearia-public/public/icon-512.png` — pendente gerar em 1024² para ficha de loja;
+splash gerado via PIL. **Não entra em `docker-compose.app.yml` nem em `deploy/update.sh`** — é só projeto
+de build local, nunca deployado na VM. `.dockerignore` da raiz corrigido de quebra: `barbearia-public/` e
+`barbearia-superadmin/` estavam vazando para o contexto de build docker do backend sem necessidade (só
+`barbearia-frontend/` estava ignorado); agora os três diretórios de app (incluindo `barbearia-app/`) estão
+fora.
+
+**Fase D — responsabilidade do usuário, documentada em `barbearia-app/README.md`, NADA disso feito ainda:**
+conta Apple Developer (US$99/ano) + Google Play Console (US$25); projeto Firebase (grátis, pré-requisito
+do push nativo — `google-services.json`/`GoogleService-Info.plist` + service account para
+`FCM_PROJECT_ID`/`FCM_CREDENTIALS_JSON` no `.env` da VM); key APNs (`.p8`) depois de ter conta Apple;
+keystore Android + certificados iOS; fichas de loja (ícone 1024², screenshots, Data Safety/Privacy
+Nutrition Labels declarando nome/telefone/email/foto); conta de teste para revisão (app não tem senha, só
+nome+telefone); risco de rejeição por Guideline 4.2 (wrapper de site — mitigado por `/inicio` dedicado +
+push/câmera nativos, não é garantia).
+
+**Pendente para ir a produção:** aplicar migrations `0058`-`0060` na VM (backup antes, molde D-96/D-98);
+rebuild backend+`public` (frontend web); **depois disso**, e só depois, `barbearia-app/` pode ser
+compilado localmente (`server.url` aponta pro site vivo) e a Fase D (contas/Firebase/lojas) começa. Nenhum
+teste manual no browser/dispositivo real foi feito nesta sessão.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |
@@ -3223,3 +3293,4 @@ celular real (Android + iOS instalado) — sem dispositivo físico disponível n
 | Backups `.sql` da VM com PII, sem cifra nem prazo | `~/predeploy_*.sql` na VM | Médio | D-86: anonimizar um titular não o remove dos dumps. Inventariar e descartar os antigos. |
 | `POST /kernel-ia/query` sem rate limiting | `app/api/kernel_ia.py` | Baixo | Nenhuma throttle/quota por usuário; cada pergunta financeira (D-58) faz 2 chamadas LLM. Severidade caiu de Médio para Baixo no **D-88** (modelo passou a `claude-haiku-4-5`, $1/$5 por MTok) — o item continua aberto, só o custo do abuso encolheu. |
 | ~~Select dentro de Dialog pode fechar o Dialog inteiro~~ | `components/ui/select.tsx` + `components/ui/dialog.tsx` | ✅ Descartado | Investigado a fundo em 2026-08-03: não é bug — era a ferramenta de automação clicando duas vezes no trigger (abre/fecha) em vez de clicar na opção, mais um descompasso de escala screenshot×viewport. Clique correto na opção seleciona e mantém o Dialog aberto, confirmado no `MovimentacaoDialog` e no `ProdutoFormDialog`. Nada a corrigir. |
+| App nativo (D-99) sem deploy/validação real | `barbearia-app/`, migrations `0058`-`0060` | ⚠️ Alto | Implementado 2026-08-21, não deployado em prod nem testado no browser/dispositivo real. Falta: aplicar migrations na VM, rebuild backend+`public`, depois compilar o app Capacitor local e só então iniciar a Fase D (contas de loja/Firebase/APNs). |

@@ -5,6 +5,7 @@
    Tratamento escuro (UI_SPEC_V3): card em superfície + fio, ação em ouro. */
 
 import { useEffect, useState } from "react";
+import { useIsApp } from "@/components/app-mode";
 
 const DISMISSED_KEY = "tt_install_dismissed";
 
@@ -16,8 +17,11 @@ export default function InstallBanner() {
   const [visible, setVisible] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+  // Quem já está no app instalado não precisa ser convidado a instalar o PWA.
+  const isApp = useIsApp();
 
   useEffect(() => {
+    if (isApp) return;
     if (localStorage.getItem(DISMISSED_KEY)) return;
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
@@ -38,9 +42,9 @@ export default function InstallBanner() {
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
     return () => window.removeEventListener("beforeinstallprompt", onPrompt);
-  }, []);
+  }, [isApp]);
 
-  if (!visible) return null;
+  if (isApp || !visible) return null;
 
   return (
     <aside

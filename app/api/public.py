@@ -25,14 +25,24 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status as http_status
-from pydantic import BaseModel, Field
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status as http_status,
+)
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.phone import normalize_phone
+from app.core.phone import mask_phone, normalize_phone
 from app.core.privacy import PRIVACY_POLICY_VERSION, SOURCE_SITE_SIGNUP
 from app.core.rate_limit import limiter
 from app.core.security import generate_refresh_token, hash_refresh_token
@@ -50,6 +60,7 @@ from app.services.tenant import org_id_by_subdomain
 from models import (
     Appointment,
     AppointmentItem,
+    AppointmentRating,
     AppointmentStatus,
     Barber,
     BarberService,
@@ -61,6 +72,7 @@ from models import (
     ConsentStatus,
     ContactChannel,
     Organization,
+    PushChannel,
     PushSubscriberType,
     PushSubscription,
     Service,
@@ -210,11 +222,58 @@ class PublicAppointmentOut(BaseModel):
     public_id: str
     service_name: str
     barber_name: str
+    # ids explícitos: destravam remarcação/reagendamento com pré-seleção no
+    # frontend (que só recebia nomes e não conseguia montar o deep-link).
+    service_id: int
+    barber_id: int
     start_at: str
     end_at: str
     status: str
     total_amount: float
     cancelable: bool
+    rating: Optional[int] = None
+    can_rate: bool = False
+
+
+def _cancelable(appt: Appointment, now: datetime) -> bool:
+    return (
+        appt.status == AppointmentStatus.agendado
+        and appt.start_at > now + timedelta(hours=settings.public_cancel_min_hours)
+    )
+
+
+def _can_rate(appt: Appointment, rating: Optional[int], now: datetime) -> bool:
+    """Concluído, ainda não avaliado e dentro da janela de avaliação."""
+    return (
+        rating is None
+        and appt.status == AppointmentStatus.concluido
+        and appt.end_at >= now - timedelta(days=settings.public_rating_window_days)
+    )
+
+
+def _appointment_out(
+    appt: Appointment,
+    item: AppointmentItem,
+    service_name: str,
+    barber_name: str,
+    *,
+    now: datetime,
+    rating: Optional[int] = None,
+) -> PublicAppointmentOut:
+    return PublicAppointmentOut(
+        public_id=str(appt.public_id),
+        service_name=service_name,
+        barber_name=barber_name,
+        service_id=item.service_id,
+        barber_id=item.barber_id,
+        start_at=appt.start_at.isoformat(),
+        end_at=appt.end_at.isoformat(),
+        status=appt.status.value,
+        total_amount=float(appt.total_amount),
+        cancelable=_cancelable(appt, now),
+        rating=rating,
+        can_rate=_can_rate(appt, rating, now),
+    )
 
 
 # ─── GET /info ───────────────────────────────────────────────────────────────
@@ -514,10 +573,49 @@ async def book_appointment(
     session: Annotated[ClientSession, Depends(get_client_session)],
 ) -> PublicAppointmentOut:
     svc, barber = await _validate_service_barber(db, org_id, body.service_id, body.barber_id)
+    appt, item = await _place_appointment(
+        db, org_id=org_id, session=session, svc=svc, barber=barber, start_at=body.start_at
+    )
+    appt_id = appt.id
+    start_iso = appt.start_at.isoformat()
+    out = _appointment_out(
+        appt, item, svc.name, barber.name, now=datetime.now(timezone.utc)
+    )
+    await db.commit()
 
-    if body.start_at.tzinfo is None:
+    background_tasks.add_task(push_appointment, appt_id, org_id, "upsert")
+    background_tasks.add_task(push_svc.notify_booking_confirmation, appt_id, org_id)
+    record_event(
+        organization_id=org_id,
+        action="public.appointment_created",
+        actor_kind="client",
+        resource_type="appointment",
+        resource_id=appt_id,
+        after={"service_id": svc.id, "barber_id": barber.id, "start_at": start_iso},
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return out
+
+
+async def _place_appointment(
+    db: AsyncSession,
+    *,
+    org_id: int,
+    session: ClientSession,
+    svc: Service,
+    barber: Barber,
+    start_at: datetime,
+) -> tuple[Appointment, AppointmentItem]:
+    """Cria `Appointment` + `AppointmentItem` na transação corrente (SEM commit).
+
+    Extraído de `book_appointment` para que a remarcação (que cancela o antigo
+    e cria o novo) use exatamente a mesma validação de grade/conflito e o mesmo
+    lock de numeração, na MESMA transação — nunca em duas chamadas.
+    """
+    if start_at.tzinfo is None:
         raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, "start_at deve incluir fuso horário.")
-    start_utc = body.start_at.astimezone(timezone.utc)
+    start_utc = start_at.astimezone(timezone.utc)
     end_utc = start_utc + timedelta(minutes=svc.default_duration_min)
 
     unit = await _default_unit(db, org_id)
@@ -557,45 +655,18 @@ async def book_appointment(
     )
     db.add(appt)
     await db.flush()
-    appt_id = appt.id
-    public_id = str(appt.public_id)
-    start_iso = appt.start_at.isoformat()
-    end_iso = appt.end_at.isoformat()
 
-    db.add(
-        AppointmentItem(
-            organization_id=org_id,
-            appointment_id=appt_id,
-            service_id=svc.id,
-            barber_id=barber.id,
-            price_charged=price,
-            duration_minutes=svc.default_duration_min,
-        )
-    )
-    await db.commit()
-
-    background_tasks.add_task(push_appointment, appt_id, org_id, "upsert")
-    background_tasks.add_task(push_svc.notify_booking_confirmation, appt_id, org_id)
-    record_event(
+    item = AppointmentItem(
         organization_id=org_id,
-        action="public.appointment_created",
-        actor_kind="client",
-        resource_type="appointment",
-        resource_id=appt_id,
-        after={"service_id": svc.id, "barber_id": barber.id, "start_at": start_iso},
-        ip=_client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        appointment_id=appt.id,
+        service_id=svc.id,
+        barber_id=barber.id,
+        price_charged=price,
+        duration_minutes=svc.default_duration_min,
     )
-    return PublicAppointmentOut(
-        public_id=public_id,
-        service_name=svc.name,
-        barber_name=barber.name,
-        start_at=start_iso,
-        end_at=end_iso,
-        status="agendado",
-        total_amount=price,
-        cancelable=True,
-    )
+    db.add(item)
+    await db.flush()
+    return appt, item
 
 
 # ─── GET /me/appointments ────────────────────────────────────────────────────
@@ -621,38 +692,37 @@ async def my_appointments(
         )
     ).all()
     now = datetime.now(timezone.utc)
-    min_cancel = timedelta(hours=settings.public_cancel_min_hours)
+    ratings = await _ratings_by_appointment(db, [appt.id for appt, *_ in rows])
     return [
-        PublicAppointmentOut(
-            public_id=str(appt.public_id),
-            service_name=service_name,
-            barber_name=barber_name,
-            start_at=appt.start_at.isoformat(),
-            end_at=appt.end_at.isoformat(),
-            status=appt.status.value,
-            total_amount=float(appt.total_amount),
-            cancelable=(
-                appt.status == AppointmentStatus.agendado
-                and appt.start_at > now + min_cancel
-            ),
+        _appointment_out(
+            appt, item, service_name, barber_name, now=now, rating=ratings.get(appt.id)
         )
-        for appt, _item, service_name, barber_name in rows
+        for appt, item, service_name, barber_name in rows
     ]
 
 
-# ─── POST /me/appointments/{public_id}/cancel ────────────────────────────────
+async def _ratings_by_appointment(
+    db: AsyncSession, appointment_ids: list[int]
+) -> dict[int, int]:
+    if not appointment_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(AppointmentRating.appointment_id, AppointmentRating.rating).where(
+                AppointmentRating.appointment_id.in_(appointment_ids)
+            )
+        )
+    ).all()
+    return {appointment_id: rating for appointment_id, rating in rows}
 
-@router.post("/me/appointments/{public_id}/cancel", response_model=PublicAppointmentOut)
-@limiter.limit("10/minute")
-async def cancel_appointment(
-    public_id: str,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    subdomain: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    org_id: Annotated[int, Depends(get_public_org)],
-    session: Annotated[ClientSession, Depends(get_client_session)],
-) -> PublicAppointmentOut:
+
+async def _load_own_appointment(
+    db: AsyncSession, session: ClientSession, public_id: str
+) -> tuple[Appointment, AppointmentItem, str, str]:
+    """Agendamento DESTA sessão (D-79: sem OTP, cada sessão só vê o que criou).
+
+    Fora da sessão → 404 (nunca 403): não confirmar que o agendamento existe.
+    """
     try:
         appt_uuid = uuid.UUID(public_id)
     except ValueError:
@@ -669,7 +739,24 @@ async def cancel_appointment(
     ).first()
     if row is None:
         raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Agendamento não encontrado.")
-    appt, _item, service_name, barber_name = row
+    appt, item, service_name, barber_name = row
+    return appt, item, service_name, barber_name
+
+
+# ─── POST /me/appointments/{public_id}/cancel ────────────────────────────────
+
+@router.post("/me/appointments/{public_id}/cancel", response_model=PublicAppointmentOut)
+@limiter.limit("10/minute")
+async def cancel_appointment(
+    public_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> PublicAppointmentOut:
+    appt, item, service_name, barber_name = await _load_own_appointment(db, session, public_id)
 
     if appt.status != AppointmentStatus.agendado:
         raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, "Este agendamento não pode mais ser cancelado.")
@@ -682,15 +769,8 @@ async def cancel_appointment(
 
     appt.status = AppointmentStatus.cancelado
     appt_id = appt.id
-    out = PublicAppointmentOut(
-        public_id=str(appt.public_id),
-        service_name=service_name,
-        barber_name=barber_name,
-        start_at=appt.start_at.isoformat(),
-        end_at=appt.end_at.isoformat(),
-        status="cancelado",
-        total_amount=float(appt.total_amount),
-        cancelable=False,
+    out = _appointment_out(
+        appt, item, service_name, barber_name, now=datetime.now(timezone.utc)
     )
     await db.commit()
 
@@ -701,6 +781,354 @@ async def cancel_appointment(
         actor_kind="client",
         resource_type="appointment",
         resource_id=appt_id,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return out
+
+
+# ─── POST /me/appointments/{public_id}/rating ────────────────────────────────
+
+
+class RatingIn(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = Field(None, max_length=1000)
+
+
+class RatingOut(BaseModel):
+    rating: int
+    comment: Optional[str]
+    created_at: str
+
+
+@router.post(
+    "/me/appointments/{public_id}/rating",
+    response_model=RatingOut,
+    status_code=http_status.HTTP_201_CREATED,
+)
+@limiter.limit("10/minute")
+async def rate_appointment(
+    body: RatingIn,
+    public_id: str,
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> RatingOut:
+    """Avaliação pós-atendimento — **definitiva** (sem edição/remoção).
+
+    A tabela nasce append-only (GRANT só SELECT/INSERT, migration 0058); o 409
+    de duplicidade é o UNIQUE em `appointment_id`, não uma checagem otimista.
+    """
+    appt, item, _service_name, _barber_name = await _load_own_appointment(db, session, public_id)
+
+    if appt.status != AppointmentStatus.concluido:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Só é possível avaliar um atendimento concluído.",
+        )
+    window = timedelta(days=settings.public_rating_window_days)
+    if appt.end_at < datetime.now(timezone.utc) - window:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"O prazo para avaliar este atendimento ({settings.public_rating_window_days} dias) já passou.",
+        )
+
+    existing = (
+        await db.execute(
+            select(AppointmentRating.id).where(AppointmentRating.appointment_id == appt.id)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(http_status.HTTP_409_CONFLICT, "Este atendimento já foi avaliado.")
+
+    comment = (body.comment or "").strip() or None
+    row = AppointmentRating(
+        organization_id=org_id,
+        appointment_id=appt.id,
+        client_id=appt.client_id,
+        barber_id=item.barber_id,
+        rating=body.rating,
+        comment=comment,
+    )
+    db.add(row)
+    await db.flush()
+    created_at = row.created_at or datetime.now(timezone.utc)
+    appt_id = appt.id
+    await db.commit()
+
+    record_event(
+        organization_id=org_id,
+        action="public.appointment_rated",
+        actor_kind="client",
+        resource_type="appointment",
+        resource_id=appt_id,
+        after={"rating": body.rating, "has_comment": comment is not None},
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return RatingOut(
+        rating=body.rating,
+        comment=comment,
+        created_at=created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+    )
+
+
+# ─── POST /me/appointments/{public_id}/reschedule ────────────────────────────
+
+
+class RescheduleIn(BaseModel):
+    service_id: int
+    barber_id: int
+    start_at: datetime
+
+
+@router.post("/me/appointments/{public_id}/reschedule", response_model=PublicAppointmentOut)
+@limiter.limit("10/minute")
+async def reschedule_appointment(
+    body: RescheduleIn,
+    public_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> PublicAppointmentOut:
+    """Remarcação **atômica**: cancela o antigo e cria o novo na MESMA transação.
+
+    Fazer isso em duas chamadas (cancelar + agendar) deixaria o cliente sem
+    horário nenhum se a segunda falhasse — daí um endpoint só. O novo passa
+    pela mesma validação de grade/conflito e pelo mesmo lock de numeração de
+    `book_appointment` (via `_place_appointment`); se ela levantar, nada é
+    comitado e o antigo continua `agendado`.
+    """
+    old_appt, _old_item, _svc_name, _barber_name = await _load_own_appointment(
+        db, session, public_id
+    )
+
+    if old_appt.status != AppointmentStatus.agendado:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Este agendamento não pode mais ser remarcado.",
+        )
+    if old_appt.start_at <= datetime.now(timezone.utc) + timedelta(
+        hours=settings.public_cancel_min_hours
+    ):
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Remarcação pelo site só até {settings.public_cancel_min_hours}h antes do horário. "
+            "Entre em contato com o estabelecimento.",
+        )
+
+    svc, barber = await _validate_service_barber(db, org_id, body.service_id, body.barber_id)
+
+    # Libera a grade do horário antigo ANTES de validar o novo: sem isso,
+    # remarcar para um slot que encosta no próprio agendamento colidiria
+    # consigo mesmo. Se `_place_appointment` levantar, o rollback devolve.
+    old_id = old_appt.id
+    before = {
+        "start_at": old_appt.start_at.isoformat(),
+        "service_id": _old_item.service_id,
+        "barber_id": _old_item.barber_id,
+    }
+    old_appt.status = AppointmentStatus.cancelado
+    await db.flush()
+
+    appt, item = await _place_appointment(
+        db, org_id=org_id, session=session, svc=svc, barber=barber, start_at=body.start_at
+    )
+    new_id = appt.id
+    out = _appointment_out(
+        appt, item, svc.name, barber.name, now=datetime.now(timezone.utc)
+    )
+    await db.commit()
+
+    background_tasks.add_task(push_appointment, old_id, org_id, "delete")
+    background_tasks.add_task(push_appointment, new_id, org_id, "upsert")
+    background_tasks.add_task(push_svc.notify_booking_confirmation, new_id, org_id)
+    record_event(
+        organization_id=org_id,
+        action="public.appointment_rescheduled",
+        actor_kind="client",
+        resource_type="appointment",
+        resource_id=new_id,
+        before=before,
+        after={
+            "start_at": out.start_at,
+            "service_id": svc.id,
+            "barber_id": barber.id,
+            "canceled_appointment_id": old_id,
+        },
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return out
+
+
+# ─── GET/PATCH /me/profile + foto ────────────────────────────────────────────
+
+
+class ProfileOut(BaseModel):
+    name: str
+    # Telefone é somente leitura na v1 (sem OTP, D-79) e sai MASCARADO: o
+    # cliente só precisa reconhecer o número, não relê-lo por inteiro.
+    phone_masked: str
+    email: Optional[str]
+    photo_url: Optional[str]
+    member_since: str
+
+
+class ProfileUpdateIn(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=120)
+    email: Optional[EmailStr] = None
+
+
+async def _load_own_client(db: AsyncSession, session: ClientSession) -> Client:
+    client = (
+        await db.execute(select(Client).where(Client.id == session.client_id))
+    ).scalar_one_or_none()
+    if client is None or client.deleted_at is not None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Cadastro não encontrado.")
+    return client
+
+
+def _profile_out(client: Client) -> ProfileOut:
+    return ProfileOut(
+        name=client.name,
+        phone_masked=mask_phone(client.phone_e164),
+        email=client.email,
+        photo_url=media.public_url(client.photo_path),
+        member_since=client.created_at.isoformat(),
+    )
+
+
+@router.get("/me/profile", response_model=ProfileOut)
+@limiter.limit("60/minute")
+async def get_profile(
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> ProfileOut:
+    return _profile_out(await _load_own_client(db, session))
+
+
+@router.patch("/me/profile", response_model=ProfileOut)
+@limiter.limit("20/minute")
+async def update_profile(
+    body: ProfileUpdateIn,
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> ProfileOut:
+    """Nome e e-mail. **Telefone não entra aqui** — é a chave de identidade do
+    cadastro e trocá-lo sem OTP permitiria assumir o cadastro de outra pessoa.
+    """
+    client = await _load_own_client(db, session)
+    before = {"name": client.name, "email": client.email}
+
+    fields = body.model_dump(exclude_unset=True)
+    if "name" in fields and fields["name"] is not None:
+        client.name = fields["name"].strip()
+    if "email" in fields:
+        client.email = str(fields["email"]) if fields["email"] else None
+
+    await db.flush()
+    out = _profile_out(client)
+    client_id = client.id
+    after = {"name": client.name, "email": client.email}
+    await db.commit()
+
+    record_event(
+        organization_id=org_id,
+        action="public.profile_updated",
+        actor_kind="client",
+        resource_type="client",
+        resource_id=client_id,
+        before=before,
+        after=after,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return out
+
+
+@router.put("/me/profile/foto", response_model=ProfileOut)
+@limiter.limit("10/minute")
+async def upload_profile_photo(
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+    file: Annotated[UploadFile, File(description="JPG, PNG, WebP ou HEIC (máx. 8 MB)")],
+) -> ProfileOut:
+    """Substitui a foto do cliente (molde `equipe.py::enviar_foto_barbeiro`).
+
+    O nome do arquivo vem do `public_id` (UUID) do cliente, não do id numérico:
+    `/media` é público sem autenticação e um id sequencial tornaria o acervo de
+    fotos de rosto enumerável (ver `app/services/media.py`).
+    """
+    client = await _load_own_client(db, session)
+    raw = await file.read()
+    try:
+        client.photo_path = media.save_client_photo(
+            org_id, client.public_id, raw, file.content_type
+        )
+    except media.MediaError as exc:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+        ) from exc
+
+    await db.flush()
+    out = _profile_out(client)
+    client_id = client.id
+    await db.commit()
+
+    record_event(
+        organization_id=org_id,
+        action="public.profile_photo_updated",
+        actor_kind="client",
+        resource_type="client",
+        resource_id=client_id,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return out
+
+
+@router.delete("/me/profile/foto", response_model=ProfileOut)
+@limiter.limit("10/minute")
+async def delete_profile_photo(
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> ProfileOut:
+    """Volta para a inicial do nome. Idempotente."""
+    client = await _load_own_client(db, session)
+    client.photo_path = None
+    await db.flush()
+    out = _profile_out(client)
+    client_id = client.id
+    public_uuid = client.public_id
+    await db.commit()
+
+    # Só apaga o arquivo depois de o campo sair do banco (molde D-85): se o
+    # disco falhar, sobra órfão invisível — nunca linha apontando para o vazio.
+    media.delete_client_photo(org_id, public_uuid)
+    record_event(
+        organization_id=org_id,
+        action="public.profile_photo_deleted",
+        actor_kind="client",
+        resource_type="client",
+        resource_id=client_id,
         ip=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
@@ -796,5 +1224,92 @@ async def public_unsubscribe_push(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Subscrição não encontrada.")
+    row.revoked_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
+# ─── POST/DELETE /push/device (app nativo, FCM) ──────────────────────────────
+
+
+class PublicDeviceIn(BaseModel):
+    token: str = Field(min_length=8, max_length=4096)
+    platform: str = Field(pattern="^(ios|android)$")
+
+
+def _fcm_endpoint(token: str) -> str:
+    """Device token do FCM no mesmo campo `endpoint` do Web Push.
+
+    Prefixo `fcm:` mantém upsert por `endpoint` e revogação valendo nos dois
+    canais sem tabela nova (ver migration 0060).
+    """
+    return f"fcm:{token}"
+
+
+@router.post("/push/device", status_code=http_status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def public_register_device(
+    body: PublicDeviceIn,
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> None:
+    await db.execute(
+        pg_insert(PushSubscription)
+        .values(
+            organization_id=org_id,
+            subscriber_type=PushSubscriberType.client,
+            user_id=None,
+            client_id=session.client_id,
+            endpoint=_fcm_endpoint(body.token),
+            channel=PushChannel.fcm,
+            # Chaves do Web Push não existem no FCM (CHECK do canal na 0060).
+            p256dh=None,
+            auth_key=None,
+            device_platform=body.platform,
+            user_agent=(request.headers.get("user-agent") or "")[:500] or None,
+        )
+        .on_conflict_do_update(
+            index_elements=["endpoint"],
+            set_={
+                "client_id": session.client_id,
+                "user_id": None,
+                "subscriber_type": PushSubscriberType.client,
+                "channel": PushChannel.fcm,
+                "p256dh": None,
+                "auth_key": None,
+                "device_platform": body.platform,
+                "revoked_at": None,
+            },
+        )
+    )
+    await db.commit()
+
+
+class PublicDeviceDeleteIn(BaseModel):
+    token: str
+
+
+@router.delete("/push/device", status_code=http_status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def public_unregister_device(
+    body: PublicDeviceDeleteIn,
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> None:
+    row = (
+        await db.execute(
+            select(PushSubscription).where(
+                PushSubscription.endpoint == _fcm_endpoint(body.token),
+                PushSubscription.client_id == session.client_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Dispositivo não encontrado.")
     row.revoked_at = datetime.now(timezone.utc)
     await db.commit()

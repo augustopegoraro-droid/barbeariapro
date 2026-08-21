@@ -19,7 +19,7 @@ from sqlalchemy import create_engine, select, text
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.services import push as push_svc
-from models import PushNotificationLog, PushSubscriberType, PushSubscription
+from models import PushChannel, PushNotificationLog, PushSubscriberType, PushSubscription
 from tests.conftest import SEED_ORG_ID
 
 from tests.test_public_site import BASE, _create_session, _first_slot, public_seed  # noqa: F401
@@ -421,3 +421,138 @@ async def test_rls_isola_subscricao_entre_orgs():
             )
         ).scalars().all()
         assert rows == []
+
+
+# ─── canal nativo (FCM) ──────────────────────────────────────────────────────
+
+
+def _fcm_token() -> str:
+    return f"teste-{uuid.uuid4().hex}"
+
+
+@pytest.mark.asyncio
+async def test_public_registra_e_revoga_dispositivo_fcm(client, public_seed):
+    await _create_session(client)
+    token = _fcm_token()
+
+    resp = await client.post(f"{BASE}/push/device", json={"token": token, "platform": "ios"})
+    assert resp.status_code == 204, resp.text
+
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        row = (
+            await session.execute(
+                select(PushSubscription).where(PushSubscription.endpoint == f"fcm:{token}")
+            )
+        ).scalar_one()
+        assert row.channel == PushChannel.fcm
+        assert row.device_platform == "ios"
+        # CHECK do canal (migration 0060): FCM não tem chaves de Web Push.
+        assert row.p256dh is None and row.auth_key is None
+        assert row.subscriber_type == PushSubscriberType.client
+        assert row.revoked_at is None
+
+    # re-registrar o mesmo token é upsert, não duplica
+    resp = await client.post(f"{BASE}/push/device", json={"token": token, "platform": "android"})
+    assert resp.status_code == 204
+
+    resp = await client.request("DELETE", f"{BASE}/push/device", json={"token": token})
+    assert resp.status_code == 204, resp.text
+
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        rows = (
+            await session.execute(
+                select(PushSubscription).where(PushSubscription.endpoint == f"fcm:{token}")
+            )
+        ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].device_platform == "android"
+        assert rows[0].revoked_at is not None
+
+
+@pytest.mark.asyncio
+async def test_plataforma_invalida_422(client, public_seed):
+    await _create_session(client)
+    resp = await client.post(
+        f"{BASE}/push/device", json={"token": _fcm_token(), "platform": "windows"}
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_fcm_sem_configuracao_nao_levanta():
+    """Sem FCM_PROJECT_ID/CREDENTIALS o canal só loga e devolve False."""
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        sub = PushSubscription(
+            organization_id=SEED_ORG_ID,
+            subscriber_type=PushSubscriberType.client,
+            client_id=None,
+            user_id=None,
+            endpoint=f"fcm:{_fcm_token()}",
+            channel=PushChannel.fcm,
+        )
+        # não precisa persistir: o caminho testado sai antes de tocar o banco
+        with patch.object(settings, "fcm_project_id", ""), patch.object(
+            settings, "fcm_credentials_json", ""
+        ):
+            assert await push_svc.send_push(session, sub, title="t", body="b") is False
+
+
+@pytest.mark.asyncio
+async def test_webpush_e_fcm_do_mesmo_cliente_sao_independentes(client, public_seed):
+    """Um cliente com navegador + app recebe pelos dois canais, um por vez."""
+    await _create_session(client)
+    web_endpoint = _endpoint()
+    token = _fcm_token()
+    assert (
+        await client.post(
+            f"{BASE}/push/subscription",
+            json={"endpoint": web_endpoint, "p256dh": "p", "auth": "a"},
+        )
+    ).status_code == 204
+    assert (
+        await client.post(f"{BASE}/push/device", json={"token": token, "platform": "android"})
+    ).status_code == 204
+
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        client_id = (
+            await session.execute(
+                select(PushSubscription.client_id).where(
+                    PushSubscription.endpoint == web_endpoint
+                )
+            )
+        ).scalar_one()
+
+        chamadas: list[tuple[str, str]] = []
+
+        async def _fake_web(db, sub, **kwargs):
+            chamadas.append(("webpush", sub.endpoint))
+            return True
+
+        async def _fake_fcm(db, sub, **kwargs):
+            chamadas.append(("fcm", sub.endpoint))
+            return True
+
+        with patch.object(push_svc, "_send_webpush", _fake_web), patch.object(
+            push_svc, "_send_fcm", _fake_fcm
+        ):
+            result = await push_svc.dispatch(
+                session,
+                org_id=SEED_ORG_ID,
+                kind="reminder_30m",
+                idempotency_key=f"test_push_multicanal_{uuid.uuid4().hex}",
+                subscriber_type=PushSubscriberType.client,
+                user_id=None,
+                client_id=client_id,
+                appointment_id=None,
+                title="t",
+                body="b",
+            )
+        await session.commit()
+
+    assert result == "sent"
+    assert ("webpush", web_endpoint) in chamadas
+    assert ("fcm", f"fcm:{token}") in chamadas

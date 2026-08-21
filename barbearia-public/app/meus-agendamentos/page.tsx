@@ -1,10 +1,13 @@
 "use client";
 
 /* Meus agendamentos.
-   P0 desta rodada (UX A4/§4.5): cancelamento agora exige confirmação num
+   P0 de rodadas anteriores (UX A4/§4.5): cancelamento exige confirmação num
    bottom sheet (foco na opção segura, Esc fecha) + toast de resultado com
-   "Agendar novo horário". A API não devolve service_id/barber_id — o
-   deep-link pré-selecionado do reagendamento fica para quando devolver. */
+   "Agendar novo horário".
+
+   A API agora devolve `service_id`/`barber_id` (Fase A), então "Remarcar"
+   monta o deep-link já pré-selecionado; e `rating`/`can_rate` destravam a
+   avaliação pós-atendimento (definitiva, sem edição). */
 
 import Link from "next/link";
 import { Wordmark } from "@/components/wordmark";
@@ -17,6 +20,7 @@ import { SolidLink } from "@/components/ui/buttons";
 import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { Toast, type ToastData } from "@/components/ui/toast";
 import AtivarNotificacoes from "@/components/ativar-notificacoes";
+import { EstrelasLeitura, RatingSheet } from "@/components/rating-sheet";
 
 export default function MeusAgendamentosPage() {
   const [items, setItems] = useState<PublicAppointment[] | null>(null);
@@ -26,6 +30,9 @@ export default function MeusAgendamentosPage() {
   const [canceling, setCanceling] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
+  const [rateTarget, setRateTarget] = useState<PublicAppointment | null>(null);
+  const [rating, setRating] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -67,6 +74,35 @@ export default function MeusAgendamentosPage() {
       setCanceling(false);
     }
   }, [target, load]);
+
+  const confirmRate = useCallback(
+    async (nota: number, comentario: string) => {
+      if (!rateTarget) return;
+      setRating(true);
+      setRateError(null);
+      try {
+        await api.rate(rateTarget.public_id, {
+          rating: nota,
+          ...(comentario.trim() ? { comment: comentario.trim() } : {}),
+        });
+        setRateTarget(null);
+        setToast({ kind: "sucesso", message: "Obrigado pela avaliação!" });
+        await load();
+      } catch (e) {
+        if (e instanceof ApiError) {
+          // 409 = já avaliado (UNIQUE), 422 = fora da janela/não concluído.
+          // Nos dois casos a lista está desatualizada — recarrega.
+          setRateError(e.message);
+          if (e.status === 409 || e.status === 422) await load();
+        } else {
+          setRateError("Sem conexão. Sua avaliação não foi enviada.");
+        }
+      } finally {
+        setRating(false);
+      }
+    },
+    [rateTarget, load],
+  );
 
   return (
     <main className="mx-auto w-full max-w-md px-6 pb-16">
@@ -134,19 +170,42 @@ export default function MeusAgendamentosPage() {
               </div>
               <StatusBadge status={a.status} />
             </div>
-            <div className="mt-3 flex items-center justify-between">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <p className="font-display text-lg text-tinta tnum">{money(a.total_amount)}</p>
-              {a.cancelable && (
-                <button
-                  onClick={() => {
-                    setSheetError(null);
-                    setTarget(a);
-                  }}
-                  className="inline-flex min-h-11 items-center text-sm text-vermelho-tinta underline underline-offset-4 transition-opacity hover:opacity-80"
-                >
-                  Cancelar
-                </button>
-              )}
+              <div className="flex items-center gap-4">
+                {/* Já avaliado: mostra a nota (é definitiva, não há o que editar). */}
+                {a.rating != null && <EstrelasLeitura rating={a.rating} />}
+                {a.status === "concluido" && a.can_rate && (
+                  <button
+                    onClick={() => {
+                      setRateError(null);
+                      setRateTarget(a);
+                    }}
+                    className="inline-flex min-h-11 items-center text-sm font-medium text-ouro underline underline-offset-4 transition-opacity hover:opacity-80"
+                  >
+                    Avaliar
+                  </button>
+                )}
+                {a.status === "agendado" && a.cancelable && (
+                  <Link
+                    href={`/agendar?servico=${a.service_id}&profissional=${a.barber_id}&remarcar=${a.public_id}`}
+                    className="inline-flex min-h-11 items-center text-sm text-tinta-suave underline underline-offset-4 transition-colors hover:text-marfim"
+                  >
+                    Remarcar
+                  </Link>
+                )}
+                {a.cancelable && (
+                  <button
+                    onClick={() => {
+                      setSheetError(null);
+                      setTarget(a);
+                    }}
+                    className="inline-flex min-h-11 items-center text-sm text-vermelho-tinta underline underline-offset-4 transition-opacity hover:opacity-80"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
             </div>
           </li>
         ))}
@@ -171,6 +230,19 @@ export default function MeusAgendamentosPage() {
           onConfirm={() => void confirmCancel()}
           onDismiss={() => {
             if (!canceling) setTarget(null);
+          }}
+        />
+      )}
+
+      {rateTarget && (
+        <RatingSheet
+          title="Como foi seu atendimento?"
+          body={`${rateTarget.service_name} · ${dateLong(rateTarget.start_at)} com ${rateTarget.barber_name}.`}
+          busy={rating}
+          error={rateError}
+          onSubmit={(nota, comentario) => void confirmRate(nota, comentario)}
+          onDismiss={() => {
+            if (!rating) setRateTarget(null);
           }}
         />
       )}

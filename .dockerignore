@@ -3,6 +3,9 @@
 
 # Frontend (build próprio, contexto próprio)
 barbearia-frontend/
+barbearia-public/
+barbearia-superadmin/
+barbearia-app/
 
 # Python
 __pycache__/

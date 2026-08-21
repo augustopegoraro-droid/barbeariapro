@@ -237,6 +237,19 @@ body {
   }
 }
 
+/* Modo app (WebView do Capacitor, `data-app="1"` no body — ver layout.tsx).
+   `.so-web` marca o que só faz sentido no site aberto pelo navegador; dentro
+   do app a navegação é a barra inferior fixa, então o cabeçalho de marketing
+   sai sem precisar transformar server components em client components. */
+body[data-app="1"] .so-web {
+  display: none;
+}
+
+/* Espaço para a barra inferior fixa não cobrir o fim do conteúdo. */
+body[data-app="1"] main {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 5rem);
+}
+
 /* Trilho horizontal sem barra de rolagem visível (galeria/abas). */
 .trilho {
   scrollbar-width: none;

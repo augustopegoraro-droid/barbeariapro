@@ -20,7 +20,9 @@ export function SiteHeader({
   facebookUrl: string;
 }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-borda-sutil bg-fundo/85 backdrop-blur-lg">
+    /* `so-web`: some no modo app (globals.css) — lá a navegação é a barra
+       inferior, e este continua sendo um server component. */
+    <header className="so-web sticky top-0 z-40 border-b border-borda-sutil bg-fundo/85 backdrop-blur-lg">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-6 px-5 py-3 sm:px-8">
         <Link
           href="/"

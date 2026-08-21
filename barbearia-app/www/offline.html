@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Sem conexão — Taylor e Thedy</title>
+    <!--
+      Exibida pela WebView quando o Capacitor não consegue alcançar
+      taylorethedy.com (server.errorPath, ver capacitor.config.ts): sem rede
+      no aparelho, ou o site fora do ar. Tudo inline (sem CSS/JS/imagem
+      externa) de propósito — se a rede caiu, nada remoto pode carregar aqui.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0a0b0d;
+        color: #f2efe9;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+
+      .cartao {
+        max-width: 360px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .icone {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        border: 2px solid #c9a86a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+        color: #c9a86a;
+      }
+
+      h1 {
+        font-size: 18px;
+        margin: 0;
+        color: #f2efe9;
+      }
+
+      p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #b9b4aa;
+      }
+
+      button {
+        margin-top: 8px;
+        border: none;
+        border-radius: 999px;
+        padding: 12px 28px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #0a0b0d;
+        background: #c9a86a;
+        cursor: pointer;
+      }
+
+      button:active {
+        opacity: 0.85;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cartao">
+      <div class="icone">!</div>
+      <h1>Sem conexão</h1>
+      <p>Não foi possível carregar o Taylor e Thedy. Verifique sua internet e tente novamente.</p>
+      <button onclick="window.location.reload()">Tentar novamente</button>
+    </div>
+  </body>
+</html>

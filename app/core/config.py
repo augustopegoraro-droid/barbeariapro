@@ -122,6 +122,9 @@ class Settings(BaseSettings):
     # handler /api/revalidate. Vazios = só o Redis é invalidado (dev/staging).
     public_site_internal_url: str = ""
     public_revalidate_secret: str = ""
+    # Janela (dias, a partir do fim do atendimento) em que o cliente ainda pode
+    # avaliar. Avaliação é definitiva — depois da janela, não entra mais.
+    public_rating_window_days: int = 30
 
     # Storage de mídia (D-85 — foto do profissional). `media_root` é o diretório
     # dentro do container (volume do host em prod); `media_public_base` é o
@@ -147,6 +150,11 @@ class Settings(BaseSettings):
     push_professional_lead_minutes: int = 30  # lembrete do profissional
     push_client_near_lead_minutes: int = 30   # lembrete "de última hora" do cliente
     push_near_window_minutes: int = 12        # janela do cron de ~10min (sobreposição)
+    # Push nativo (FCM HTTP v1) — app Capacitor, onde Web Push não existe.
+    # `fcm_credentials_json` é o JSON da service account (conteúdo, não caminho);
+    # vazios = canal FCM desligado com graça, igual ao VAPID acima.
+    fcm_project_id: str = ""
+    fcm_credentials_json: str = ""
 
 
 settings = Settings()  # type: ignore[call-arg]

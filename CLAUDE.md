@@ -1091,6 +1091,24 @@ acabamento visual do mesmo redesign — números passam de `font-display` (serif
 lado do valor (`estrelas: boolean` novo no array `numeros`). Só CSS/JSX, sem mudança de dado/API.
 Rollback: `git revert 9f4d279` + rebuild `public`.
 
+**App nativo do cliente final (iOS/Android) via Capacitor + avaliação/perfil/remarcação (D-99,
+2026-08-21 — implementado, NÃO deployado em prod, sem validação em dispositivo real):** casca
+Capacitor (`barbearia-app/`, novo diretório irmão de `barbearia-public/`, nunca deployado na VM)
+empacotando o site público já em produção via `server.url` remoto (`https://taylorethedy.com/inicio`,
+não bundle estático — reaproveita o cookie de sessão `tt_session` do D-79 sem tocar em CORS/auth).
+Backend: migrations `0058`-`0060` (head `0060`) — `appointment_ratings` (append-only, avaliação
+definitiva, 1×/atendimento, só após `concluido`), `clients.photo_path` (slug = `public_id` UUID, não
+o id numérico — LGPD, `/media` é público sem auth), canal `fcm` em `push_subscriptions` ao lado do
+`webpush` existente (D-96) — `app/services/push.py::send_push()` virou dispatcher por canal.
+Endpoints novos em `app/api/public.py` (perfil com **telefone somente leitura** até existir OTP,
+avaliação, remarcação **atômica** — cancela+recria na mesma transação, reaproveitando a validação de
+`book_appointment`). Frontend (`barbearia-public/`): `lib/native.ts` (bridge Capacitor por dynamic
+import), `/inicio` (home do modo app, detectado no server por `User-Agent: TTApp/1`), `/perfil`,
+avaliação/remarcação em `/meus-agendamentos`, tab bar inferior só em modo app. Ver D-99 em
+`DECISIONS.md` para o detalhamento completo e a lista de pendências (aplicar migrations em prod,
+Fase D de contas de loja/Firebase/APNs é responsabilidade manual do dono, documentada em
+`barbearia-app/README.md`).
+
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 

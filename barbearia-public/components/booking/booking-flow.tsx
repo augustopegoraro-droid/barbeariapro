@@ -13,6 +13,9 @@
    - A1: 409 volta ao passo 3 com banner VISÍVEL + slot que falhou riscado;
    - A6: `?servico={id}` pré-seleciona o serviço e abre no passo 2
      (lido de window.location.search — convenção do projeto p/ client);
+   - `?profissional={id}` completa a pré-seleção e abre direto no passo 3;
+   - `?remarcar={public_id}` liga o modo REMARCAÇÃO: a confirmação chama
+     `api.reschedule()` (endpoint atômico) em vez de `api.book()`;
    - A2: dias fechados desabilitados na régua via `info.hours`;
    - foco move para o h1 a cada troca de passo (§5.3). */
 
@@ -56,6 +59,8 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
   const [error, setError] = useState<string | null>(null);
   const [needsIdentify, setNeedsIdentify] = useState(true);
   const [done, setDone] = useState<PublicAppointment | null>(null);
+  // public_id do agendamento a ser substituído (modo remarcação).
+  const [rescheduleId, setRescheduleId] = useState<string | null>(null);
 
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const mountedRef = useRef(false);
@@ -66,16 +71,33 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
       setKnownName(saved);
       setNeedsIdentify(false);
     }
-    // Pré-seleção vinda da home (?servico={id}) — UX A6.
-    const preId = Number(new URLSearchParams(window.location.search).get("servico"));
-    if (preId) {
-      const pre = info.services.find((s) => s.id === preId);
-      if (pre) {
-        setService(pre);
-        setStep(2);
+    // Pré-seleção vinda da home (?servico=) e de "Remarcar" (+ ?profissional=,
+    // ?remarcar=) — UX A6.
+    const params = new URLSearchParams(window.location.search);
+    const preId = Number(params.get("servico"));
+    const preProId = Number(params.get("profissional"));
+    const remarcar = params.get("remarcar");
+
+    const pre = preId ? info.services.find((s) => s.id === preId) : undefined;
+    if (pre) {
+      setService(pre);
+      setStep(2);
+      // Com serviço E profissional definidos, só falta escolher dia/horário.
+      const proId = preProId || 0;
+      const pro = proId
+        ? info.professionals.find(
+            (p) => p.id === proId && pre.barber_ids.includes(p.id),
+          )
+        : undefined;
+      if (pro) {
+        setProfessional(pro);
+        setStep(3);
       }
     }
-  }, [info.services]);
+    // Só vale remarcar quando a pré-seleção completa veio junto — é sempre o
+    // caso, porque o link é montado a partir do próprio agendamento.
+    if (remarcar && pre && preProId) setRescheduleId(remarcar);
+  }, [info.services, info.professionals]);
 
   // Acessibilidade (§5.3): a cada troca de passo o foco vai para o h1.
   useEffect(() => {
@@ -148,6 +170,19 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
     setSubmitting(true);
     setError(null);
     try {
+      if (rescheduleId) {
+        // Remarcação: a sessão já existe (o agendamento veio dela). Não
+        // criamos sessão nova aqui — uma sessão diferente não seria dona do
+        // agendamento antigo e o backend devolveria 404.
+        setDone(
+          await api.reschedule(rescheduleId, {
+            service_id: service.id,
+            barber_id: professional.id,
+            start_at: slot,
+          }),
+        );
+        return;
+      }
       if (needsIdentify) {
         const digits = phone.replace(/\D/g, "");
         if (name.trim().length < 2 || digits.length < 10) {
@@ -168,7 +203,11 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
       const appt = await api.book(service.id, professional.id, slot);
       setDone(appt);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
+      if (e instanceof ApiError && e.status === 401 && rescheduleId) {
+        setError(
+          "Sua sessão expirou neste aparelho. Agende um novo horário e cancele o antigo em “Meus agendamentos”.",
+        );
+      } else if (e instanceof ApiError && e.status === 401) {
         // sessão expirou/limpou: pede identificação de novo
         localStorage.removeItem(KNOWN_NAME_KEY);
         setKnownName(null);
@@ -186,10 +225,19 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
     } finally {
       setSubmitting(false);
     }
-  }, [service, professional, slot, needsIdentify, name, phone, acceptPrivacy]);
+  }, [
+    service,
+    professional,
+    slot,
+    needsIdentify,
+    name,
+    phone,
+    acceptPrivacy,
+    rescheduleId,
+  ]);
 
   if (done) {
-    return <BookingSuccess done={done} />;
+    return <BookingSuccess done={done} rescheduled={!!rescheduleId} />;
   }
 
   return (
@@ -248,12 +296,14 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
         />
       )}
 
+      {/* Remarcando, a identificação já aconteceu — pedir de novo criaria uma
+          sessão diferente da dona do agendamento, daí o `!rescheduleId`. */}
       {step === 4 && service && professional && slot && (
         <StepConfirm
           service={service}
           professional={professional}
           slot={slot}
-          needsIdentify={needsIdentify}
+          needsIdentify={needsIdentify && !rescheduleId}
           knownName={knownName}
           name={name}
           phone={phone}
