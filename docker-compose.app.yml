@@ -82,6 +82,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
         NEXT_PUBLIC_ORG_ID: ${NEXT_PUBLIC_ORG_ID:-3}
         NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+        NEXT_PUBLIC_STRIPE_CONNECT_PUBLISHABLE_KEY: ${STRIPE_CONNECT_PUBLISHABLE_KEY:-}
     image: barbeariapro-frontend
     container_name: barbeariapro-app-frontend
     restart: unless-stopped
