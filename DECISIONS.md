@@ -3366,15 +3366,40 @@ containers healthy, head `0061`, `GET /feed` 401 sem auth, `GET /public/app/feed
 `/`/`/novidades` 200, `/admin/novidades` 307 sem sessão, apex+`/novidades` HTTPS 200, `app.` 307,
 logs limpos (só o warning `EACCES` de cache do `public`, já conhecido/não-fatal desde o D-99).
 
-**Assinatura online via Stripe Connect (Feature 2) — EM IMPLEMENTAÇÃO nesta mesma sessão, ainda sem
-código.** Arquitetura já decidida com o usuário (não reabrir): Direct charges + dashboard Express +
-onboarding embutido no painel do tenant (Stripe embedded components, Accounts v2) +
-`application_fee_amount` configurável por org — conta Stripe da plataforma confirmada como
-brasileira (pré-requisito legal). Dinheiro registrado em tabela nova `membership_orders` (não em
-`payments`, que exige `Appointment`). Checkout `mode=payment` único; `ClientMembership` só nasce na
-confirmação do webhook, nunca no `POST /checkout` (evita pacote fantasma). Deploy em produção fica
-**explicitamente adiado** até o dono validar o onboarding em modo de teste da Stripe — atualizar
-este bloco quando a implementação terminar.
+**Assinatura online via Stripe Connect (Feature 2) — código completo (backend+frontend), migration
+`0062` (head `0062`), ⛔ NÃO DEPLOYADO em prod por decisão explícita do usuário.** Arquitetura:
+Direct charges + dashboard Express + onboarding embutido no painel do tenant (Stripe embedded
+components) + `application_fee_amount` configurável por org (`organizations.platform_fee_pct`,
+nullable = usa `PLATFORM_FEE_PCT_DEFAULT`) — conta Stripe da plataforma confirmada como brasileira
+pelo dono (pré-requisito legal). **Accounts v1 + `controller` properties**, não v2 (desvio
+deliberado: `stripe==15.3.0` expõe `v2.core.accounts`, mas a v2 depende de habilitação própria na
+conta da plataforma e tem payload em evolução; v1 com `stripe_dashboard.type="express"` +
+`fees.payer="account"` + `losses.payments="stripe"` entrega o mesmo desenho aprovado e é GA —
+migrar depois é trocar só o corpo de `create_account`). Dinheiro registrado em tabela nova
+`membership_orders` (RLS+FORCE, GRANT sem DELETE — não em `payments`, que exige `Appointment` e
+arriscaria contar receita duas vezes, já que pacote reconhece receita no uso, D-44). Checkout
+`mode=payment` único; `ClientMembership` só nasce na confirmação do webhook dedicado
+(`/connect/webhooks/stripe`, segredo próprio, reaproveita `webhook_events`/D-61 com
+`provider="stripe_connect"`), nunca no `POST /checkout` — evita pacote fantasma se o cliente
+abandonar o pagamento. **Refactor colateral:** `app/services/webhook_log.py` extraído de
+`billing/service.py` (D-61) e reaproveitado pelos dois fluxos — no processo, corrigido um bug real
+pré-existente e nunca exercitado por teste: `mark_event` gravava `organization_id` numa sessão sem
+GUC de tenant, violando a RLS "global OU tenant" de `webhook_events` (V18a/D-76); o helper agora
+escopa o tenant antes do UPDATE. Site público: `/assinatura` (oculta se vazio — sem Connect
+configurado), checkout com fluxo de identificação reaproveitado do agendamento
+(`components/ui/identificacao.tsx`, extraído de `step-confirm.tsx`), página de sucesso com polling
+curto (o webhook confirma depois do redirect), card "Minha assinatura" no perfil. Painel: onboarding
+embutido em `/admin/empresa` (`@stripe/connect-js`), 4 estados (desligado/sem conta/KYC
+pendente/ativo com taxa exibida), gated por `billing.manage` (owner-only, já existia no catálogo).
+Suíte **852 pass / 2 ambientais / 0 regressões** (+33 testes, incluindo os de billing SaaS
+existentes — confirma que o refactor do `webhook_log.py` não quebrou nada); `tsc`/`next build`
+limpos nos dois frontends. Kill switch `CONNECT_ENABLED=false` (default) mantém tudo inerte:
+`GET /planos` vazio, checkout 503, zero mudança de comportamento observável enquanto a env não for
+ligada. **Commitado e enviado ao `main` dos dois repos, mas NADA foi para a VM.** Antes de deployar:
+provisionar `STRIPE_CONNECT_SECRET_KEY`/`STRIPE_CONNECT_PUBLISHABLE_KEY`/
+`STRIPE_CONNECT_WEBHOOK_SECRET`/`NEXT_PUBLIC_STRIPE_CONNECT_PUBLISHABLE_KEY` no `.env`/build da VM,
+o dono completar o onboarding de teste de verdade no formulário do Stripe, só então
+`CONNECT_ENABLED=true` e migration `0062` aplicada em prod.
 
 ---
 
