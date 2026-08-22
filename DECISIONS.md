@@ -3395,11 +3395,26 @@ Suíte **852 pass / 2 ambientais / 0 regressões** (+33 testes, incluindo os de 
 existentes — confirma que o refactor do `webhook_log.py` não quebrou nada); `tsc`/`next build`
 limpos nos dois frontends. Kill switch `CONNECT_ENABLED=false` (default) mantém tudo inerte:
 `GET /planos` vazio, checkout 503, zero mudança de comportamento observável enquanto a env não for
-ligada. **Commitado e enviado ao `main` dos dois repos, mas NADA foi para a VM.** Antes de deployar:
-provisionar `STRIPE_CONNECT_SECRET_KEY`/`STRIPE_CONNECT_PUBLISHABLE_KEY`/
-`STRIPE_CONNECT_WEBHOOK_SECRET`/`NEXT_PUBLIC_STRIPE_CONNECT_PUBLISHABLE_KEY` no `.env`/build da VM,
-o dono completar o onboarding de teste de verdade no formulário do Stripe, só então
-`CONNECT_ENABLED=true` e migration `0062` aplicada em prod.
+ligada.
+
+**✅ DEPLOYADO em prod 2026-08-22, em MODO DE TESTE (chaves `_test_` da Stripe, `CONNECT_ENABLED=true`):**
+backup `~/predeploy_d100_connect_20260822_185300.sql` → `git pull`+`git submodule update
+--init --recursive` (repo principal `9db5211`, `barbearia-frontend` `f75cd11` — inclui o ARG novo
+`NEXT_PUBLIC_STRIPE_CONNECT_PUBLISHABLE_KEY` no `Dockerfile`/`docker-compose.app.yml`, molde
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY`/D-96) → migration `0062` aplicada (head `0062`) → `STRIPE_CONNECT_
+SECRET_KEY` (chave **restrita**, não a secret key completa — só com permissões Core Accounts/
+Account sessions/Checkout Sessions/Charges, boa prática de menor privilégio) + `STRIPE_CONNECT_
+PUBLISHABLE_KEY` provisionadas no `.env` da VM → rebuild `backend`+`frontend`+`public`. Validado: 5
+containers healthy, `/health` 200, `GET /connect/status` 401 sem auth, `GET /public/app/planos` 200
+`{"plans":[]}` (org 1 ainda sem connected account — esperado), `/assinatura` 200 (mensagem "em
+breve", sem plano configurado ainda), `/admin/empresa` 307 sem sessão, apex+`/assinatura`+`app.`
+HTTPS 200/307, logs limpos (só o `EACCES` de cache do `public`, já conhecido desde o D-99).
+**`STRIPE_CONNECT_WEBHOOK_SECRET` ainda NÃO foi provisionado** — não é necessário para validar o
+onboarding (só para confirmar automaticamente uma compra depois que o teste completo existir); sem
+ele, o endpoint `/connect/webhooks/stripe` responderia 400 caso a Stripe tentasse chamar, mas
+nenhum webhook foi configurado no Dashboard ainda. **Chaves de PRODUÇÃO (live) não foram tocadas —
+é modo de teste, sem risco de dinheiro real.** Próximo passo é do dono: completar o onboarding de
+teste em `admin.taylorethedy.com/admin/empresa` → "Recebimentos online".
 
 ---
 
