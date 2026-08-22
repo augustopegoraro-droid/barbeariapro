@@ -52,6 +52,26 @@ async def org_id_by_wa_instance(db: AsyncSession, instance: str) -> Optional[int
     return row.scalar_one_or_none()
 
 
+async def org_id_by_connected_account(
+    db: AsyncSession, account_id: str
+) -> Optional[int]:
+    """org_id da barbearia dona da connected account da Stripe, ou None.
+
+    Usado pelo webhook do Stripe Connect (`POST /connect/webhooks/stripe`), que
+    chega SEM tenant na sessão: o único identificador de tenant no evento é o
+    campo `account` (top-level do Event). Mesmo molde de
+    `org_id_by_subdomain` — a função SQL é SECURITY DEFINER (migration 0062)
+    porque `organizations` tem RLS.
+    """
+    if not account_id or not account_id.strip():
+        return None
+    row = await db.execute(
+        text("SELECT app_org_id_by_connected_account(:a)"),
+        {"a": account_id.strip()},
+    )
+    return row.scalar_one_or_none()
+
+
 async def org_id_by_refresh_token_hash(db: AsyncSession, token_hash: str) -> Optional[int]:
     """org_id da `sessions` (não revogada) cujo hash atual OU anterior casa.
 

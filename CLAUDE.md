@@ -1132,12 +1132,62 @@ generalizado (`invalidate_public_tags`) — base reaproveitada pela Feature 2 ab
 `content.feed.view`/`content.feed.manage` (catálogo com 76 permissões). Ver D-100 em
 `DECISIONS.md` para detalhes e o achado sobre `deploy/update.sh` não atualizar submódulos.
 
-**Assinatura online via Stripe Connect (D-100, Feature 2 — em implementação nesta sessão):**
-cliente final vai poder comprar mensalidade/pacote pelo site pagando com cartão; o dinheiro é da
-barbearia (Stripe Connect, direct charges + dashboard Express + onboarding embutido), a plataforma
-retém uma taxa % configurável por org. Deploy fica **explicitamente adiado** até o dono validar o
-onboarding em modo de teste da Stripe. Ver D-100 em `DECISIONS.md` para o desenho completo assim
-que a implementação terminar.
+**Assinatura online via Stripe Connect (D-100, Feature 2 — BACKEND IMPLEMENTADO, ⛔ NÃO
+DEPLOYADO por decisão do dono):** cliente final compra mensalidade/pacote pelo site pagando com
+cartão; o dinheiro é da barbearia (Connect, **direct charges** + dashboard Express + onboarding
+embutido), a plataforma retém `application_fee` % configurável por org. **Deploy adiado** até o
+dono validar o onboarding em modo de teste da Stripe (KYC exige interação humana). Migration
+`0062`: `organizations` += `stripe_connected_account_id` (UNIQUE parcial) + os 3 flags de
+capacidade + `stripe_connect_synced_at` + `platform_fee_pct` (CHECK 0-100, NULL = default global);
+tabela `membership_orders` (RLS+FORCE, GRANT sem DELETE — registro financeiro; snapshots do plano;
+`UNIQUE(provider, provider_session_id)`); função SECURITY DEFINER
+`app_org_id_by_connected_account` (o webhook chega sem tenant e `organizations` tem RLS).
+`app/services/connect/` é pacote **irmão** de `billing/` (D-61), não herdeiro: lá a plataforma
+cobra a barbearia, aqui a barbearia cobra o cliente final — contas, chaves e segredos separados.
+`registry.py` tem o kill switch `CONNECT_ENABLED=False` (default) → `MockConnectProvider`, então o
+SDK da Stripe nunca carrega e **nada do comportamento atual muda**; a suíte roda inteira sem chave
+real. **Accounts v1 (controller properties: `stripe_dashboard.type=express`, `fees.payer=account`,
+`losses.payments=stripe`) e não v2** — o SDK 15.3.0 expõe `v2.core.accounts`, mas a v1 é GA e
+entrega o mesmo desenho; migrar é trocar o corpo de `create_account`. Rotas: `/connect/status|
+account|account-session|sync` (tenant, `billing.view`/`billing.manage` já owner-only, auditadas),
+`POST /connect/webhooks/stripe` (assinatura HMAC; endpoint e segredo **separados** do
+`/billing/webhooks/{provider}`, reaproveitando `webhook_events` com `provider="stripe_connect"`),
+`POST /internal/connect/expire-orders` (cron `X-Bot-Token`), e no site público
+`GET /public/{sub}/planos` (fail closed: vazio sem `connect_enabled`/conta/`charges_enabled`;
+cache `public_plans:{org}` + tag `public-plans`), `POST /public/{sub}/memberships/checkout`
+(sessão de cliente; 409 se já tem assinatura ativa, 503 sem `charges_enabled`; `success_url`/
+`cancel_url` montadas no SERVIDOR a partir de `PUBLIC_SITE_URL`) e `GET /public/{sub}/me/assinatura`.
+**Invariante:** o checkout só grava `MembershipOrder(pending)` — o `ClientMembership` nasce
+exclusivamente na confirmação do webhook (`SELECT ... FOR UPDATE` + dupla idempotência por
+`event_id` e por `client_membership_id` já preenchido), reusando `membership.create_membership`
+sem overrides. Estorno/chargeback **não** cancela a assinatura automaticamente (v1 consciente).
+Refactor colateral: `app/services/webhook_log.py` (`record_raw_event`/`mark_event`) extraído de
+`billing/service.py` e usado pelos **dois** webhooks — e a gravação passou a escopar o tenant antes
+do UPDATE (a RLS "global OU tenant" da `webhook_events`/V18a recusava gravar `organization_id` numa
+sessão sem GUC). Envs novas: `STRIPE_CONNECT_SECRET_KEY`/`_PUBLISHABLE_KEY`/`_WEBHOOK_SECRET`,
+`PLATFORM_FEE_PCT_DEFAULT`, `CONNECT_ENABLED`, `PUBLIC_SITE_URL`. Suíte **852 pass / 2 ambientais**
+(+33 em `tests/test_connect_onboarding.py` e `tests/test_connect_checkout.py`).
+**Frontend implementado (2026-08-21, ⛔ ainda sem deploy, working tree):**
+*Painel* (`barbearia-frontend/`) — deps `@stripe/connect-js`+`@stripe/react-connect-js`,
+`hooks/use-connect.ts`, `components/empresa/recebimentos-panel.tsx` (4 estados excludentes:
+desligado / sem conta / KYC pendente com `<ConnectAccountOnboarding>` embutido / ativo com badge +
+taxa + `<ConnectNotificationBanner>`) + `connect-embed.tsx` (inicializa o Connect.js uma única vez,
+`fetchClientSecret` → `POST /connect/account-session`, aparência derivada dos tokens do Design
+System e atualizada na troca de tema), inserido em `/admin/empresa` sob
+`usePermissions().has("billing.manage")`. Env de build nova:
+`NEXT_PUBLIC_STRIPE_CONNECT_PUBLISHABLE_KEY` (se ausente, cai na `publishable_key` que o próprio
+backend devolve na account-session). *Site público* (`barbearia-public/`) — `lib/api.ts` ganhou
+`PLANS_TAG`/`fetchPlanos`/`api.checkout`/`api.minhaAssinatura`, `/assinatura` (SSR; lista vazia =
+"Assinaturas em breve", nunca erro), `components/assinatura/` (`planos.tsx` server,
+`checkout-button.tsx` client, `assinatura-resumo.tsx` compartilhado), `/assinatura/sucesso`
+(polling curto de ~16s em `GET /me/assinatura` — a página **nunca** confirma nada por si, só o
+webhook) e card "Minha assinatura" no `/perfil` (some quando não há assinatura). A identificação
+do cliente foi **extraída** de `booking/step-confirm.tsx` para `components/ui/identificacao.tsx` e
+é reusada pelo checkout — um único lugar onde o titular entra na base (LGPD/D-86). Link
+"Assinatura" no `site-header.tsx`; **a `app-tabbar.tsx` do modo app NÃO ganhou 6ª aba** (5 já
+ocupam a largura — a entrada fica no perfil). `app/api/revalidate/route.ts` passou a aceitar a tag
+`public-plans` na allowlist (o backend já a enviava e ela era ignorada em silêncio).
+`tsc`/`next build` limpos nos dois frontends. **Falta:** o deploy. Ver D-100 em `DECISIONS.md`.
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

@@ -100,6 +100,7 @@ from .lead import Lead, LeadEvent
 from .conversation import Attachment, Conversation, Message
 from .membership import (
     ClientMembership,
+    MembershipOrder,
     MembershipPlan,
     MembershipPlanItem,
     MembershipUsage,
@@ -238,6 +239,8 @@ __all__ = [
     "MembershipPlanItem",
     "ClientMembership",
     "MembershipUsage",
+    # compra online de assinatura (Stripe Connect, Feature 2)
+    "MembershipOrder",
     # auditoria (Fase 4)
     "AuditLog",
     # visibilidade do site público (Fase 6)

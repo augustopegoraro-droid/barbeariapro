@@ -214,6 +214,94 @@ class ClientMembership(Base):
     )
 
 
+class MembershipOrder(Base):
+    """Pedido de compra ONLINE de assinatura (Stripe Connect, migration 0062).
+
+    É o registro do dinheiro da venda pelo site público — deliberadamente fora
+    de `payments` (que exige `Appointment`) e fora de `client_memberships` (que
+    é o direito contratado, criado SÓ quando o webhook confirma o pagamento).
+
+    Ciclo: `pending` (criado junto da Checkout Session) → `paid` (webhook
+    confirmou; `client_membership_id` preenchido) | `failed` | `expired`
+    (abandonado; cron `/internal/connect/expire-orders`) | `canceled`.
+
+    `UNIQUE (provider, provider_session_id)` + `client_membership_id` não-nulo
+    são as duas travas de idempotência do webhook: uma sessão de checkout gera
+    no máximo um pedido, e um pedido gera no máximo uma assinatura.
+    """
+
+    __tablename__ = "membership_orders"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'paid', 'failed', 'expired', 'canceled')",
+            name="membership_orders_status_valid",
+        ),
+        CheckConstraint("amount_cents >= 0", name="membership_orders_amount_nonneg"),
+        CheckConstraint(
+            "application_fee_cents >= 0 AND application_fee_cents <= amount_cents",
+            name="membership_orders_fee_within_amount",
+        ),
+        UniqueConstraint(
+            "provider", "provider_session_id",
+            name="membership_orders_provider_session_unique",
+        ),
+        Index("idx_membership_orders_org_status", "organization_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    public_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, nullable=False, unique=True, server_default=text("gen_random_uuid()")
+    )
+    client_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False
+    )
+    client_session_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("client_sessions.id", ondelete="SET NULL")
+    )
+    plan_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("membership_plans.id", ondelete="RESTRICT"), nullable=False
+    )
+    # ── snapshots do plano no momento do pedido ────────────────────────────
+    plan_name: Mapped[str] = mapped_column(Text, nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    included_uses: Mapped[Optional[int]] = mapped_column(Integer)
+    duration_days: Mapped[Optional[int]] = mapped_column(Integer)
+    combo_snapshot: Mapped[Optional[list]] = mapped_column(JSONB)
+    # ── ciclo de vida / gateway ────────────────────────────────────────────
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'pending'")
+    )
+    provider: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'stripe_connect'")
+    )
+    provider_session_id: Mapped[Optional[str]] = mapped_column(Text)
+    provider_payment_intent_id: Mapped[Optional[str]] = mapped_column(Text)
+    provider_charge_id: Mapped[Optional[str]] = mapped_column(Text)
+    connected_account_id: Mapped[Optional[str]] = mapped_column(Text)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    application_fee_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'brl'")
+    )
+    payment_method_detail: Mapped[Optional[str]] = mapped_column(Text)
+    client_membership_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("client_memberships.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+    paid_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+    expires_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
+
+    organization: Mapped["Organization"] = relationship()
+    client: Mapped["Client"] = relationship()
+    plan: Mapped["MembershipPlan"] = relationship()
+    membership: Mapped[Optional["ClientMembership"]] = relationship()
+
+
 class MembershipUsage(Base):
     """Histórico de uso de pacote + vínculo canônico 1:1 ao agendamento."""
 

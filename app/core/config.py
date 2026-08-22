@@ -64,6 +64,21 @@ class Settings(BaseSettings):
     billing_grace_days_past_due: int = 7
     billing_enforcement: str = "log"
 
+    # Stripe CONNECT (Feature 2) — DOMÍNIO DE DINHEIRO DIFERENTE do billing SaaS
+    # acima. Lá a plataforma cobra a BARBEARIA; aqui a BARBEARIA cobra o cliente
+    # final (direct charges na connected account dela) e a plataforma retém uma
+    # `application_fee`. Conta/chave/segredo de webhook separados de propósito.
+    # `connect_enabled=False` é o kill switch: com ele desligado o provider real
+    # nunca é instanciado, `GET /public/{sub}/planos` devolve lista vazia e o
+    # checkout é recusado — nada do comportamento atual muda.
+    stripe_connect_secret_key: str = ""
+    stripe_connect_publishable_key: str = ""
+    stripe_connect_webhook_secret: str = ""
+    # Taxa da plataforma (%) quando a org não define a sua (`platform_fee_pct`).
+    # String p/ virar Decimal sem passar por float (dinheiro).
+    platform_fee_pct_default: str = "10.0"
+    connect_enabled: bool = False
+
     # Bot / n8n chatbot
     bot_api_key: str = ""
     bot_organization_id: int = 0
@@ -122,6 +137,10 @@ class Settings(BaseSettings):
     # handler /api/revalidate. Vazios = só o Redis é invalidado (dev/staging).
     public_site_internal_url: str = ""
     public_revalidate_secret: str = ""
+    # URL PÚBLICA do site (ex.: "https://taylorethedy.com"). Usada para montar
+    # `success_url`/`cancel_url` do checkout no SERVIDOR — nunca aceitas do
+    # corpo da requisição (open-redirect).
+    public_site_url: str = ""
     # Janela (dias, a partir do fim do atendimento) em que o cliente ainda pode
     # avaliar. Avaliação é definitiva — depois da janela, não entra mais.
     public_rating_window_days: int = 30

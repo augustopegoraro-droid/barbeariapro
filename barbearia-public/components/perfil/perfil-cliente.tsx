@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Toast, type ToastData } from "@/components/ui/toast";
 import { Wordmark } from "@/components/wordmark";
 import AtivarNotificacoes from "@/components/ativar-notificacoes";
+import { MinhaAssinatura } from "@/components/perfil/minha-assinatura";
 import { getCameraPhoto, handleExternalLink, isNativeApp } from "@/lib/native";
 
 /* Mesmo número do fallback verificado de `lib/contato.ts` (a API pública não
@@ -290,6 +291,8 @@ export default function PerfilCliente() {
               </SolidButton>
             </div>
           </section>
+
+          <MinhaAssinatura />
 
           <section className="mt-8" aria-label="Notificações">
             <AtivarNotificacoes />

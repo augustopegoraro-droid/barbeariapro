@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal, set_current_org
+from app.services import webhook_log
 from models import (
     BillingCredit,
     BillingCustomer,
@@ -433,23 +434,12 @@ async def ingest_webhook(provider_name: str, headers: Mapping[str, str], body: b
     received = processed = duplicated = failed = 0
     for event in events:
         received += 1
-        async with AsyncSessionLocal() as session:
-            async with session.begin():
-                inserted = (
-                    await session.execute(
-                        pg_insert(WebhookEvent)
-                        .values(
-                            provider=event.provider,
-                            event_id=event.event_id,
-                            event_type=event.event_type,
-                            # Payload BRUTO: é o que permite reprocessar depois.
-                            payload=raw_payload,
-                            status="received",
-                        )
-                        .on_conflict_do_nothing(index_elements=["provider", "event_id"])
-                        .returning(WebhookEvent.id)
-                    )
-                ).scalar_one_or_none()
+        inserted = await webhook_log.record_raw_event(
+            provider=event.provider,
+            event_id=event.event_id,
+            event_type=event.event_type,
+            payload=raw_payload,
+        )
         if inserted is None:
             duplicated += 1  # replay do gateway — já processado
             continue
@@ -488,19 +478,9 @@ async def reprocess_webhook_event(webhook_event_id: int) -> dict:
 
 async def _mark_webhook(webhook_id: int, status: str, *, org_id: Optional[int] = None,
                         error: Optional[str] = None) -> None:
-    async with AsyncSessionLocal() as session:
-        async with session.begin():
-            await session.execute(
-                update(WebhookEvent)
-                .where(WebhookEvent.id == webhook_id)
-                .values(
-                    status=status,
-                    organization_id=org_id,
-                    error=error,
-                    attempts=WebhookEvent.attempts + 1,
-                    processed_at=_now(),
-                )
-            )
+    """Wrapper fino sobre o helper compartilhado (`app/services/webhook_log.py`),
+    que o webhook do Stripe Connect também usa."""
+    await webhook_log.mark_event(webhook_id, status, org_id=org_id, error=error)
 
 
 async def _resolve_org(event: ProviderEvent) -> Optional[int]:

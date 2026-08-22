@@ -58,9 +58,15 @@ from app.services import push as push_svc
 from app.services.public_cache import (
     FEED_CACHE_TTL_SECONDS,
     INFO_CACHE_TTL_SECONDS,
+    PLANS_CACHE_TTL_SECONDS,
     feed_cache_key,
     info_cache_key,
+    plans_cache_key,
 )
+from app.services.connect import service as connect_svc
+from app.services.connect.provider import ConnectProviderError
+from app.services.connect.registry import get_connect_provider
+from app.services import membership as membership_svc
 from app.services.scheduling import barber_has_conflict
 from app.services.tenant import org_id_by_subdomain
 from models import (
@@ -78,6 +84,9 @@ from models import (
     ConsentStatus,
     ContactChannel,
     FeedPost,
+    MembershipOrder,
+    MembershipPlan,
+    MembershipPlanItem,
     Organization,
     PushChannel,
     PushSubscriberType,
@@ -1405,3 +1414,313 @@ async def public_unregister_device(
         raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Dispositivo não encontrado.")
     row.revoked_at = datetime.now(timezone.utc)
     await db.commit()
+
+
+# ─── assinatura online (Stripe Connect, Feature 2) ───────────────────────────
+#
+# Regra de ouro deste bloco: o checkout NÃO cria assinatura. Ele grava um
+# `MembershipOrder` pendente e devolve a URL da Stripe. Quem cria o
+# `ClientMembership` é o webhook (`app/api/connect.py`), depois de a Stripe
+# confirmar o pagamento — assim ninguém ganha pacote abandonando o checkout.
+
+
+class PublicPlanOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    price: float
+    included_uses: Optional[int] = None
+    duration_days: int
+    services: list[str]
+
+
+class PublicPlansOut(BaseModel):
+    plans: list[PublicPlanOut]
+
+
+class CheckoutIn(BaseModel):
+    plan_id: int
+
+
+class CheckoutOut(BaseModel):
+    checkout_url: str
+    order_public_id: str
+
+
+class MyMembershipOut(BaseModel):
+    public_id: str
+    plan_name: Optional[str]
+    status: str
+    start_at: str
+    end_at: str
+    included_uses: Optional[int]
+    used_uses: int
+    services: list[str]
+
+
+def _sells_online(org: Organization) -> bool:
+    """A org só vende assinatura no site com a feature ligada E a conta apta.
+
+    Fail closed nos três eixos: kill switch da instalação, conta conectada
+    existente e `charges_enabled` confirmado pela Stripe.
+    """
+    return bool(
+        settings.connect_enabled
+        and org.stripe_connected_account_id
+        and org.stripe_connect_charges_enabled
+    )
+
+
+async def _load_org(db: AsyncSession, org_id: int) -> Organization:
+    org = (
+        await db.execute(select(Organization).where(Organization.id == org_id))
+    ).scalar_one_or_none()
+    if org is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Estabelecimento não encontrado.")
+    return org
+
+
+async def _plan_services(db: AsyncSession, plan_ids: list[int]) -> dict[int, list[str]]:
+    if not plan_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(MembershipPlanItem.plan_id, Service.name)
+            .join(Service, Service.id == MembershipPlanItem.service_id)
+            .where(MembershipPlanItem.plan_id.in_(plan_ids))
+            .order_by(MembershipPlanItem.plan_id, MembershipPlanItem.position)
+        )
+    ).all()
+    out: dict[int, list[str]] = {}
+    for plan_id, service_name in rows:
+        out.setdefault(plan_id, []).append(service_name)
+    return out
+
+
+@router.get("/planos", response_model=PublicPlansOut)
+@limiter.limit("60/minute")
+async def public_plans(
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+) -> PublicPlansOut:
+    """Planos vendáveis online. Lista VAZIA enquanto a org não puder cobrar.
+
+    O resultado é cacheado sempre — inclusive o vazio. O que garante coerência
+    é a invalidação da tag `public-plans` em `POST /connect/sync` e no webhook
+    `account.updated` (`app/api/connect.py`), que são os únicos pontos em que a
+    capacidade de cobrar muda.
+    """
+    cache_key = plans_cache_key(org_id)
+    try:
+        cached = await get_redis().get(cache_key)
+        if cached:
+            return PublicPlansOut(**json.loads(cached))
+    except Exception:
+        pass  # cache é otimização; Redis fora não derruba a vitrine
+
+    org = await _load_org(db, org_id)
+    plans: list[PublicPlanOut] = []
+    if _sells_online(org):
+        rows = (
+            (
+                await db.execute(
+                    select(MembershipPlan)
+                    .where(MembershipPlan.is_active.is_(True))
+                    .where(MembershipPlan.deleted_at.is_(None))
+                    .order_by(MembershipPlan.price, MembershipPlan.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        services_by_plan = await _plan_services(db, [p.id for p in rows])
+        plans = [
+            PublicPlanOut(
+                id=p.id,
+                name=p.name,
+                description=p.description,
+                price=float(p.price),
+                included_uses=p.included_uses,
+                duration_days=p.duration_days,
+                services=services_by_plan.get(p.id, []),
+            )
+            for p in rows
+            # plano sem combo não é vendável (a criação da assinatura recusaria)
+            if services_by_plan.get(p.id)
+        ]
+
+    out = PublicPlansOut(plans=plans)
+    try:
+        await get_redis().setex(
+            cache_key, PLANS_CACHE_TTL_SECONDS, out.model_dump_json()
+        )
+    except Exception:
+        pass
+    return out
+
+
+@router.post(
+    "/memberships/checkout",
+    response_model=CheckoutOut,
+    status_code=http_status.HTTP_201_CREATED,
+)
+@limiter.limit("5/minute")
+async def create_membership_checkout(
+    body: CheckoutIn,
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> CheckoutOut:
+    org = await _load_org(db, org_id)
+    if not _sells_online(org):
+        raise HTTPException(
+            http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Pagamento online indisponível neste estabelecimento.",
+        )
+
+    plan = (
+        await db.execute(
+            select(MembershipPlan).where(MembershipPlan.id == body.plan_id)
+        )
+    ).scalar_one_or_none()
+    if plan is None or plan.deleted_at is not None or not plan.is_active:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Plano não encontrado.")
+    servicos = (await _plan_services(db, [plan.id])).get(plan.id, [])
+    if not servicos:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Plano sem combo configurado.",
+        )
+
+    # Renovação pelo site fica fora da v1: com uma assinatura vigente, a compra
+    # de outra teria que decidir empilhar ou substituir — decisão de negócio.
+    if await membership_svc.active_memberships_for_client(db, session.client_id):
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT, "Você já tem uma assinatura ativa."
+        )
+
+    amount_cents = int((plan.price * 100).to_integral_value())
+    fee_cents = connect_svc.resolve_fee_cents(org, amount_cents)
+
+    client = (
+        await db.execute(select(Client).where(Client.id == session.client_id))
+    ).scalar_one_or_none()
+    if client is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Cliente não encontrado.")
+
+    order = MembershipOrder(
+        organization_id=org_id,
+        client_id=session.client_id,
+        client_session_id=session.id,
+        plan_id=plan.id,
+        plan_name=plan.name,
+        price=plan.price,
+        included_uses=plan.included_uses,
+        duration_days=plan.duration_days,
+        combo_snapshot=servicos,
+        status="pending",
+        provider="stripe_connect",
+        connected_account_id=org.stripe_connected_account_id,
+        amount_cents=amount_cents,
+        application_fee_cents=fee_cents,
+        currency="brl",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    db.add(order)
+    await db.flush()
+
+    # URLs montadas NO SERVIDOR (nunca aceitas do corpo — open-redirect).
+    base = (settings.public_site_url or "").rstrip("/")
+    success_url = f"{base}/assinatura/sucesso?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{base}/assinatura?cancelado=1"
+
+    provider = get_connect_provider()
+    try:
+        stripe_session = await provider.create_checkout_session(
+            account_id=org.stripe_connected_account_id,
+            amount_cents=amount_cents,
+            fee_cents=fee_cents,
+            currency="brl",
+            product_name=plan.name,
+            client_reference_id=str(order.public_id),
+            customer_email=client.email,
+            metadata={
+                "organization_id": str(org_id),
+                "membership_order_id": str(order.id),
+                "plan_id": str(plan.id),
+            },
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except ConnectProviderError as exc:
+        # Sem sessão na Stripe não há como pagar: o pedido não pode ficar
+        # pendurado esperando um webhook que nunca virá.
+        await db.rollback()
+        raise HTTPException(
+            http_status.HTTP_502_BAD_GATEWAY, "Não foi possível iniciar o pagamento."
+        ) from exc
+
+    order.provider_session_id = stripe_session["session_id"]
+    order_public_id = str(order.public_id)
+    order_id = order.id
+    await db.commit()
+
+    record_event(
+        organization_id=org_id,
+        actor_kind="client",
+        action="memberships.checkout_started",
+        resource_type="membership_order",
+        resource_id=order_id,
+        after={"plan_id": plan.id, "amount_cents": amount_cents},
+        ip=_client_ip(request),
+    )
+    return CheckoutOut(
+        checkout_url=stripe_session["checkout_url"], order_public_id=order_public_id
+    )
+
+
+@router.get("/me/assinatura", response_model=Optional[MyMembershipOut])
+@limiter.limit("60/minute")
+async def my_membership(
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    session: Annotated[ClientSession, Depends(get_client_session)],
+) -> Optional[MyMembershipOut]:
+    """Assinatura vigente da sessão atual (ou `null`).
+
+    É o que a página de sucesso consulta em polling curto: a confirmação vem
+    SEMPRE do webhook, nunca da `success_url` (que o cliente controla).
+    """
+    membership = await membership_svc.active_membership_for_client(
+        db, session.client_id
+    )
+    if membership is None:
+        return None
+    # Nome do plano por consulta explícita: `membership.plan` é lazy e um
+    # acesso implícito aqui estouraria MissingGreenlet no contexto async.
+    plan_name = None
+    if membership.plan_id is not None:
+        plan_name = (
+            await db.execute(
+                select(MembershipPlan.name).where(MembershipPlan.id == membership.plan_id)
+            )
+        ).scalar_one_or_none()
+    return MyMembershipOut(
+        public_id=str(membership.public_id),
+        plan_name=plan_name,
+        status=membership.status.value,
+        start_at=membership.start_at.isoformat(),
+        end_at=membership.end_at.isoformat(),
+        included_uses=membership.included_uses,
+        used_uses=membership.used_uses,
+        services=[
+            item.get("name", "") if isinstance(item, dict) else str(item)
+            for item in (membership.combo_snapshot or [])
+        ],
+    )

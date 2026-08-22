@@ -11,13 +11,13 @@
 
 import { revalidateTag } from "next/cache";
 import { timingSafeEqual } from "node:crypto";
-import { FEED_TAG, INFO_TAG } from "@/lib/api";
+import { FEED_TAG, INFO_TAG, PLANS_TAG } from "@/lib/api";
 
 export const runtime = "nodejs";
 
 /* Allowlist: só estas tags podem ser invalidadas de fora. Um corpo com tag
    desconhecida é ignorado — nunca há "revalidar tudo". */
-const ALLOWED_TAGS = [INFO_TAG, FEED_TAG] as const;
+const ALLOWED_TAGS = [INFO_TAG, FEED_TAG, PLANS_TAG] as const;
 
 function parseTags(body: unknown): string[] {
   if (!body || typeof body !== "object") return [];

@@ -162,6 +162,48 @@ export async function fetchFeed(
   return data.posts;
 }
 
+/* Tag do cache dos planos vendáveis online. Invalidada pelo backend quando a
+   capacidade de cobrar da barbearia muda (`charges_enabled`, Stripe Connect) —
+   é o que faz a página de assinatura sair do "em breve" sem esperar o ISR. */
+export const PLANS_TAG = "public-plans";
+
+/* Plano de assinatura/pacote vendável no site. `included_uses` null = uso
+   ilimitado dentro da vigência. */
+export type MembershipPlanPublic = {
+  id: number;
+  name: string;
+  description: string | null;
+  price: number;
+  included_uses: number | null;
+  duration_days: number;
+  services: string[];
+};
+
+/* Assinatura vigente do cliente da sessão atual (`GET /me/assinatura`). */
+export type ActiveMembership = {
+  public_id: string;
+  plan_name: string | null;
+  status: string;
+  start_at: string;
+  end_at: string;
+  included_uses: number | null;
+  used_uses: number;
+  services: string[];
+};
+
+/* Planos vendáveis. Lista VAZIA é resposta legítima (a barbearia ainda não
+   habilitou recebimentos online) — nunca um erro a exibir. */
+export async function fetchPlanos(
+  revalidateSeconds = 300,
+): Promise<MembershipPlanPublic[]> {
+  const resp = await fetch(`${base()}/planos`, {
+    next: { revalidate: revalidateSeconds, tags: [PLANS_TAG] },
+  });
+  if (!resp.ok) throw new ApiError(resp.status, "Falha ao carregar os planos.");
+  const data: { plans: MembershipPlanPublic[] } = await resp.json();
+  return data.plans;
+}
+
 export async function fetchInfo(revalidateSeconds = 300): Promise<PublicInfo> {
   // Server-side (home SSR/ISR): usa o cache do Next.
   const resp = await fetch(`${base()}/info`, {
@@ -239,6 +281,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  /* ─── Assinatura online (Stripe Connect) ──────────────────────────────── */
+  planos: () => request<{ plans: MembershipPlanPublic[] }>("/planos"),
+  /* Abre o checkout na Stripe. Devolve a URL para onde redirecionar — nada é
+     confirmado aqui: quem cria a assinatura é o webhook, depois do pagamento. */
+  checkout: (planId: number) =>
+    request<{ checkout_url: string; order_public_id: string }>(
+      "/memberships/checkout",
+      { method: "POST", body: JSON.stringify({ plan_id: planId }) },
+    ),
+  /* `null` quando a sessão não tem assinatura vigente. */
+  minhaAssinatura: () => request<ActiveMembership | null>("/me/assinatura"),
 
   /* ─── Push nativo (FCM, app Capacitor) ────────────────────────────────── */
   subscribeDevicePush: (token: string, platform: "ios" | "android") =>

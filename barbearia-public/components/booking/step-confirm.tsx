@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import type { PublicProfessional, PublicService } from "@/lib/api";
-import { maskPhone } from "@/lib/format";
 import { AppointmentSummary } from "@/components/ui/appointment-summary";
+import { IdentificacaoFields } from "@/components/ui/identificacao";
 import { SolidButton, Spinner } from "@/components/ui/buttons";
 import { BackButton } from "@/components/booking/back-button";
 
@@ -68,60 +68,15 @@ export function StepConfirm({
             onConfirm();
           }}
         >
-          <div>
-            <label htmlFor="nome" className="block text-sm font-medium text-tinta">
-              Seu nome
-            </label>
-            <input
-              id="nome"
-              value={name}
-              onChange={(e) => onNameChange(e.target.value)}
-              autoComplete="name"
-              required
-              minLength={2}
-              className="mt-1 w-full rounded-lg border border-borda bg-superficie px-3 py-3 text-tinta transition-colors placeholder:text-tinta-fraca focus:border-borda-ativa"
-              placeholder="Como podemos te chamar"
-            />
-          </div>
-          <div>
-            <label htmlFor="telefone" className="block text-sm font-medium text-tinta">
-              WhatsApp / celular
-            </label>
-            <input
-              id="telefone"
-              value={phone}
-              onChange={(e) => onPhoneChange(maskPhone(e.target.value))}
-              inputMode="tel"
-              autoComplete="tel-national"
-              required
-              className="mt-1 w-full rounded-lg border border-borda bg-superficie px-3 py-3 text-tinta tnum transition-colors placeholder:text-tinta-fraca focus:border-borda-ativa"
-              placeholder="(63) 99999-9999"
-            />
-            <p className="mt-1 text-xs text-tinta-suave">
-              Usamos seu número para confirmar e lembrar do horário.
-            </p>
-          </div>
-          <label className="flex items-start gap-3 py-1 text-sm text-tinta-suave">
-            <input
-              type="checkbox"
-              checked={acceptPrivacy}
-              onChange={(e) => onAcceptPrivacyChange(e.target.checked)}
-              required
-              className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--ouro)]"
-            />
-            <span>
-              Li e aceito a{" "}
-              <a
-                href="/privacidade"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-4 hover:text-tinta"
-              >
-                política de privacidade
-              </a>
-              . Você pode pedir para sair das mensagens quando quiser.
-            </span>
-          </label>
+          <IdentificacaoFields
+            idPrefix="agendar"
+            name={name}
+            phone={phone}
+            acceptPrivacy={acceptPrivacy}
+            onNameChange={onNameChange}
+            onPhoneChange={onPhoneChange}
+            onAcceptPrivacyChange={onAcceptPrivacyChange}
+          />
           {error && (
             <p role="alert" className="text-sm text-vermelho-tinta">
               {error}

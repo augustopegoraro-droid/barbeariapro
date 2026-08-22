@@ -38,8 +38,13 @@ logger = logging.getLogger(__name__)
 
 INFO_CACHE_TTL_SECONDS = 60
 FEED_CACHE_TTL_SECONDS = 60
+PLANS_CACHE_TTL_SECONDS = 60
 REVALIDATE_TAG = "public-info"
 FEED_TAG = "public-feed"
+# Planos de assinatura vendidos no site (Stripe Connect, Feature 2). A lista
+# depende do `charges_enabled` da org, então o webhook `account.updated` e o
+# `POST /connect/sync` invalidam esta tag junto com a vitrine.
+PLANS_TAG = "public-plans"
 _REVALIDATE_TIMEOUT_SECONDS = 5.0
 
 
@@ -51,12 +56,17 @@ def feed_cache_key(org_id: int) -> str:
     return f"public_feed:{org_id}"
 
 
+def plans_cache_key(org_id: int) -> str:
+    return f"public_plans:{org_id}"
+
+
 # Cada tag conhecida tem (no máximo) uma chave Redis correspondente no backend.
 # A tag também é o que o Next revalida (ISR). Tag desconhecida = só ignorada
 # aqui e recusada pela allowlist do route handler — nunca invalida "tudo".
 _TAG_KEYS: dict[str, Callable[[int], str]] = {
     REVALIDATE_TAG: info_cache_key,
     FEED_TAG: feed_cache_key,
+    PLANS_TAG: plans_cache_key,
 }
 
 

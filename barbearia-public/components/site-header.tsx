@@ -6,10 +6,12 @@ import Link from "next/link";
 import { Wordmark } from "@/components/wordmark";
 import { IconeFacebook, IconeInstagram } from "@/components/ui/contato-botoes";
 
-/* Âncoras da própria home, exceto "Novidades", que é rota própria
-   (`/novidades`) — o mural completo não cabe na landing. */
+/* Âncoras da própria home, exceto "Novidades" e "Assinatura", que são rotas
+   próprias (`/novidades`, `/assinatura`) — nem o mural completo nem a vitrine
+   de pacotes cabem na landing. */
 const SECOES = [
   { href: "#servicos", label: "Serviços" },
+  { href: "/assinatura", label: "Assinatura" },
   { href: "/novidades", label: "Novidades" },
   { href: "#equipe", label: "Equipe" },
   { href: "#visite", label: "Horários" },

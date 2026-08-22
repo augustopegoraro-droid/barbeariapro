@@ -24,6 +24,8 @@ PUBLIC_PATHS = {
     "/billing/webhooks/{provider_name}",  # assinatura do provider
     "/internal/billing/run-lifecycle",    # X-Bot-Token (secrets_match) no handler
     "/internal/audit/purge",              # X-Bot-Token (secrets_match) no handler (Fase 4)
+    "/connect/webhooks/stripe",           # assinatura da Stripe (Connect, Feature 2)
+    "/internal/connect/expire-orders",    # X-Bot-Token (secrets_match) no handler
     "/integracoes/google/calendar/callback",  # state JWT assinado
     "/crm/stream",               # autentica por ticket/token no handler (V4)
     "/auth/refresh",             # credencial é o refresh token (corpo), não Bearer (D-68)
@@ -38,6 +40,7 @@ PUBLIC_PATHS = {
     "/public/{subdomain}/slots",
     "/public/{subdomain}/feed",  # mural de novidades: conteúdo de vitrine, sem sessão
     "/public/{subdomain}/auth/session",
+    "/public/{subdomain}/planos",  # vitrine de assinaturas: público, sem sessão
 }
 
 # Pontos de entrada de autenticação: se um deles aparece na árvore de deps da

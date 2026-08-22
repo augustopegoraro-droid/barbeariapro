@@ -108,6 +108,26 @@ class Organization(Base):
     dpa_accepted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
     # Sem FK de propósito (molde da 0048): fato jurídico sobrevive ao usuário.
     dpa_accepted_by_user_id: Mapped[Optional[int]] = mapped_column(BigInteger)
+    # ── Stripe Connect (Feature 2, migration 0062) ──────────────────────────
+    # Conta conectada DESTA barbearia (o dinheiro da venda online é dela; a
+    # plataforma só retém `application_fee`). Os 3 flags são espelho do que a
+    # Stripe devolve em `Account` — nunca inferidos localmente. NULL/false =
+    # onboarding não concluído → o site público não vende assinatura.
+    stripe_connected_account_id: Mapped[Optional[str]] = mapped_column(Text)
+    stripe_connect_charges_enabled: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("false")
+    )
+    stripe_connect_details_submitted: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("false")
+    )
+    stripe_connect_payouts_enabled: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("false")
+    )
+    stripe_connect_synced_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True)
+    )
+    # Taxa da plataforma (%) desta org. NULL = usa `PLATFORM_FEE_PCT_DEFAULT`.
+    platform_fee_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2))
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
