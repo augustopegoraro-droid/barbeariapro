@@ -19,6 +19,7 @@ from app.core.dates import local_date
 from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services import cash_register as cash
 from app.services.audit import record_event
 from app.services.management import commissions_by_barber
 from models import (
@@ -27,6 +28,8 @@ from models import (
     AppointmentStatus,
     Barber,
     CashDailyClosing,
+    CashMovement,
+    CashMovementType,
     Client,
     CommissionTransfer,
     DreMonthlyLine,
@@ -534,6 +537,9 @@ class ExpenseCreateIn(BaseModel):
     amount: float = Field(..., gt=0)
     month: str = Field(..., description="Mês de competência YYYY-MM")
     note: Optional[str] = Field(None, max_length=300)
+    # Caixa vivo (D-101): despesa paga com dinheiro da gaveta. Se true e o
+    # enforcement da org estiver ligado, exige um caixa aberto (409).
+    paid_in_cash: bool = Field(False, description="Paga em dinheiro (sai do caixa)")
 
 
 @router.post("/despesas", response_model=ExpenseOut, status_code=http_status.HTTP_201_CREATED)
@@ -568,6 +574,14 @@ async def criar_despesa(
     if unit is None:
         raise HTTPException(409, "Organização sem unidade cadastrada.")
 
+    # Caixa vivo (D-101): despesa em dinheiro sai da gaveta — exige caixa aberto
+    # quando o enforcement da org está ligado. Checa ANTES de gravar.
+    cash_session = None
+    if body.paid_in_cash:
+        cash_session = await cash.require_open_session(
+            db, organization_id=current_user.organization_id, unit_id=unit.id
+        )
+
     expense = Expense(
         organization_id=current_user.organization_id,
         unit_id=unit.id,
@@ -578,6 +592,17 @@ async def criar_despesa(
     )
     db.add(expense)
     await db.flush()
+    if cash_session is not None:
+        await cash.post_movement(
+            db,
+            cash_session,
+            type=CashMovementType.despesa,
+            amount=Decimal(str(body.amount)),
+            reference_type="expense",
+            reference_id=expense.id,
+            note=body.note or f"Despesa: {category.name}",
+            user_id=current_user.id,
+        )
     record_event(
         organization_id=current_user.organization_id,
         actor_user_id=current_user.id,
@@ -611,6 +636,31 @@ async def remover_despesa(
             status_code=http_status.HTTP_404_NOT_FOUND, detail="Despesa não encontrada."
         )
     before = {"category_id": expense.category_id, "amount": float(expense.amount)}
+
+    # Caixa vivo (D-101): se a despesa saiu do caixa, devolve o dinheiro com um
+    # `ajuste` positivo NO CAIXA ABERTO ATUAL. Sem caixa aberto, só registra em
+    # log — remover a despesa nunca é bloqueado.
+    cash_mov = (
+        await db.execute(
+            select(CashMovement)
+            .where(CashMovement.reference_type == "expense")
+            .where(CashMovement.reference_id == expense.id)
+        )
+    ).scalar_one_or_none()
+    if cash_mov is not None:
+        open_session = await cash.get_open_session(db, expense.unit_id)
+        if open_session is not None:
+            await cash.post_movement(
+                db,
+                open_session,
+                type=CashMovementType.ajuste,
+                amount=cash_mov.amount,
+                reference_type="expense_delete",
+                reference_id=expense.id,
+                note="Despesa removida",
+                user_id=current_user.id,
+            )
+
     await db.delete(expense)
     await db.flush()
     record_event(

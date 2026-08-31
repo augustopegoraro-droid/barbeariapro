@@ -52,6 +52,30 @@ async def _flush_audit_tasks():
     await wait_for_pending()
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _relax_cash_register():
+    """Caixa vivo (D-101): a coluna `organizations.cash_register_enforced` nasce
+    `true` (novos tenants bloqueiam recebimento em dinheiro sem caixa aberto).
+    Para não exigir um caixa aberto em toda a suíte legada (centenas de testes
+    que concluem atendimento / vendem em dinheiro), este autouse desliga o
+    enforcement na org semeada antes de cada teste. `tests/test_caixa.py` liga
+    de volta explicitamente quando testa o bloqueio."""
+    from sqlalchemy import update
+
+    from app.db.session import AsyncSessionLocal, set_current_org
+    from models import Organization
+
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        await session.execute(
+            update(Organization)
+            .where(Organization.id == SEED_ORG_ID)
+            .values(cash_register_enforced=False)
+        )
+        await session.commit()
+    yield
+
+
 @pytest_asyncio.fixture
 async def client():
     """AsyncClient httpx falando direto com o app ASGI (mesmo processo)."""

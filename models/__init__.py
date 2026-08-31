@@ -11,6 +11,8 @@ from .base import Base
 from .enums import (
     AppointmentStatus,
     AttachmentMediaType,
+    CashMovementType,
+    CashSessionStatus,
     ConsentStatus,
     ContactChannel,
     ConversationStatus,
@@ -62,6 +64,7 @@ from .appointment import Appointment, AppointmentItem
 from .payment import Expense, ExpenseCategory, Payment
 from .debt import ClientDebt
 from .cash_closing import CashDailyClosing
+from .cash_register import CashMovement, CashSession
 from .payment_transaction import PaymentTransaction
 from .dre import DreMonthlyLine
 from .commission_transfer import CommissionTransfer
@@ -189,6 +192,10 @@ __all__ = [
     "Expense",
     "ClientDebt",
     "CashDailyClosing",
+    "CashSession",
+    "CashMovement",
+    "CashSessionStatus",
+    "CashMovementType",
     "PaymentTransaction",
     "DreMonthlyLine",
     "CommissionTransfer",

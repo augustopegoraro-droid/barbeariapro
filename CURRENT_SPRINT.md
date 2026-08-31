@@ -1,6 +1,26 @@
 # CURRENT_SPRINT.md
 > Estado do desenvolvimento em **2026-06-29**. Atualizar a cada sessão.
-> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-52), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
+> Companheiros: `PROJECT_CONTEXT.md` (estado/infra), `DECISIONS.md` (D-01..D-101), `CLAUDE.md` (memória técnica), `barbearia-frontend/AGENTS.md` (frontend).
+
+---
+
+## 🟢 Sessão 2026-08-27 — Módulo de Caixa vivo (D-101) — implementado, só dev/staging
+
+Abrir/fechar turno de caixa em tempo real (a gaveta física); antes só existia o histórico migrado da
+Trinks (D-59). Plano em `~/.claude/plans/vivid-wishing-starfish.md`.
+
+- **Backend:** migration `0063` (`cash_sessions` + ledger append-only `cash_movements` +
+  `organizations.cash_register_enforced`), serviço `app/services/cash_register.py` (porta única),
+  router `app/api/caixa.py`, permissões `cash.session.{view,operate}` (recepção opera).
+- **Auto-post + bloqueio** (só método `dinheiro`): `barbeiro.py::concluir_atendimento`,
+  `vendas.py::criar_venda`/`cancelar_venda`, `financeiro.py::criar_despesa` (`paid_in_cash`)/
+  `remover_despesa`. Sem caixa aberto + enforcement ligado → 409 `cash_register_closed`.
+- **Frontend:** `/admin/caixa` + `hooks/use-caixa.ts` + `components/caixa/*` + item na sidebar;
+  toggle em `/admin/empresa`; 409 tratado em `concluir-dialog`/`venda-rapida-dialog` (`getErrorCode`).
+- **Testes:** `tests/test_caixa.py` (+17); suíte **869 pass / 2 ambientais / 0 regressões**.
+- **Verificado:** migration up/down/up + `sync_authz_catalog.py` (78/9/323) no staging; `tsc`/
+  `eslint`/`next build` limpos; graphify atualizado.
+- **Pendente:** deploy em prod (molde D-93/D-94); validação visual no browser.
 
 ---
 

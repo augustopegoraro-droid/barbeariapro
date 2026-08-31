@@ -65,6 +65,10 @@ CATALOG: tuple[Permission, ...] = (
     Permission("finance.expenses.manage", "Lançar/excluir despesas", "Financeiro"),
     Permission("finance.commission_transfers.manage", "Lançar/estornar repasse de comissão entre barbeiros", "Financeiro"),
     Permission("finance.export", "Exportar dados financeiros", "Financeiro"),
+    # Caixa vivo (D-101) — operação da gaveta física, não é dado financeiro
+    # sensível (a recepção opera): fica fora do bloco `_FINANCE`.
+    Permission("cash.session.view", "Ver o caixa (turnos e movimentos)", "Caixa"),
+    Permission("cash.session.operate", "Abrir/fechar caixa e lançar sangria/suprimento/ajuste", "Caixa"),
     # Relatórios
     Permission("reports.dashboard.view", "Ver dashboard operacional (sem dinheiro)", "Relatórios"),
     Permission("reports.dashboard.financial.view", "Ver receita/ticket/comissão no dashboard", "Relatórios", sensitive_field=True),
@@ -174,6 +178,9 @@ _OPERATIONS: frozenset[str] = frozenset({
     "services.view", "products.view", "inventory.view", "inventory.manage",
     "inventory.count.manage",
     "sales.view", "sales.create", "suppliers.view", "purchases.view", "purchases.request",
+    # Caixa vivo (D-101): a recepção (Raquel) abre/fecha o caixa e lança
+    # sangria/suprimento — é operação do balcão, não financeiro sensível.
+    "cash.session.view", "cash.session.operate",
     "reports.dashboard.view", "reports.operational.view",
     "integrations.view", "ai.assistant.use",
     # Feed de novidades: a recepção LÊ o mural (para responder o cliente que

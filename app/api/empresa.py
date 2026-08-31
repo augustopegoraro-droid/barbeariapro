@@ -46,6 +46,7 @@ class OrganizationOut(BaseModel):
     instagram: Optional[str] = None
     logo_url: Optional[str] = None
     monthly_revenue_goal: Optional[float] = None
+    cash_register_enforced: bool = True
 
     class Config:
         from_attributes = True
@@ -104,6 +105,9 @@ class OrganizationUpdate(BaseModel):
     instagram: Optional[str] = Field(None, max_length=120)
     logo_url: Optional[str] = Field(None, max_length=500)
     monthly_revenue_goal: Optional[float] = Field(None, ge=0, description="Meta de faturamento mensal (R$); null limpa")
+    cash_register_enforced: Optional[bool] = Field(
+        None, description="Exigir caixa aberto para recebimentos em dinheiro (D-101)"
+    )
 
 
 class UnitUpdate(BaseModel):

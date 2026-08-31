@@ -3418,6 +3418,104 @@ teste em `admin.taylorethedy.com/admin/empresa` → "Recebimentos online".
 
 ---
 
+### D-101 — Módulo de Caixa vivo (abrir/fechar turno em tempo real) — 2026-08-27 (implementado, só dev/staging)
+
+**Problema.** Só existia o **histórico de caixa migrado da Trinks** (`cash_daily_closings`,
+migration 0026 / D-59), read-only. Não havia como abrir/fechar caixa em tempo real: a recepção
+(Raquel) não controlava a gaveta física — troco inicial, entradas em dinheiro, sangria, suprimento,
+despesa em dinheiro, contagem de fechamento com divergência. Item pendente recorrente no `CLAUDE.md`.
+
+**Decisões do dono (respondidas antes do plano):** (1) modelo por **turno** (abre/fecha várias
+vezes/dia, ≤1 aberto por unidade, operador registrado); (2) lançamento **automático + manual**
+(conclusão de atendimento / venda / despesa em dinheiro geram movimento no caixa aberto
+automaticamente; sangria/suprimento/ajuste são manuais); (3) sem caixa aberto + recebimento em
+dinheiro → **BLOQUEAR** (HTTP 409), com escape hatch `organizations.cash_register_enforced`
+(default `true`); (4) controla o **dinheiro físico** (cartão/Pix são total informativo), e a
+**recepção opera** (permissões `cash.session.*` fora do bloco financeiro sensível).
+
+**Schema (migration `0063_cash_register`, head `0063`; molde `commission_transfers`/0050 e
+`sales`/0053).**
+- Enums PG: `cash_session_status` (`aberto`/`fechado`), `cash_movement_type`
+  (`venda_servico`/`venda_produto`/`suprimento`/`sangria`/`despesa`/`ajuste`).
+- `cash_sessions` (turno) — GRANT SELECT/INSERT/UPDATE (sem DELETE; registro financeiro). Índice
+  único parcial `cash_sessions_one_open_per_unit` (`WHERE status='aberto'`) garante ≤1 aberto por
+  unidade. `opened_by_user_id`/`closed_by_user_id` sem FK (fato histórico, molde 0048).
+  `expected_amount`/`difference` são **snapshots** congelados no fechamento.
+- `cash_movements` (ledger **append-only** — GRANT SELECT/INSERT apenas). CHECK
+  `amount >= 0 OR type = 'ajuste'` (só `ajuste` aceita negativo → estorno = novo lançamento).
+  Idempotência: índice único parcial `cash_movements_ref_unique` em
+  `(organization_id, reference_type, reference_id)` para `reference_type IN ('payment','sale','expense')`.
+- `organizations.cash_register_enforced` boolean NOT NULL DEFAULT `true` (aditivo — backfilla
+  linhas existentes com `true`, incluindo a org 1).
+
+**Serviço `app/services/cash_register.py` (porta única de escrita).** `get_open_session`,
+`open_session` (409 no índice único, via `begin_nested`), `post_movement` (check-first idempotente
+por referência), `session_balance` (`expected_cash` = troco + Σentradas − Σsaídas ± Σajuste;
+`card_total`/`pix_total` lidos de `Payment`/`SalePayment` na janela do turno, só exibição),
+`close_session` (congela snapshots), `require_open_session` (409
+`{detail, code:"cash_register_closed"}` quando enforcement ligado e sem caixa; `None` quando
+desligado → fluxo segue sem vínculo; se há caixa aberto, devolve-o mesmo com enforcement desligado).
+
+**Integrações (auto-post + bloqueio — só quando o método é `dinheiro`, cartão/Pix intocados).**
+- `app/api/barbeiro.py::concluir_atendimento` (único endpoint de conclusão, admin+barbeiro): fluxo
+  normal em dinheiro e o `Payment` só-gorjeta em dinheiro → `require_open_session` antes de mutar,
+  `post_movement(venda_servico, amount = valor + gorjeta, ref=payment)` depois.
+- `app/api/vendas.py::criar_venda`: pagamento(s) em dinheiro → `post_movement(venda_produto,
+  amount = Σ dinheiro, ref=sale)`. `cancelar_venda`: se havia movimento, `ajuste` negativo **no
+  caixa aberto atual** (`ref=sale_cancel`); sem caixa aberto, não bloqueia.
+- `app/api/financeiro.py::criar_despesa`: campo novo `paid_in_cash` → `post_movement(despesa,
+  ref=expense)`. `remover_despesa`: `ajuste` positivo no caixa aberto atual (`ref=expense_delete`).
+
+**Router `app/api/caixa.py` (`/caixa`, montado no `main.py`).** `GET /caixa/atual` (sessão +
+saldo ao vivo ou null), `POST /caixa/abrir`, `POST /caixa/fechar`, `POST /caixa/movimentos`
+(manual: suprimento/sangria/despesa/ajuste; nota obrigatória em sangria/despesa/ajuste),
+`GET /caixa/movimentos?session_id=`, `GET /caixa` (histórico), `GET /caixa/{id}`. Auditado
+(`cash.session.open`/`close`, `cash.movement.create`). `unit_id` pela unidade primária.
+
+**Permissões (`app/core/permissions.py`).** `cash.session.view` / `cash.session.operate`,
+categoria "Caixa", no bloco `_OPERATIONS` → owner/manager/**recepção**; barbeiro/estagiário fora.
+`finance.cash.view` (bloco sensível) segue só para a visão histórica da Trinks em
+`/admin/financeiro`. Catálogo: **78 permissões** / 9 papéis / 323 vínculos.
+
+**Frontend (`barbearia-frontend`).** Rota `/admin/caixa` (client) + item "Caixa" na sidebar (grupo
+GESTÃO, após Financeiro, `perm="cash.session.view"`). `hooks/use-caixa.ts` (React Query;
+`useCaixaAtual` com `refetchInterval` 30s). `components/caixa/`: `caixa-atual-card.tsx` (StatCards
++ botões Suprimento/Sangria/Fechar), `abrir-caixa-dialog.tsx`, `fechar-caixa-dialog.tsx` (diferença
+sobra/falta ao vivo), `movimento-dialog.tsx`, `movimentos-table.tsx`, `sessoes-table.tsx`.
+`lib/api.ts` ganhou `getErrorCode` (desembrulha `detail.code`); `concluir-dialog.tsx` e
+`venda-rapida-dialog.tsx` mostram mensagem dedicada no 409 `cash_register_closed`.
+`/admin/empresa` (`cadastro-form.tsx`) ganhou o toggle "Exigir caixa aberto para recebimentos em
+dinheiro".
+
+**Testes.** `tests/test_caixa.py` (17): ciclo abrir/fechar; 2º abrir → 409; conclusão/venda em
+dinheiro sem caixa → 409 `cash_register_closed`; com caixa → movimento `venda_servico`/`venda_produto`
+(valor + gorjeta); cartão/Pix não tocam no caixa; sangria/suprimento/ajuste e aritmética do saldo;
+fechamento congela `expected_amount`/`difference`; estorno de venda cancelada; sangria sem motivo →
+422; rota manual recusa tipo automático → 422; RLS entre orgs; RBAC (recepção opera, barbeiro
+403); enforcement desligado → sem bloqueio. `tests/conftest.py` ganhou autouse
+`_relax_cash_register` (desliga o enforcement na org semeada por teste, já que a coluna nasce
+`true`); `test_caixa.py` liga de volta quando testa o bloqueio; a limpeza usa `ADMIN_DATABASE_URL`
+(tabelas append-only). Suíte **869 pass / 2 ambientais / 1 skip / 0 regressões** (baseline: as 2
+falhas de sempre — n8n `bypass_hours` e e2e link barbeiro↔serviço).
+
+**Verificado.** `alembic upgrade head` + `downgrade -1` + `upgrade head` no staging (RLS+FORCE
+ativos, GRANTs append-only conferidos). `scripts/sync_authz_catalog.py` rodado (78/9/323).
+Frontend: `tsc` limpo, `eslint` limpo, `next build` OK (`/admin/caixa` compilada). graphify
+atualizado.
+
+**Consequência aceita do "bloquear" (documentada para o dono).** Com `cash_register_enforced=true`
+(default, e a org 1 herda `true` na migration), se a recepção não abrir o caixa no início do dia,
+**concluir atendimento em dinheiro e vender em dinheiro retornam 409** — para admin e barbeiro. É o
+comportamento pedido. O toggle em `/admin/empresa` desliga por organização.
+
+**Pendente:** deploy em prod (backup → `0063` via container avulso como `postgres` +
+`sync_authz_catalog.py` à parte + rebuild backend/frontend com `-f docker-compose.app.yml` apenas —
+molde D-93/D-94); validação visual no browser. Follow-up (fora de escopo): agregado
+`cash_sessions_report` em `management.py` para Gestor/DRE; tópico `caixa` no Kernel IA
+(`consultar_financas`); múltiplas unidades.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

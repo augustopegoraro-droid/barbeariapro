@@ -98,6 +98,12 @@ class Organization(Base):
     logo_url: Mapped[Optional[str]] = mapped_column(Text)
     # Meta de faturamento mensal (R$); NULL = sem meta. Usada no alerta proativo.
     monthly_revenue_goal: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2))
+    # Caixa vivo (D-101): quando true, concluir atendimento / vender em DINHEIRO
+    # exige um caixa aberto (409 se não houver). Escape hatch do dono, alternável
+    # em /admin/empresa. Cartão/Pix nunca exigem caixa.
+    cash_register_enforced: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("true")
+    )
     # Retenção da auditoria (meses), configurável por org (Fase 4, D-70).
     audit_retention_months: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("12")

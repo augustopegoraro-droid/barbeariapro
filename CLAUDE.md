@@ -172,7 +172,29 @@ dentro do frontend de tenant.
 - Receita = soma de `AppointmentItem.price_charged` de agendamentos `concluido`.
 - Comissão = receita × `Barber.commission_pct`. Despesas via `Expense` (com `competence_month`).
 - `Payment` é registrado **independente** do Appointment (sem vínculo transacional — débito conhecido).
-- **Ainda não existe:** caixa (abrir/fechar), consumo de produtos/estoque, pacotes/assinaturas.
+
+**Caixa vivo — abrir/fechar turno em tempo real (D-101, 2026-08-27 — implementado, só dev/staging;
+migration `0063`, head `0063`):** não confundir com `cash_daily_closings` (histórico Trinks, D-59,
+read-only). Camada nova: `cash_sessions` (turno; ≤1 `aberto` por unidade via índice único parcial;
+GRANT sem DELETE; `expected_amount`/`difference` são snapshots do fechamento) + `cash_movements`
+(ledger **append-only** — GRANT SELECT/INSERT; CHECK `amount>=0 OR type='ajuste'`; idempotência por
+`(org, reference_type, reference_id)` para payment/sale/expense). Porta única de escrita:
+`app/services/cash_register.py` (`open_session`/`post_movement`/`session_balance`/`close_session`/
+`require_open_session`). **Auto-post** (só método `dinheiro`; cartão/Pix não tocam no caixa):
+`barbeiro.py::concluir_atendimento` → `venda_servico` (valor + gorjeta); `vendas.py::criar_venda` →
+`venda_produto`; `financeiro.py::criar_despesa` com `paid_in_cash` → `despesa`; cancelar venda /
+remover despesa → `ajuste` compensatório no caixa **aberto atual**. **Bloqueio:**
+`organizations.cash_register_enforced` (default `true`, org 1 herda `true`) → sem caixa aberto,
+receber em dinheiro devolve **409 `{code:"cash_register_closed"}`** (admin e barbeiro); toggle em
+`/admin/empresa` desliga por org. Router `app/api/caixa.py` (`/caixa/atual|abrir|fechar|movimentos`;
+histórico `GET /caixa`, `GET /caixa/{id}`). Permissões `cash.session.view`/`cash.session.operate`
+(bloco `_OPERATIONS` → owner/manager/**recepção**; barbeiro fora). Frontend: `/admin/caixa` +
+`hooks/use-caixa.ts` + `components/caixa/*` + item "Caixa" na sidebar (GESTÃO). Suíte
+**869 pass / 2 ambientais / 0 regressões** (`tests/test_caixa.py`, +17; `conftest.py` ganhou autouse
+`_relax_cash_register`). Detalhes em DECISIONS.md D-101.
+
+- **Ainda não existe:** consumo de produtos no atendimento além da venda anexada, pacotes/assinaturas
+  no fluxo do caixa.
 
 ### Agenda (`app/api/agenda.py` + `app/services/scheduling.py`)
 - Validação encadeada (client/barber/service/link barber↔service/preço variável) → normaliza UTC →
@@ -316,9 +338,10 @@ dados operacionais + catálogos, preserva estrutura/integrações/assinatura; dr
 > (o "Resumo de Movimentação de Entradas e Saídas"; a 1ª tabela, pagamentos por comanda, é fora de
 > escopo — exigiria agendamentos de todo o período). Upsert por `(org, dia)`, idempotente.
 > **✅ DEPLOYADO em prod 2026-07-02:** migration `0026` aplicada (head `0026`) + 149 dias reais
-> importados na org 1 (05/01–02/07/2026), totais conferindo com o relatório da Trinks. Ainda
-> **não existe módulo de Caixa vivo** (abrir/fechar em tempo real) — isto é só o histórico
-> migrado para consulta/relatório. **Consumo:** `GET /financeiro/caixa?month=` + card "Histórico
+> importados na org 1 (05/01–02/07/2026), totais conferindo com o relatório da Trinks. Isto é só o
+> histórico migrado para consulta/relatório; o **módulo de Caixa vivo** (abrir/fechar turno em tempo
+> real) veio depois na **D-101** (`cash_sessions`/`cash_movements`, migration `0063` — só dev/staging).
+> **Consumo:** `GET /financeiro/caixa?month=` + card "Histórico
 > de caixa" em `/admin/financeiro` (visão Mês) — **✅ DEPLOYADO em prod 2026-07-02**.
 > **Pagamentos/Estornos (D-63, 2026-07-04 — ✅ DEPLOYADO em prod 2026-07-04, head `0035`):** o export
 > "Pagamentos/Estornos" (`…26pagamentos.csv`) é o **pagamento por comanda** que o D-59 deixou fora de
@@ -1192,7 +1215,8 @@ ocupam a largura — a entrada fica no perfil). `app/api/revalidate/route.ts` pa
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
-**Pendente (visão do produto):** Caixa · Consumo de produtos no atendimento · Estoque/Produtos ·
+**Pendente (visão do produto):** ~~Caixa~~ (✅ D-101 — abrir/fechar turno em tempo real, só dev/
+staging) · Consumo de produtos no atendimento · Estoque/Produtos ·
 Renovação **automática** de mensalidade (a manual já existe — D-44) · Dashboard executivo
 (comercial, financeiro, operacional, **leads fora do horário comercial / faturamento gerado pela IA**) ·
 Multi-tenant real no frontend · Arquitetura de múltiplos agentes.

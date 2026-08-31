@@ -24,10 +24,13 @@ from sqlalchemy.orm import selectinload
 
 from app.authz import require_permission
 from app.deps import get_current_user, get_tenant_db
+from app.services import cash_register as cash
 from app.services.audit import record_event
 from app.services.inventory import apply_stock_movement
 from app.services.management import top_selling_products
 from models import (
+    CashMovement,
+    CashMovementType,
     Client,
     Product,
     ProductVariant,
@@ -288,6 +291,17 @@ async def criar_venda(
     if unit is None:
         raise HTTPException(http_status.HTTP_409_CONFLICT, "Organização sem unidade cadastrada.")
 
+    # Caixa vivo (D-101): venda paga (parte) em DINHEIRO exige caixa aberto
+    # quando o enforcement da org está ligado. Checa ANTES de gravar.
+    cash_amount = sum(
+        (p.amount for p in body.payments if p.method == PaymentMethod.dinheiro), Decimal("0")
+    )
+    cash_session = None
+    if cash_amount > 0:
+        cash_session = await cash.require_open_session(
+            db, organization_id=current_user.organization_id, unit_id=unit.id
+        )
+
     sale = Sale(
         organization_id=current_user.organization_id,
         unit_id=unit.id,
@@ -335,6 +349,17 @@ async def criar_venda(
         )
     await db.flush()
 
+    if cash_session is not None:
+        await cash.post_movement(
+            db,
+            cash_session,
+            type=CashMovementType.venda_produto,
+            amount=cash_amount,
+            reference_type="sale",
+            reference_id=sale.id,
+            user_id=current_user.id,
+        )
+
     record_event(
         organization_id=current_user.organization_id,
         actor_user_id=current_user.id,
@@ -379,6 +404,30 @@ async def cancelar_venda(
 
     sale.status = SaleStatus.cancelada
     await db.flush()
+
+    # Caixa vivo (D-101): se a venda tinha dinheiro lançado no caixa, estorna
+    # com um `ajuste` negativo NO CAIXA ABERTO ATUAL (não no turno original).
+    # Sem caixa aberto, apenas registra em log — cancelar nunca é bloqueado.
+    cash_mov = (
+        await db.execute(
+            select(CashMovement)
+            .where(CashMovement.reference_type == "sale")
+            .where(CashMovement.reference_id == sale.id)
+        )
+    ).scalar_one_or_none()
+    if cash_mov is not None:
+        open_session = await cash.get_open_session(db, sale.unit_id)
+        if open_session is not None:
+            await cash.post_movement(
+                db,
+                open_session,
+                type=CashMovementType.ajuste,
+                amount=-cash_mov.amount,
+                reference_type="sale_cancel",
+                reference_id=sale.id,
+                note="Estorno de venda cancelada",
+                user_id=current_user.id,
+            )
 
     record_event(
         organization_id=current_user.organization_id,

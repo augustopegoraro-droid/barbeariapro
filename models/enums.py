@@ -250,3 +250,29 @@ class PushChannel(str, enum.Enum):
 
     webpush = "webpush"
     fcm = "fcm"
+
+
+class CashSessionStatus(str, enum.Enum):
+    """Estado de um turno de caixa vivo (D-101)."""
+
+    aberto = "aberto"
+    fechado = "fechado"
+
+
+class CashMovementType(str, enum.Enum):
+    """Tipo de movimento no ledger append-only do caixa (D-101).
+
+    Entradas de dinheiro: `venda_servico` (conclusão de atendimento em
+    dinheiro), `venda_produto` (venda com pagamento em dinheiro), `suprimento`
+    (reforço de troco). Saídas: `sangria` (retirada), `despesa` (despesa paga
+    em dinheiro da gaveta). `ajuste` é o único que aceita valor negativo —
+    correção/estorno (ex.: venda cancelada) sempre por novo lançamento, nunca
+    apagando linha.
+    """
+
+    venda_servico = "venda_servico"
+    venda_produto = "venda_produto"
+    suprimento = "suprimento"
+    sangria = "sangria"
+    despesa = "despesa"
+    ajuste = "ajuste"

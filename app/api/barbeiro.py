@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.rbac import check_appointment_ownership
 from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
+from app.services import cash_register as cash
 from app.services.audit import record_event
 from app.services.calendar_sync import push_appointment
 from app.services.loyalty import (
@@ -25,7 +26,7 @@ from app.services.membership import (
     revert_usage,
     usage_for_appointment,
 )
-from models import Appointment, AppointmentItem, ClientMembership, Payment, User
+from models import Appointment, AppointmentItem, CashMovementType, ClientMembership, Payment, User
 from models.enums import AppointmentStatus, PaymentMethod
 
 router = APIRouter(prefix="/barbeiro", tags=["barbeiro"])
@@ -130,16 +131,39 @@ async def concluir_atendimento(
         # (sem dinheiro) e NÃO sobrescreve price_charged. A gorjeta, se houver,
         # ainda é dinheiro e vai para Payment.
         tip = Decimal(str(body.tip_amount)) if body.tip_amount else None
+        tip_payment: Optional[Payment] = None
+        cash_session = None
+        if tip is not None and body.method == PaymentMethod.dinheiro.value:
+            # Gorjeta em dinheiro num atendimento pago por assinatura ainda é
+            # dinheiro na gaveta (D-101). Exige caixa aberto se o enforcement
+            # estiver ligado.
+            cash_session = await cash.require_open_session(
+                db,
+                organization_id=current_user.organization_id,
+                unit_id=appt.unit_id,
+            )
         if tip is not None:
-            db.add(Payment(
+            tip_payment = Payment(
                 organization_id=current_user.organization_id,
                 appointment_id=appt.id,
                 amount=Decimal("0"),
                 tip_amount=tip,
                 method=PaymentMethod(body.method) if body.method in _VALID_METHODS else PaymentMethod.dinheiro,
-            ))
+            )
+            db.add(tip_payment)
         appt.status = AppointmentStatus.concluido
         await db.flush()
+        if cash_session is not None and tip_payment is not None:
+            await cash.post_movement(
+                db,
+                cash_session,
+                type=CashMovementType.venda_servico,
+                amount=tip,
+                reference_type="payment",
+                reference_id=tip_payment.id,
+                note="Gorjeta (atendimento pago por assinatura)",
+                user_id=current_user.id,
+            )
         await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
         await db.commit()
         record_event(
@@ -165,6 +189,17 @@ async def concluir_atendimento(
     amount = Decimal(str(body.amount))
     tip = Decimal(str(body.tip_amount)) if body.tip_amount else None
 
+    # Caixa vivo (D-101): recebimento em DINHEIRO exige caixa aberto quando o
+    # enforcement da org está ligado (409 com code=cash_register_closed). Checa
+    # ANTES de mutar estado. Cartão/Pix não tocam no caixa.
+    cash_session = None
+    if body.method == PaymentMethod.dinheiro.value:
+        cash_session = await cash.require_open_session(
+            db,
+            organization_id=current_user.organization_id,
+            unit_id=appt.unit_id,
+        )
+
     payment = Payment(
         organization_id=current_user.organization_id,
         appointment_id=appt.id,
@@ -185,6 +220,19 @@ async def concluir_atendimento(
 
     # autoflush=False: sem flush as agregações do recalculate não veem este atendimento
     await db.flush()
+    if cash_session is not None:
+        # Dinheiro que entra na gaveta = valor do serviço + gorjeta (a gorjeta
+        # em dinheiro também está fisicamente no caixa).
+        await cash.post_movement(
+            db,
+            cash_session,
+            type=CashMovementType.venda_servico,
+            amount=amount + (tip or Decimal("0")),
+            reference_type="payment",
+            reference_id=payment.id,
+            note="inclui gorjeta" if tip else None,
+            user_id=current_user.id,
+        )
     await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
     await db.commit()
     record_event(
