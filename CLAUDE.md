@@ -194,6 +194,35 @@ histórico `GET /caixa`, `GET /caixa/{id}`). Permissões `cash.session.view`/`ca
 **869 pass / 2 ambientais / 0 regressões** (`tests/test_caixa.py`, +17; `conftest.py` ganhou autouse
 `_relax_cash_register`). Detalhes em DECISIONS.md D-101.
 
+**Despesas ricas + contas a pagar + despesas recorrentes (D-102, 2026-08-31 — implementado, só
+staging; migration `0064`, head `0064`):** o registro de despesa (`Expense`) era raso (categoria +
+valor + competência + nota). Enums PG novos `expense_method` (dinheiro/pix/cartao/transferencia/
+boleto/debito_automatico/outro) e `expense_status` (pago/a_pagar). Colunas aditivas em `expenses`:
+`method`, `subgroup` (mesmos slugs do `dre_monthly_lines`/D-65), `payee`, `status` NOT NULL DEFAULT
+`'pago'` (backfilla o histórico), `due_date`, `paid_at`, `recurrence_id` (FK `ON DELETE SET NULL`).
+Tabela nova `expense_recurrences` (template de despesa fixa; GRANT sem DELETE; `day_of_month` 1–28;
+RLS+FORCE). Índice parcial único `expenses_recurrence_month_unique` = idempotência do cron
+(1 conta/template/mês). Porta única: **`app/services/expenses.py`** (`create_expense`, `mark_paid`,
+`unmark_paid`, `materialize_recurrences`, `resolve_category`, `validate_subgroup`). Integração com o
+Caixa vivo (D-101) inalterada: **só `dinheiro` + `pago` sai da gaveta** — `create_expense`/`mark_paid`
+chamam `cash.require_open_session` + `post_movement(despesa, ref=expense)`; `unmark_paid` lança
+`ajuste` compensatório no caixa aberto atual. API (`financeiro.py`): `GET /financeiro/despesas`
+(`?month=&status=&subgroup=`, `overdue` derivado; `?status=a_pagar` sem `month` = todas as contas em
+aberto), `POST` estendido, `PATCH /financeiro/despesas/{id}` (edita + `mark_paid: bool`; mudar
+`amount` de despesa já no caixa → 409), `GET/POST /financeiro/despesas/recorrencias` +
+`PATCH .../recorrencias/{id}` (declaradas antes de `/{id}`). `get_financeiro_mensal` +
+`financial_summary` ganham `expenses_by_subgroup` e `expenses_unpaid` (aditivo; `total_expenses`/`net`
+seguem somando tudo por competência; consumidores com Pydantic `extra="ignore"`). Cron:
+`app/api/expenses.py::POST /internal/expenses/run` (`X-Bot-Token`, molde `reminders.py`) →
+`materialize_recurrences`; cron mensal `0 6 1 * *` documentado em `docs/EXPENSES_CRON_N8N.md` (**o
+dono cria no n8n**). Permissões: nenhuma nova (`finance.revenue.view`/`finance.expenses.manage`).
+Frontend: aba **"A pagar"** em `/admin/financeiro` (`components/financeiro/apagar-view.tsx` +
+`marcar-paga-dialog.tsx` + `recorrencia-dialog.tsx`), `despesa-dialog.tsx` com forma/subgrupo/
+beneficiário/toggle "Já paguei", `mensal-view.tsx` com badge de status; `hooks/use-financeiro.ts`
+(`useDespesas`/`useUpdateDespesa`/`useMarcarDespesaPaga`/`useRecorrencias`/...; invalida
+`["financeiro"]`+`["caixa"]`). Suíte **883 pass / 2 ambientais / 1 skip / 0 regressões**
+(`tests/test_despesas.py`, +14). Detalhes em DECISIONS.md D-102.
+
 - **Ainda não existe:** consumo de produtos no atendimento além da venda anexada, pacotes/assinaturas
   no fluxo do caixa.
 
@@ -1217,7 +1246,8 @@ ocupam a largura — a entrada fica no perfil). `app/api/revalidate/route.ts` pa
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
 **Pendente (visão do produto):** ~~Caixa~~ (✅ D-101 — abrir/fechar turno em tempo real, só dev/
-staging) · Consumo de produtos no atendimento · Estoque/Produtos ·
+staging) · ~~Despesas ricas / contas a pagar / despesas recorrentes~~ (✅ D-102 — só staging) ·
+Consumo de produtos no atendimento · Estoque/Produtos ·
 Renovação **automática** de mensalidade (a manual já existe — D-44) · Dashboard executivo
 (comercial, financeiro, operacional, **leads fora do horário comercial / faturamento gerado pela IA**) ·
 Multi-tenant real no frontend · Arquitetura de múltiplos agentes.

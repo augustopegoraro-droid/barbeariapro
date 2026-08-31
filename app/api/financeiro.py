@@ -15,11 +15,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dates import local_date
+from app.core.dates import local_date, today_local
 from app.authz import require_permission
 from app.core.rbac import require_manager_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
 from app.services import cash_register as cash
+from app.services import expenses as expenses_svc
 from app.services.audit import record_event
 from app.services.management import commissions_by_barber
 from models import (
@@ -35,6 +36,9 @@ from models import (
     DreMonthlyLine,
     Expense,
     ExpenseCategory,
+    ExpenseMethod,
+    ExpenseRecurrence,
+    ExpenseStatus,
     Payment,
     PaymentTransaction,
     Service,
@@ -226,6 +230,55 @@ class ExpenseOut(BaseModel):
     amount: float
     competence_month: str
     note: Optional[str]
+    # D-102: despesa rica + contas a pagar
+    method: Optional[str] = None
+    subgroup: Optional[str] = None
+    payee: Optional[str] = None
+    status: str = "pago"
+    due_date: Optional[str] = None
+    paid_at: Optional[str] = None
+    overdue: bool = False
+    recurrence_id: Optional[int] = None
+
+
+def _expense_out(e: Expense, category_name: str, today: date) -> ExpenseOut:
+    return ExpenseOut(
+        id=e.id,
+        category=category_name,
+        amount=float(e.amount),
+        competence_month=e.competence_month.isoformat(),
+        note=e.note,
+        method=e.method.value if e.method else None,
+        subgroup=e.subgroup,
+        payee=e.payee,
+        status=e.status.value,
+        due_date=e.due_date.isoformat() if e.due_date else None,
+        paid_at=e.paid_at.isoformat() if e.paid_at else None,
+        overdue=(
+            e.status == ExpenseStatus.a_pagar
+            and e.due_date is not None
+            and e.due_date < today
+        ),
+        recurrence_id=e.recurrence_id,
+    )
+
+
+def _parse_method(v: Optional[str]) -> Optional[ExpenseMethod]:
+    if not v:
+        return None
+    try:
+        return ExpenseMethod(v)
+    except ValueError:
+        raise HTTPException(422, "Forma de pagamento inválida.")
+
+
+def _parse_status(v: Optional[str]) -> ExpenseStatus:
+    if not v:
+        return ExpenseStatus.pago
+    try:
+        return ExpenseStatus(v)
+    except ValueError:
+        raise HTTPException(422, "Status de despesa inválido.")
 
 
 class FinanceiroMensalOut(BaseModel):
@@ -238,6 +291,9 @@ class FinanceiroMensalOut(BaseModel):
     by_method: list[MethodOut]
     by_barber: list[BarberOut]
     expenses: list[ExpenseOut]
+    # D-102 (aditivo — `total_expenses`/`net` seguem somando TUDO por competência).
+    expenses_by_subgroup: dict[str, float] = {}
+    expenses_unpaid: float = 0.0
 
 
 @router.get("/mensal", response_model=FinanceiroMensalOut)
@@ -298,17 +354,17 @@ async def get_financeiro_mensal(
             .order_by(Expense.created_at.desc())
         )
     ).all()
-    expenses = [
-        ExpenseOut(
-            id=e.id,
-            category=cat_name,
-            amount=float(e.amount),
-            competence_month=e.competence_month.isoformat(),
-            note=e.note,
-        )
-        for e, cat_name in expense_rows
-    ]
+    today = today_local()
+    expenses = [_expense_out(e, cat_name, today) for e, cat_name in expense_rows]
     total_expenses = sum(e.amount for e in expenses)
+
+    by_subgroup: dict[str, float] = {}
+    unpaid = 0.0
+    for e, _cat in expense_rows:
+        key = e.subgroup or "outros"
+        by_subgroup[key] = round(by_subgroup.get(key, 0.0) + float(e.amount), 2)
+        if e.status == ExpenseStatus.a_pagar:
+            unpaid += float(e.amount)
 
     return FinanceiroMensalOut(
         month=month,
@@ -320,6 +376,8 @@ async def get_financeiro_mensal(
         by_method=by_method,
         by_barber=by_barber,
         expenses=expenses,
+        expenses_by_subgroup=by_subgroup,
+        expenses_unpaid=round(unpaid, 2),
     )
 
 
@@ -530,16 +588,123 @@ async def get_financeiro_dre(
     )
 
 
-# ─── Despesas (CRUD) ──────────────────────────────────────────────────────────
+# ─── Despesas (CRUD) + contas a pagar + recorrências (D-102) ─────────────────
 
 class ExpenseCreateIn(BaseModel):
     category: str = Field(..., min_length=2, max_length=80, description="Nome da categoria (criada se não existir)")
     amount: float = Field(..., gt=0)
     month: str = Field(..., description="Mês de competência YYYY-MM")
     note: Optional[str] = Field(None, max_length=300)
-    # Caixa vivo (D-101): despesa paga com dinheiro da gaveta. Se true e o
-    # enforcement da org estiver ligado, exige um caixa aberto (409).
+    # D-102: despesa rica
+    method: Optional[str] = Field(None, description="dinheiro|pix|cartao|transferencia|boleto|debito_automatico|outro")
+    subgroup: Optional[str] = Field(None, description="fixa|variavel|pessoal|impostos|outros")
+    payee: Optional[str] = Field(None, max_length=120, description="Beneficiário")
+    status: Optional[str] = Field("pago", description="pago|a_pagar")
+    due_date: Optional[date] = Field(None, description="Vencimento (usado quando a_pagar)")
+    # Caixa vivo (D-101): açúcar — se true e sem `method`, vira method=dinheiro.
     paid_in_cash: bool = Field(False, description="Paga em dinheiro (sai do caixa)")
+
+
+class ExpenseUpdateIn(BaseModel):
+    category: Optional[str] = Field(None, min_length=2, max_length=80)
+    amount: Optional[float] = Field(None, gt=0)
+    note: Optional[str] = Field(None, max_length=300)
+    method: Optional[str] = None
+    subgroup: Optional[str] = None
+    payee: Optional[str] = Field(None, max_length=120)
+    due_date: Optional[date] = None
+    # true → marca como paga; false → volta para a pagar.
+    mark_paid: Optional[bool] = None
+    # Forma/data usadas quando `mark_paid=true`.
+    paid_method: Optional[str] = None
+    paid_at: Optional[date] = None
+
+
+class ExpenseRecurrenceOut(BaseModel):
+    id: int
+    description: str
+    category: str
+    amount: float
+    method: Optional[str] = None
+    subgroup: Optional[str] = None
+    payee: Optional[str] = None
+    day_of_month: int
+    note: Optional[str] = None
+    active: bool
+    created_at: str
+
+
+class ExpenseRecurrenceCreateIn(BaseModel):
+    description: str = Field(..., min_length=2, max_length=120)
+    category: str = Field(..., min_length=2, max_length=80)
+    amount: float = Field(..., gt=0)
+    day_of_month: int = Field(..., ge=1, le=28)
+    method: Optional[str] = None
+    subgroup: Optional[str] = None
+    payee: Optional[str] = Field(None, max_length=120)
+    note: Optional[str] = Field(None, max_length=300)
+
+
+class ExpenseRecurrenceUpdateIn(BaseModel):
+    description: Optional[str] = Field(None, min_length=2, max_length=120)
+    amount: Optional[float] = Field(None, gt=0)
+    day_of_month: Optional[int] = Field(None, ge=1, le=28)
+    method: Optional[str] = None
+    subgroup: Optional[str] = None
+    payee: Optional[str] = Field(None, max_length=120)
+    note: Optional[str] = Field(None, max_length=300)
+    active: Optional[bool] = None
+
+
+def _recurrence_out(rec: ExpenseRecurrence, category_name: str) -> ExpenseRecurrenceOut:
+    return ExpenseRecurrenceOut(
+        id=rec.id,
+        description=rec.description,
+        category=category_name,
+        amount=float(rec.amount),
+        method=rec.method.value if rec.method else None,
+        subgroup=rec.subgroup,
+        payee=rec.payee,
+        day_of_month=rec.day_of_month,
+        note=rec.note,
+        active=rec.active,
+        created_at=rec.created_at.isoformat(),
+    )
+
+
+@router.get("/despesas", response_model=list[ExpenseOut])
+async def listar_despesas(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    month: Annotated[Optional[str], Query(description="Mês de competência YYYY-MM")] = None,
+    status: Annotated[Optional[str], Query(description="pago|a_pagar")] = None,
+    subgroup: Annotated[Optional[str], Query(description="fixa|variavel|pessoal|impostos|outros")] = None,
+) -> list[ExpenseOut]:
+    """Lista despesas com todos os campos ricos + `overdue` derivado.
+    `?status=a_pagar` sem `month` = todas as contas em aberto (aba "A pagar"),
+    ordenadas por vencimento."""
+    await _require_manager(db, current_user)
+
+    q = select(Expense, ExpenseCategory.name.label("category_name")).join(
+        ExpenseCategory, ExpenseCategory.id == Expense.category_id
+    )
+    if month:
+        first, _ = _month_range(month)
+        q = q.where(Expense.competence_month == first)
+    status_enum = _parse_status(status) if status else None
+    if status_enum is not None:
+        q = q.where(Expense.status == status_enum)
+    if subgroup:
+        q = q.where(Expense.subgroup == expenses_svc.validate_subgroup(subgroup))
+
+    if status_enum == ExpenseStatus.a_pagar:
+        q = q.order_by(Expense.due_date.asc().nulls_last(), Expense.created_at.desc())
+    else:
+        q = q.order_by(Expense.created_at.desc())
+
+    rows = (await db.execute(q)).all()
+    today = today_local()
+    return [_expense_out(e, name, today) for e, name in rows]
 
 
 @router.post("/despesas", response_model=ExpenseOut, status_code=http_status.HTTP_201_CREATED)
@@ -551,74 +716,227 @@ async def criar_despesa(
     await _require_manager(db, current_user)
     competence, _ = _month_range(body.month)
 
-    category_name = body.category.strip()
-    category = (
-        await db.execute(
-            select(ExpenseCategory).where(
-                func.lower(ExpenseCategory.name) == category_name.lower()
-            )
-        )
-    ).scalar_one_or_none()
-    if category is None:
-        category = ExpenseCategory(
-            organization_id=current_user.organization_id, name=category_name
-        )
-        db.add(category)
-        await db.flush()
+    method = _parse_method(body.method)
+    if method is None and body.paid_in_cash:
+        method = ExpenseMethod.dinheiro
+    status_enum = _parse_status(body.status)
 
-    unit = (
-        await db.execute(
-            select(Unit).where(Unit.deleted_at.is_(None)).order_by(Unit.id).limit(1)
-        )
-    ).scalar_one_or_none()
-    if unit is None:
-        raise HTTPException(409, "Organização sem unidade cadastrada.")
-
-    # Caixa vivo (D-101): despesa em dinheiro sai da gaveta — exige caixa aberto
-    # quando o enforcement da org está ligado. Checa ANTES de gravar.
-    cash_session = None
-    if body.paid_in_cash:
-        cash_session = await cash.require_open_session(
-            db, organization_id=current_user.organization_id, unit_id=unit.id
-        )
-
-    expense = Expense(
+    expense, category_name = await expenses_svc.create_expense(
+        db,
         organization_id=current_user.organization_id,
-        unit_id=unit.id,
-        category_id=category.id,
+        category_name=body.category,
         amount=Decimal(str(body.amount)),
         competence_month=competence,
-        note=body.note or None,
+        user_id=current_user.id,
+        method=method,
+        subgroup=body.subgroup,
+        payee=body.payee,
+        status=status_enum,
+        due_date=body.due_date,
+        note=body.note,
     )
-    db.add(expense)
-    await db.flush()
-    if cash_session is not None:
-        await cash.post_movement(
-            db,
-            cash_session,
-            type=CashMovementType.despesa,
-            amount=Decimal(str(body.amount)),
-            reference_type="expense",
-            reference_id=expense.id,
-            note=body.note or f"Despesa: {category.name}",
-            user_id=current_user.id,
-        )
     record_event(
         organization_id=current_user.organization_id,
         actor_user_id=current_user.id,
         action="finance.expenses.create",
         resource_type="expense",
         resource_id=expense.id,
-        after={"category": category.name, "amount": float(expense.amount), "month": body.month},
+        after={
+            "category": category_name,
+            "amount": float(expense.amount),
+            "month": body.month,
+            "status": expense.status.value,
+            "method": method.value if method else None,
+        },
     )
+    return _expense_out(expense, category_name, today_local())
 
-    return ExpenseOut(
-        id=expense.id,
-        category=category.name,
-        amount=float(expense.amount),
-        competence_month=expense.competence_month.isoformat(),
-        note=expense.note,
+
+# ─── Despesas recorrentes (templates) ────────────────────────────────────────
+# Declaradas ANTES de `PATCH /despesas/{expense_id}` para o path "recorrencias"
+# não cair na rota de id.
+
+@router.get("/despesas/recorrencias", response_model=list[ExpenseRecurrenceOut])
+async def listar_recorrencias(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> list[ExpenseRecurrenceOut]:
+    await _require_manager(db, current_user)
+    rows = (
+        await db.execute(
+            select(ExpenseRecurrence, ExpenseCategory.name.label("category_name"))
+            .join(ExpenseCategory, ExpenseCategory.id == ExpenseRecurrence.category_id)
+            .order_by(ExpenseRecurrence.active.desc(), ExpenseRecurrence.description)
+        )
+    ).all()
+    return [_recurrence_out(rec, name) for rec, name in rows]
+
+
+@router.post(
+    "/despesas/recorrencias",
+    response_model=ExpenseRecurrenceOut,
+    status_code=http_status.HTTP_201_CREATED,
+)
+async def criar_recorrencia(
+    body: ExpenseRecurrenceCreateIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> ExpenseRecurrenceOut:
+    await _require_manager(db, current_user)
+    subgroup = expenses_svc.validate_subgroup(body.subgroup)
+    method = _parse_method(body.method)
+    category = await expenses_svc.resolve_category(
+        db, organization_id=current_user.organization_id, name=body.category
     )
+    unit_id = await cash.resolve_unit_id(db)
+
+    rec = ExpenseRecurrence(
+        organization_id=current_user.organization_id,
+        unit_id=unit_id,
+        category_id=category.id,
+        description=body.description.strip(),
+        amount=Decimal(str(body.amount)),
+        method=method,
+        subgroup=subgroup,
+        payee=(body.payee.strip() if body.payee and body.payee.strip() else None),
+        day_of_month=body.day_of_month,
+        note=body.note or None,
+        created_by_user_id=current_user.id,
+    )
+    db.add(rec)
+    await db.flush()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.expenses.recurrence.create",
+        resource_type="expense_recurrence",
+        resource_id=rec.id,
+        after={"description": rec.description, "amount": float(rec.amount), "day_of_month": rec.day_of_month},
+    )
+    return _recurrence_out(rec, category.name)
+
+
+@router.patch("/despesas/recorrencias/{rec_id}", response_model=ExpenseRecurrenceOut)
+async def atualizar_recorrencia(
+    rec_id: Annotated[int, Path(gt=0)],
+    body: ExpenseRecurrenceUpdateIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> ExpenseRecurrenceOut:
+    await _require_manager(db, current_user)
+    rec = (
+        await db.execute(select(ExpenseRecurrence).where(ExpenseRecurrence.id == rec_id))
+    ).scalar_one_or_none()
+    if rec is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Recorrência não encontrada.")
+
+    if body.description is not None:
+        rec.description = body.description.strip()
+    if body.amount is not None:
+        rec.amount = Decimal(str(body.amount))
+    if body.day_of_month is not None:
+        rec.day_of_month = body.day_of_month
+    if body.method is not None:
+        rec.method = _parse_method(body.method)
+    if body.subgroup is not None:
+        rec.subgroup = expenses_svc.validate_subgroup(body.subgroup)
+    if body.payee is not None:
+        rec.payee = body.payee.strip() or None
+    if body.note is not None:
+        rec.note = body.note or None
+    if body.active is not None:
+        rec.active = body.active
+    await db.flush()
+
+    category_name = (
+        await db.execute(
+            select(ExpenseCategory.name).where(ExpenseCategory.id == rec.category_id)
+        )
+    ).scalar_one()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.expenses.recurrence.update",
+        resource_type="expense_recurrence",
+        resource_id=rec.id,
+        after={"active": rec.active, "amount": float(rec.amount)},
+    )
+    return _recurrence_out(rec, category_name)
+
+
+@router.patch("/despesas/{expense_id}", response_model=ExpenseOut)
+async def atualizar_despesa(
+    expense_id: Annotated[int, Path(gt=0)],
+    body: ExpenseUpdateIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> ExpenseOut:
+    await _require_manager(db, current_user)
+    expense = (
+        await db.execute(select(Expense).where(Expense.id == expense_id))
+    ).scalar_one_or_none()
+    if expense is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Despesa não encontrada.")
+
+    if body.category is not None:
+        category = await expenses_svc.resolve_category(
+            db, organization_id=current_user.organization_id, name=body.category
+        )
+        expense.category_id = category.id
+    if body.amount is not None:
+        # Editar o valor de uma despesa já lançada no caixa desincronizaria a
+        # gaveta — remova e recrie nesse caso.
+        linked = (
+            await db.execute(
+                select(CashMovement.id)
+                .where(CashMovement.reference_type == "expense")
+                .where(CashMovement.reference_id == expense.id)
+            )
+        ).scalar_one_or_none()
+        if linked is not None:
+            raise HTTPException(
+                http_status.HTTP_409_CONFLICT,
+                "Despesa já lançada no caixa; remova e recrie para mudar o valor.",
+            )
+        expense.amount = Decimal(str(body.amount))
+    if body.note is not None:
+        expense.note = body.note or None
+    if body.method is not None:
+        expense.method = _parse_method(body.method)
+    if body.subgroup is not None:
+        expense.subgroup = expenses_svc.validate_subgroup(body.subgroup)
+    if body.payee is not None:
+        expense.payee = body.payee.strip() or None
+    if body.due_date is not None:
+        expense.due_date = body.due_date
+
+    if body.mark_paid is True:
+        await expenses_svc.mark_paid(
+            db,
+            expense,
+            organization_id=current_user.organization_id,
+            user_id=current_user.id,
+            method=_parse_method(body.paid_method),
+            paid_at=body.paid_at,
+        )
+    elif body.mark_paid is False:
+        await expenses_svc.unmark_paid(db, expense, user_id=current_user.id)
+
+    await db.flush()
+    category_name = (
+        await db.execute(
+            select(ExpenseCategory.name).where(ExpenseCategory.id == expense.category_id)
+        )
+    ).scalar_one()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="finance.expenses.update",
+        resource_type="expense",
+        resource_id=expense.id,
+        after={"status": expense.status.value, "amount": float(expense.amount)},
+    )
+    return _expense_out(expense, category_name, today_local())
 
 
 @router.delete("/despesas/{expense_id}", status_code=http_status.HTTP_204_NO_CONTENT)

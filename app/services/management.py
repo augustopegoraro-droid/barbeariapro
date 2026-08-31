@@ -431,18 +431,34 @@ async def financial_summary(db: AsyncSession, date_from: date, date_to: date) ->
     ]
 
     # Despesas por competência mensal dos meses tocados pelo intervalo.
-    from models import Expense  # import tardio: evita ciclo na borda do módulo
+    from models import Expense, ExpenseStatus  # import tardio: evita ciclo
 
     first_month = date_from.replace(day=1)
     last_month = date_to.replace(day=1)
-    expenses_total = (
+    exp_rows = (
         await db.execute(
-            select(func.coalesce(func.sum(Expense.amount), 0))
+            select(
+                Expense.subgroup,
+                Expense.status,
+                func.coalesce(func.sum(Expense.amount), 0).label("total"),
+            )
             .where(Expense.competence_month >= first_month)
             .where(Expense.competence_month <= last_month)
+            .group_by(Expense.subgroup, Expense.status)
         )
-    ).scalar_one()
-    expenses = Decimal(str(expenses_total))
+    ).all()
+    expenses = Decimal("0")
+    unpaid = Decimal("0")
+    expenses_by_subgroup: dict[str, float] = {}
+    for sg, st, total in exp_rows:
+        total_dec = Decimal(str(total))
+        expenses += total_dec
+        key = sg or "outros"
+        expenses_by_subgroup[key] = round(
+            expenses_by_subgroup.get(key, 0.0) + float(total_dec), 2
+        )
+        if st == ExpenseStatus.a_pagar:
+            unpaid += total_dec
 
     net = revenue - commissions - expenses
     products = await product_sales_summary(db, date_from, date_to)
@@ -456,6 +472,9 @@ async def financial_summary(db: AsyncSession, date_from: date, date_to: date) ->
         "appointment_count": appt_count,
         "by_method": by_method,
         "products": products,
+        # D-102 (aditivo — consumidores com Pydantic extra="ignore" descartam).
+        "expenses_by_subgroup": expenses_by_subgroup,
+        "expenses_unpaid": float(unpaid),
     }
 
 

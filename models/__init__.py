@@ -17,6 +17,8 @@ from .enums import (
     ContactChannel,
     ConversationStatus,
     DeliveryStatus,
+    ExpenseMethod,
+    ExpenseStatus,
     IntegrationProvider,
     IntegrationStatus,
     InventoryCountStatus,
@@ -61,7 +63,7 @@ from .barber import Barber, BarberService, BarberUnit, TimeOff
 from .client import Client, ClientConsent
 from .service import Service
 from .appointment import Appointment, AppointmentItem
-from .payment import Expense, ExpenseCategory, Payment
+from .payment import Expense, ExpenseCategory, ExpenseRecurrence, Payment
 from .debt import ClientDebt
 from .cash_closing import CashDailyClosing
 from .cash_register import CashMovement, CashSession
@@ -190,6 +192,9 @@ __all__ = [
     "Payment",
     "ExpenseCategory",
     "Expense",
+    "ExpenseRecurrence",
+    "ExpenseMethod",
+    "ExpenseStatus",
     "ClientDebt",
     "CashDailyClosing",
     "CashSession",

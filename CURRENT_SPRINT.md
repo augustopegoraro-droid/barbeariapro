@@ -4,6 +4,34 @@
 
 ---
 
+## 🟡 Sessão 2026-08-31 — Despesas ricas + contas a pagar + despesas recorrentes (D-102) — implementado, só staging
+
+Enriquecer `Expense` (era raso: categoria + valor + competência + nota) e destravar **contas a pagar**
++ **despesas fixas que se relançam sozinhas** todo mês. Plano em `~/.claude/plans/vivid-wishing-starfish.md`.
+
+- **Backend:** migration `0064` (enums `expense_method`/`expense_status`; colunas aditivas em `expenses`
+  — `method`/`subgroup`/`payee`/`status`(DEFAULT `pago`, backfilla histórico)/`due_date`/`paid_at`/
+  `recurrence_id`; tabela nova `expense_recurrences`; índice parcial único de idempotência do cron).
+  Serviço `app/services/expenses.py` (porta única: `create_expense`/`mark_paid`/`unmark_paid`/
+  `materialize_recurrences`). API em `financeiro.py`: `GET /financeiro/despesas` (filtros +
+  `overdue`), `POST` estendido, `PATCH /despesas/{id}` (+`mark_paid`), CRUD `/despesas/recorrencias`.
+  Cron `app/api/expenses.py::POST /internal/expenses/run` (`X-Bot-Token`). `financial_summary` +
+  `get_financeiro_mensal` ganham `expenses_by_subgroup`/`expenses_unpaid` (aditivo).
+- **Integração Caixa vivo (D-101):** só `dinheiro` + `pago` sai da gaveta; `unmark_paid` compensa
+  com `ajuste`.
+- **Frontend:** aba **"A pagar"** (`components/financeiro/apagar-view.tsx` + `marcar-paga-dialog.tsx`
+  + `recorrencia-dialog.tsx`), `despesa-dialog.tsx` (forma/subgrupo/beneficiário/"Já paguei"),
+  `mensal-view.tsx` (badge de status), `hooks/use-financeiro.ts` (6 hooks novos).
+- **Permissões:** nenhuma nova (`finance.revenue.view`/`finance.expenses.manage`).
+- **Testes:** `tests/test_despesas.py` (+14); suíte **883 pass / 2 ambientais / 1 skip / 0 regressões**
+  (baseline D-101: 869).
+- **Verificado (staging):** migration up/down/up (RLS+FORCE, GRANTs, índices, backfill `pago`);
+  `tsc`/`eslint`/`next build` limpos; graphify atualizado; `docs/EXPENSES_CRON_N8N.md` criado.
+- **Pendente:** validação visual no browser (dev local); deploy prod (molde D-93/D-94/D-101) + o dono
+  criar o cron mensal `/internal/expenses/run` no n8n.
+
+---
+
 ## 🟢 Sessão 2026-08-27/31 — Módulo de Caixa vivo (D-101) — ✅ DEPLOYADO em prod 2026-08-31
 
 Abrir/fechar turno de caixa em tempo real (a gaveta física); antes só existia o histórico migrado da

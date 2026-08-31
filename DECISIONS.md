@@ -3526,6 +3526,107 @@ tópico `caixa` no Kernel IA (`consultar_financas`); múltiplas unidades.
 
 ---
 
+### D-102 — Despesas ricas + contas a pagar + despesas recorrentes — 2026-08-31 (implementado, só staging; head `0064`)
+
+**Problema.** O registro de despesa (`Expense`, `POST /financeiro/despesas`) era **raso**: só
+categoria (texto livre), valor, mês de competência e nota. Sem forma de pagamento estruturada,
+beneficiário, subgrupo (fixa/variável/pessoal/impostos/outros), vencimento, status pago/a-pagar nem
+recorrência. O `paid_in_cash` do D-101 nem era persistido — só disparava o movimento de caixa. Não
+dava para responder "o aluguel deste mês já foi pago? por qual forma? para quem?", nem "quais contas
+vencem essa semana?", e toda despesa fixa era relançada à mão todo mês.
+
+**Escopo (decisões do dono já respondidas):** (1) enriquecer a despesa (forma de pagamento +
+subgrupo + beneficiário); (2) **contas a pagar** (status `pago`/`a_pagar` + vencimento + "marcar como
+paga"); (3) **despesas recorrentes** (template que gera a conta do mês via cron n8n). A integração
+com o Caixa vivo (D-101) continua valendo: **só `dinheiro` + `pago` sai da gaveta**; qualquer outra
+forma fica só no Financeiro/DRE.
+
+**Schema (migration `0064_expense_details`, head `0064`; molde `commission_transfers`/0050 e
+`cash_register`/0063).**
+- Enums PG: `expense_method` (`dinheiro`/`pix`/`cartao`/`transferencia`/`boleto`/`debito_automatico`/
+  `outro`), `expense_status` (`pago`/`a_pagar`).
+- `expenses` — colunas aditivas: `method` (nullable), `subgroup` text (+CHECK slugs =
+  `dre_monthly_lines.subgroup` do D-65), `payee` text, `status` NOT NULL DEFAULT `'pago'`
+  (**backfilla** o histórico → `pago`, que é o que eram), `due_date` date, `paid_at` date,
+  `recurrence_id` bigint FK→`expense_recurrences` `ON DELETE SET NULL`. Índice parcial único
+  `expenses_recurrence_month_unique` (`org, recurrence_id, competence_month WHERE recurrence_id IS
+  NOT NULL`) = idempotência do cron (1 conta/template/mês). Índice `(org, status, due_date)` para a
+  aba "A pagar".
+- `expense_recurrences` (nova) — GRANT SELECT/INSERT/UPDATE (sem DELETE; desativar via `active`).
+  `day_of_month` int CHECK 1–28; `created_by_user_id` sem FK (molde 0048). RLS + FORCE.
+
+**Serviço `app/services/expenses.py` (porta única).** `validate_subgroup`, `resolve_category`
+(movida de `criar_despesa`), `create_expense` (só `pago`+`dinheiro` → `cash.require_open_session`
+antes de gravar + `post_movement(despesa, ref=expense)`), `mark_paid` (`a_pagar → pago`; checa o
+caixa ANTES de mutar; 409 `cash_register_closed` se enforcement ligado e sem caixa), `unmark_paid`
+(`pago → a_pagar`; se havia movimento de caixa, `ajuste` compensatório no caixa aberto atual, molde
+`remover_despesa` do D-101; `ref=expense_unpay`), `materialize_recurrences` (para cada recorrência
+ativa, cria a conta `a_pagar` do mês corrente — `competence_month`=1º dia, `due_date`=`day_of_month`;
+idempotente pelo índice + `begin_nested`).
+
+**API `app/api/financeiro.py`.** `GET /financeiro/despesas?month=&status=&subgroup=` (lista rica +
+`overdue` derivado; `?status=a_pagar` sem `month` = todas as contas em aberto, ordem por vencimento).
+`POST /financeiro/despesas` — corpo estendido (`method?`/`subgroup?`/`payee?`/`status?`/`due_date?`);
+`paid_in_cash` mantido como açúcar (sem `method` → `dinheiro`). `PATCH /financeiro/despesas/{id}` —
+edita campos + `mark_paid: bool` (`true`→`mark_paid`, `false`→`unmark_paid`); editar `amount` de
+despesa já lançada no caixa → **409** (remova e recrie). `DELETE` inalterado (já compensa o caixa no
+D-101). `GET/POST /financeiro/despesas/recorrencias` + `PATCH .../recorrencias/{id}` — CRUD dos
+templates (ativar/desativar via `active`), **declaradas antes** de `PATCH /despesas/{id}` para o path
+não colidir. Tudo sob `finance.revenue.view` (via `_require_manager`), auditado
+(`finance.expenses.{create,update}`, `finance.expenses.recurrence.{create,update}`).
+`get_financeiro_mensal`: `ExpenseOut` enriquecido; `FinanceiroMensalOut` ganha
+`expenses_by_subgroup: dict` e `expenses_unpaid: float` (aditivo; `total_expenses`/`net` seguem
+somando **tudo** por competência).
+
+**Cron `app/api/expenses.py` (`internal_router`, montado no `main.py`).**
+`POST /internal/expenses/run` (molde `reminders.py`: `get_bot_db`/`get_bot_org_id`, `X-Bot-Token`) →
+`materialize_recurrences` → `{created, skipped}`. Doc `docs/EXPENSES_CRON_N8N.md` (cron mensal
+`0 6 1 * *`; **o dono cria no n8n** — sem API key, mesmo padrão D-96/D-98).
+
+**management.py.** `financial_summary` ganha `expenses_by_subgroup` e `expenses_unpaid` (aditivo;
+consumidores com Pydantic `extra="ignore"` — `gestor.py`, `kernel_ia_finance.py` — descartam sem
+quebrar). Sem função nova.
+
+**Permissões.** Nenhuma nova — `finance.expenses.manage`/`finance.revenue.view` (já no catálogo,
+owner/manager) cobrem tudo. Cron sob `X-Bot-Token`.
+
+**Frontend (`barbearia-frontend`).** `types/index.ts`: `ExpenseMethod`/`ExpenseStatus`/
+`ExpenseSubgroup`/`ExpenseRecurrence`; `ExpenseItem` + `FinanceiroMensalData` estendidos.
+`hooks/use-financeiro.ts`: `useDespesas(filter)`, `useUpdateDespesa`, `useMarcarDespesaPaga`,
+`useRecorrencias`, `useCreateRecorrencia`, `useUpdateRecorrencia`; mutações de despesa invalidam
+`["financeiro"]` **e** `["caixa"]`. `constants.ts`: `ViewMode += "apagar"`, `EXPENSE_METHOD_*`,
+`EXPENSE_STATUS_LABEL`, `EXPENSE_SUBGROUP_OPTIONS` (reusa `DRE_SUBGROUP_LABEL`). `page.tsx`:
+aba **"A pagar"**. Componentes novos: `apagar-view.tsx` (contas em aberto ordenadas por vencimento,
+vencidas em vermelho, "Marcar como paga" + painel "Despesas fixas" com CRUD de recorrências),
+`marcar-paga-dialog.tsx`, `recorrencia-dialog.tsx`. `despesa-dialog.tsx`: forma de pagamento,
+subgrupo, beneficiário, toggle "Já paguei" (off → campo de vencimento + `status=a_pagar`).
+`mensal-view.tsx`: linhas de despesa mostram subgrupo · forma · beneficiário + `Badge` de status
+(Pago / A pagar / Vencida).
+
+**Testes.** `tests/test_despesas.py` (14): campos ricos persistem; filtros `month`/`status`/
+`subgroup`; `overdue`; `PATCH` edita; `mark_paid` em dinheiro com caixa → movimento `despesa`;
+`mark_paid` em dinheiro sem caixa + enforcement → 409 `cash_register_closed`; `unmark_paid` compensa
+com `ajuste`; editar `amount` já no caixa → 409; recorrência CRUD; `POST /internal/expenses/run`
+materializa + 2ª chamada no-op; cron sem token → 401; RBAC (barbeiro/recepção 403); RLS entre orgs.
+Limpeza via `ADMIN_DATABASE_URL` (tabelas sem DELETE), molde `test_caixa.py`. Suíte
+**883 pass / 2 ambientais / 1 skip / 0 regressões** (baseline D-101: 869; +14).
+
+**Verificado (staging).** `alembic upgrade head` + `downgrade -1` + `upgrade head` (RLS+FORCE ativos
+nas 2 tabelas, GRANT de `expense_recurrences` = SELECT/INSERT/UPDATE sem DELETE, índices
+`idx_expenses_status_due` + `expenses_recurrence_month_unique` criados, `status` NOT NULL DEFAULT
+`pago`). Frontend: `tsc` limpo, `eslint` limpo, `next build` OK. graphify atualizado.
+
+**Pendente para prod (molde D-93/D-94/D-101):** backup → `git pull` + `git submodule update` →
+migration `0064` via `Dockerfile.migrate` → rebuild `backend`+`frontend` com `-f
+docker-compose.app.yml` apenas → smoke (`/health` 200, `/financeiro/despesas` 401 sem token,
+`/internal/expenses/run` 401 sem `X-Bot-Token`, app./apex OK) → **o dono cria o cron mensal
+`/internal/expenses/run` no n8n**. Validação visual no browser (dev local) ainda não feita.
+
+**Follow-up (fora de escopo):** vincular `payee` a `suppliers`; painel de contas a pagar no
+`/admin/gestor`; tópico "contas a pagar" no Kernel IA; conciliação despesa × `payment_transactions`.
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

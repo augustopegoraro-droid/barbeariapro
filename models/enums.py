@@ -259,6 +259,34 @@ class CashSessionStatus(str, enum.Enum):
     fechado = "fechado"
 
 
+class ExpenseMethod(str, enum.Enum):
+    """Forma de pagamento de uma despesa (D-102).
+
+    Só `dinheiro` + `status == pago` sai do caixa vivo (D-101); qualquer outra
+    forma (Pix, cartão, transferência, boleto, débito automático) fica só no
+    Financeiro/DRE.
+    """
+
+    dinheiro = "dinheiro"
+    pix = "pix"
+    cartao = "cartao"
+    transferencia = "transferencia"
+    boleto = "boleto"
+    debito_automatico = "debito_automatico"
+    outro = "outro"
+
+
+class ExpenseStatus(str, enum.Enum):
+    """Status de pagamento de uma despesa (D-102).
+
+    `a_pagar` = conta em aberto (contas a pagar, com vencimento); `pago` =
+    quitada. O histórico anterior à D-102 é todo `pago` (era o que eram).
+    """
+
+    pago = "pago"
+    a_pagar = "a_pagar"
+
+
 class CashMovementType(str, enum.Enum):
     """Tipo de movimento no ledger append-only do caixa (D-101).
 
