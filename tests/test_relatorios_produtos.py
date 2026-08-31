@@ -131,6 +131,70 @@ async def test_produtos_mais_vendidos_soma_qty_e_receita(client, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_produtos_mais_vendidos_inclui_price(client, auth_headers):
+    """`price` (preço atual da variação) alimenta os botões de acesso rápido."""
+    variant_id = await _criar_produto(client, auth_headers, price="7.50")
+    await _entrada(client, auth_headers, variant_id, "10")
+    await _vender(client, auth_headers, variant_id, "1", "7.50")
+
+    today = date.today().isoformat()
+    resp = await client.get(
+        "/vendas/produtos-mais-vendidos",
+        headers=auth_headers,
+        params={"date_from": today, "date_to": today},
+    )
+    assert resp.status_code == 200, resp.text
+    row = next(r for r in resp.json() if r["variant_id"] == variant_id)
+    assert row["price"] == 7.5
+
+
+@pytest.mark.asyncio
+async def test_only_active_descarta_produto_arquivado(client, auth_headers):
+    resp = await client.post(
+        "/produtos",
+        headers=auth_headers,
+        json={
+            "name": f"Produto Relatorio Teste {_suf()}",
+            "tracks_stock": True,
+            "variants": [{"name": "Único", "price": "5.00"}],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    product_id = resp.json()["id"]
+    variant_id = resp.json()["variants"][0]["id"]
+    await _entrada(client, auth_headers, variant_id, "10")
+    await _vender(client, auth_headers, variant_id, "2", "5.00")
+
+    today = date.today().isoformat()
+    base = {"date_from": today, "date_to": today}
+
+    r = await client.get(
+        "/vendas/produtos-mais-vendidos",
+        headers=auth_headers,
+        params={**base, "only_active": "true"},
+    )
+    assert any(x["variant_id"] == variant_id for x in r.json())
+
+    arq = await client.patch(
+        f"/produtos/{product_id}", headers=auth_headers, json={"active": False}
+    )
+    assert arq.status_code == 200, arq.text
+
+    r_all = await client.get(
+        "/vendas/produtos-mais-vendidos", headers=auth_headers, params=base
+    )
+    r_active = await client.get(
+        "/vendas/produtos-mais-vendidos",
+        headers=auth_headers,
+        params={**base, "only_active": "true"},
+    )
+    # relatório (default): histórico completo, mesmo arquivado
+    assert any(x["variant_id"] == variant_id for x in r_all.json())
+    # atalhos de venda: só produto/variação ativos
+    assert all(x["variant_id"] != variant_id for x in r_active.json())
+
+
+@pytest.mark.asyncio
 async def test_giro_estoque_calcula_turnover(client, auth_headers):
     variant_id = await _criar_produto(client, auth_headers, price="5.00")
     await _entrada(client, auth_headers, variant_id, "20")

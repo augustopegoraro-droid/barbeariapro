@@ -4,6 +4,24 @@
 
 ---
 
+## 🟢 Sessão 2026-08-31 — Botões de acesso rápido na venda de produtos — ✅ DEPLOYADO em prod
+
+Otimização da recepção: o `ProdutoPicker` (Venda rápida + bloco "+ Produtos" da conclusão de
+atendimento) ganhou uma faixa de até 6 chips com os **produtos mais vendidos nos últimos 30 dias** —
+1 toque = +1 no carrinho, sem abrir os 3 `Select`.
+
+- **Backend:** `top_selling_products` += `price` (aditivo) + `only_active` (default `False` = relatório
+  histórico completo; `True` = só ativos, para os atalhos). `GET /vendas/produtos-mais-vendidos` +
+  param `only_active`. Sem migration.
+- **Frontend:** `components/vendas/atalhos-produtos.tsx` + `useAtalhosProdutos` (queryKey estável,
+  janela de 30d); renderizado no topo do `ProdutoPicker`; some quando não há histórico de venda.
+- **Testes:** +2 em `tests/test_relatorios_produtos.py` (`price` no payload; `only_active` descarta
+  produto arquivado). Suíte **885 pass / 2 ambientais / 1 skip / 0 regressões**.
+- **✅ DEPLOYADO em prod 2026-08-31** (junto com nada mais — deploy só-código: `git pull` +
+  `deploy/update.sh`, sem migration).
+
+---
+
 ## 🟢 Sessão 2026-08-31 — Despesas ricas + contas a pagar + despesas recorrentes (D-102) — ✅ DEPLOYADO em prod 2026-08-31
 
 Enriquecer `Expense` (era raso: categoria + valor + competência + nota) e destravar **contas a pagar**

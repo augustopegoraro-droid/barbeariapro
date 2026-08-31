@@ -1001,7 +1001,15 @@ própria) — validação em prod restrita a `/health`/rotas 401 (sem credencial
 smoke test autenticado); fluxo completo ("+ Produtos" na comanda) já validado end-to-end em dev local
 antes do deploy.
 
-**Produtos/Estoque/Vendas — Fase 5: fornecedores e compras (D-93, 2026-08-04 — ✅ DEPLOYADO em
+> **Botões de acesso rápido (2026-08-31 — ✅ DEPLOYADO em prod):** o `ProdutoPicker` (compartilhado
+> por Venda rápida e pelo bloco "+ Produtos" da conclusão) ganhou uma faixa de até 6 chips com os
+> produtos **mais vendidos nos últimos 30 dias** — 1 toque = +1 unidade no carrinho, sem abrir os 3
+> `Select`. Fonte: `GET /vendas/produtos-mais-vendidos` ganhou `price` (aditivo) + `only_active`
+> (`top_selling_products(..., only_active=)`; default `False` = relatório com histórico completo,
+> `True` = só produto/variação ativos, para os atalhos). Componente
+> `components/vendas/atalhos-produtos.tsx` + hook `useAtalhosProdutos` (queryKey estável); some
+> quando não há histórico de venda (barbearia nova). Sem migration. +2 testes em
+> `tests/test_relatorios_produtos.py` (`price` no payload; `only_active` descarta arquivado).
 prod 2026-08-04):** `suppliers`/`purchase_orders`/`purchase_order_items` (migration `0054`, molde
 `sales`/0053 — RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — arquivar fornecedor via `active`,
 cancelar pedido via `status`, nunca apagar linha). `PurchaseOrder` nasce `rascunho` →

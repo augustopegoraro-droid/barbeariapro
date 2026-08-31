@@ -253,36 +253,49 @@ async def product_sales_summary(db: AsyncSession, date_from: date, date_to: date
 
 
 async def top_selling_products(
-    db: AsyncSession, date_from: date, date_to: date, limit: int = 10
+    db: AsyncSession,
+    date_from: date,
+    date_to: date,
+    limit: int = 10,
+    *,
+    only_active: bool = False,
 ) -> list[dict]:
     """Variações mais vendidas no período (Fase 7), ordenadas por quantidade
     vendida. Considera só `sales.status = concluida` (mesmo filtro de
-    `product_sales_summary`)."""
-    rows = (
-        await db.execute(
-            select(
-                SaleItem.variant_id,
-                ProductVariant.name.label("variant_name"),
-                Product.name.label("product_name"),
-                func.sum(SaleItem.qty).label("qty_sold"),
-                func.sum(SaleItem.qty * SaleItem.unit_price_charged).label("revenue"),
-            )
-            .select_from(SaleItem)
-            .join(Sale, Sale.id == SaleItem.sale_id)
-            .join(ProductVariant, ProductVariant.id == SaleItem.variant_id)
-            .join(Product, Product.id == ProductVariant.product_id)
-            .where(Sale.status == SaleStatus.concluida)
-            .where(local_date(Sale.created_at) >= date_from)
-            .where(local_date(Sale.created_at) <= date_to)
-            .group_by(SaleItem.variant_id, ProductVariant.name, Product.name)
-            .order_by(func.sum(SaleItem.qty).desc())
-            .limit(limit)
+    `product_sales_summary`). `price` é o preço atual da variação (D-102/atalhos
+    de venda). `only_active=True` descarta produto/variação arquivados — para os
+    botões de acesso rápido da conclusão de atendimento; o relatório usa o
+    default `False` (histórico completo)."""
+    q = (
+        select(
+            SaleItem.variant_id,
+            ProductVariant.name.label("variant_name"),
+            ProductVariant.price.label("price"),
+            Product.name.label("product_name"),
+            func.sum(SaleItem.qty).label("qty_sold"),
+            func.sum(SaleItem.qty * SaleItem.unit_price_charged).label("revenue"),
         )
-    ).all()
+        .select_from(SaleItem)
+        .join(Sale, Sale.id == SaleItem.sale_id)
+        .join(ProductVariant, ProductVariant.id == SaleItem.variant_id)
+        .join(Product, Product.id == ProductVariant.product_id)
+        .where(Sale.status == SaleStatus.concluida)
+        .where(local_date(Sale.created_at) >= date_from)
+        .where(local_date(Sale.created_at) <= date_to)
+        .group_by(
+            SaleItem.variant_id, ProductVariant.name, ProductVariant.price, Product.name
+        )
+        .order_by(func.sum(SaleItem.qty).desc())
+        .limit(limit)
+    )
+    if only_active:
+        q = q.where(ProductVariant.active.is_(True)).where(Product.active.is_(True))
+    rows = (await db.execute(q)).all()
     return [
         {
             "variant_id": r.variant_id,
             "variant_name": r.variant_name,
+            "price": float(r.price),
             "product_name": r.product_name,
             "qty_sold": float(r.qty_sold),
             "revenue": float(r.revenue),

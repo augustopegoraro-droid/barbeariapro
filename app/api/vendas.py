@@ -129,6 +129,7 @@ class ProdutoMaisVendidoOut(BaseModel):
     variant_id: int
     variant_name: str
     product_name: str
+    price: float
     qty_sold: float
     revenue: float
 
@@ -229,10 +230,17 @@ async def produtos_mais_vendidos(
     date_from: date = Query(...),
     date_to: date = Query(...),
     limit: int = Query(10, ge=1, le=50),
+    only_active: bool = Query(
+        False, description="Descarta produto/variação arquivados (atalhos de venda)"
+    ),
 ) -> list[ProdutoMaisVendidoOut]:
-    """Relatório de produtos mais vendidos no período (Fase 7)."""
+    """Relatório de produtos mais vendidos no período (Fase 7). Com
+    `only_active=true`, alimenta os botões de acesso rápido da conclusão de
+    atendimento."""
     await _require_view(db, current_user)
-    rows = await top_selling_products(db, date_from, date_to, limit=limit)
+    rows = await top_selling_products(
+        db, date_from, date_to, limit=limit, only_active=only_active
+    )
     return [ProdutoMaisVendidoOut(**row) for row in rows]
 
 
