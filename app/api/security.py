@@ -138,13 +138,15 @@ async def create_org_user(
             detail="Unidade não encontrada nesta organização.",
         )
 
+    # Vincular o login a um profissional (`user_units.barber_id`) é permitido em
+    # QUALQUER papel aceito aqui (owner/manager/reception/barber): a recepcionista
+    # que também atende, o dono que corta cabelo — todos podem ser um profissional
+    # da agenda. A restrição "só vê a própria agenda" é amarrada ao PAPEL
+    # (`resolve_current_role_with_barber` só devolve `barber_id` quando
+    # role='barber'), não à presença do vínculo — então uma Recepcionista
+    # vinculada continua operando a agenda de todos.
     barber_id: Optional[int] = None
     if payload.barber_id is not None:
-        if payload.role != "barber":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Vincular a um profissional só faz sentido no papel Barbeiro.",
-            )
         barber_id = (
             await db.execute(select(Barber.id).where(Barber.id == payload.barber_id))
         ).scalar_one_or_none()

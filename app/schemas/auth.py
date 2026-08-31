@@ -95,7 +95,9 @@ class AdminUserCreateIn(BaseModel):
     role: Literal["owner", "manager", "reception", "barber"]
     password: Optional[str] = Field(default=None, min_length=8)
     phone_e164: Optional[str] = Field(default=None, max_length=20)
-    # Só faz sentido com role="barber": liga o login ao profissional da agenda.
+    # Liga o login a um profissional da agenda (`user_units.barber_id`). Permitido
+    # em qualquer papel — a recepcionista que também atende, o dono que corta
+    # cabelo. Só o papel `barber` restringe a visão à própria agenda.
     barber_id: Optional[int] = Field(default=None, gt=0)
     unit_id: Optional[int] = Field(default=None, gt=0)
 

@@ -419,6 +419,66 @@ async def test_admin_create_user_accepts_explicit_password(client, auth_headers)
 
 
 @pytest.mark.asyncio
+async def test_admin_create_user_reception_linked_to_professional(client, auth_headers):
+    """Recepcionista que também atende: o login pode ser vinculado a um
+    profissional (`user_units.barber_id`) em qualquer papel, não só `barber`.
+    A restrição "só a própria agenda" continua amarrada ao papel."""
+    if not ADMIN_URL:
+        pytest.skip("ADMIN_DATABASE_URL ausente.")
+    from sqlalchemy import create_engine, text
+
+    eng = create_engine(ADMIN_URL)
+    with eng.begin() as conn:
+        barber_id = conn.execute(
+            text(
+                "SELECT id FROM barbers WHERE organization_id=:o AND deleted_at IS NULL "
+                "ORDER BY id LIMIT 1"
+            ),
+            {"o": SEED_ORG_ID},
+        ).scalar_one()
+    eng.dispose()
+
+    email = "recepcao-atende-d102@example.com"
+    await _delete_user(email)
+    try:
+        r = await client.post(
+            "/admin/security/users",
+            headers=auth_headers,
+            json={"email": email, "role": "reception", "barber_id": barber_id},
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["user"]["role"] == "reception"
+
+        eng = create_engine(ADMIN_URL)
+        with eng.begin() as conn:
+            linked = conn.execute(
+                text(
+                    "SELECT uu.barber_id FROM user_units uu JOIN users u ON u.id=uu.user_id "
+                    "WHERE u.organization_id=:o AND u.email=:e"
+                ),
+                {"o": SEED_ORG_ID, "e": email},
+            ).scalar_one()
+        eng.dispose()
+        assert linked == barber_id
+    finally:
+        await _delete_user(email)
+
+
+@pytest.mark.asyncio
+async def test_admin_create_user_link_unknown_professional_404(client, auth_headers):
+    if not ADMIN_URL:
+        pytest.skip("ADMIN_DATABASE_URL ausente.")
+    email = "recepcao-link-404-d102@example.com"
+    await _delete_user(email)
+    r = await client.post(
+        "/admin/security/users",
+        headers=auth_headers,
+        json={"email": email, "role": "reception", "barber_id": 99_999_999},
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_admin_create_user_duplicate_email_409(client, auth_headers):
     r = await client.post(
         "/admin/security/users",
