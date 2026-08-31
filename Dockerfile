@@ -20,7 +20,12 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    # glibc cria ~1 arena de malloc por thread → RSS infla muito além do heap
+    # Python real. 2 arenas é o maior corte de memória do uvicorn nesta carga.
+    MALLOC_ARENA_MAX=2 \
+    # Devolve páginas livres ao SO com mais agressividade (menos RSS retido).
+    MALLOC_TRIM_THRESHOLD_=100000
 
 # Usuário não-root
 RUN groupadd --system app && useradd --system --gid app --home /app app
@@ -45,4 +50,7 @@ USER app
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 1 processo só (sem --workers): o `--workers N` do uvicorn sobe um supervisor +
+# N filhos. Para a carga atual da VM, 1 worker basta e gasta menos RAM. Escalar
+# horizontalmente = mais réplicas do container atrás do nginx, não workers aqui.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]

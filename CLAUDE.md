@@ -78,6 +78,22 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
 - **Infra:** Docker Compose (`docker-compose.yml` = infra; `docker-compose.app.yml` = app) · nginx no
   host · n8n + Evolution API como serviços do bot. Detalhes operacionais em `PROJECT_CONTEXT.md §4`.
 
+  **Otimização de memória — VM 4 GB (2026-08-31):** todo serviço dos dois compose tem `mem_limit` +
+  `cpus` (teto de cgroup, não reserva). Soma dos tetos ≈ 3,1 GB → ~700 MB de folga. Os 3 apps Next
+  (`barbearia-frontend` :3000, `barbearia-public` :3200, `barbearia-superadmin` :3100) são **apps
+  distintos, não processos redundantes** — cada um roda seu `node server.js`. Os 4 Dockerfiles Next
+  agora usam **`output: "standalone"`** (`next.config.ts`): o runtime carrega só o trace do Next
+  (`.next/standalone` + `.next/static` + `public`) e roda `node server.js` — sem `npm start`/`next
+  start`, sem `node_modules` completo. Heap V8 capado por `NODE_OPTIONS=--max-old-space-size` no
+  compose (256 nos apps de tenant/público, 224 superadmin, 384 n8n, 256 Evolution). Backend uvicorn
+  segue **1 processo só** (sem `--workers`); `MALLOC_ARENA_MAX=2` + `MALLOC_TRIM_THRESHOLD_` baked no
+  `Dockerfile` (corta o RSS inflado por arena do glibc). n8n: `N8N_RUNNERS_ENABLED=false` (nós rodam
+  no processo principal, sem task-runner separado), `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none` + poda de
+  histórico (7d/1000), telemetria/banners/templates off. Redis (app + infra + evolution) com
+  `--maxmemory`/`allkeys-lru`/`--save ""`. Deploy = `deploy/update.sh` (rebuild de tudo) ou rebuild
+  seletivo por serviço; **exige `--build`** (mudou Dockerfile e next.config). O redis do
+  `docker-compose.yml` só serve o backend local fora de Docker — em prod pode ficar de fora do `up`.
+
 ### Estrutura de pastas (backend)
 - `app/api/*` — 19 routers (auth, agenda, barbeiro, bot, clientes, conversations, crm, dashboard,
   empresa, equipe, financeiro, health, integracoes, loyalty, memberships, reminders, servicos, wa_webhook).

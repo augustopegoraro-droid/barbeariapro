@@ -26,6 +26,11 @@ services:
     image: redis:7-alpine
     container_name: barbeariapro-app-redis
     restart: unless-stopped
+    # VM 4 GB — dado 100% efêmero, teto baixo. LRU descarta o mais antigo em vez
+    # de estourar; `--save ""` desliga o snapshot em disco (fork = pico de RAM).
+    mem_limit: 96m
+    cpus: 0.25
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -42,6 +47,9 @@ services:
     image: barbeariapro-backend
     container_name: barbeariapro-app-backend
     restart: unless-stopped
+    mem_limit: 384m
+    mem_reservation: 192m
+    cpus: 1.0
     ports:
       - "8000:8000"
     env_file:
@@ -51,6 +59,10 @@ services:
       # Redis é deste mesmo compose (nome do serviço resolve na rede do projeto);
       # não é o evolution-redis (isolado, outra rede/projeto).
       REDIS_URL: redis://redis:6379/0
+      # glibc abre 1 arena de malloc por thread → RSS infla muito além do heap
+      # real do Python. Limitar a 2 arenas é o maior corte de memória do uvicorn
+      # (sem efeito em latência para esta carga). Também baked no Dockerfile.
+      MALLOC_ARENA_MAX: "2"
     volumes:
       # Mídia enviada pelo painel (D-85: fotos de profissionais). Bind mount no
       # host — arquivo de usuário NÃO pode viver só na imagem (rebuild apagaria).
@@ -86,10 +98,16 @@ services:
     image: barbeariapro-frontend
     container_name: barbeariapro-app-frontend
     restart: unless-stopped
+    mem_limit: 320m
+    mem_reservation: 160m
+    cpus: 0.5
     ports:
       - "3000:3000"
     env_file:
       - .env.docker   # API_URL_INTERNAL (SSR/next-auth), AUTH_SECRET, AUTH_TRUST_HOST
+    environment:
+      # Cap do heap V8 do processo `node server.js` (build standalone).
+      NODE_OPTIONS: "--max-old-space-size=256"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -120,9 +138,18 @@ services:
     image: barbeariapro-public
     container_name: barbeariapro-app-public
     restart: unless-stopped
+    mem_limit: 320m
+    mem_reservation: 160m
+    cpus: 0.5
     ports:
       - "3200:3200"
     environment:
+      # Cap do heap V8 do processo `node server.js` (build standalone).
+      NODE_OPTIONS: "--max-old-space-size=256"
+      # `server.js` do standalone lê PORT/HOSTNAME do ambiente (o `-p 3200` do
+      # `next start` deixa de existir).
+      PORT: "3200"
+      HOSTNAME: "0.0.0.0"
       # SSR/ISR da home fala com o backend pela rede interna do compose.
       API_URL_INTERNAL: http://backend:8000
       # Segredo do POST /api/revalidate (D-84) — o backend usa o MESMO valor em
@@ -164,10 +191,19 @@ services:
     image: barbeariapro-superadmin
     container_name: barbeariapro-app-superadmin
     restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
+    cpus: 0.5
     ports:
       - "3100:3100"
     env_file:
       - .env.superadmin   # API_URL_INTERNAL (SSR/next-auth), AUTH_SECRET, AUTH_TRUST_HOST
+    environment:
+      # Cap do heap V8 do processo `node server.js` (build standalone).
+      NODE_OPTIONS: "--max-old-space-size=224"
+      # `server.js` do standalone lê PORT/HOSTNAME (o `-p 3100` deixa de existir).
+      PORT: "3100"
+      HOSTNAME: "0.0.0.0"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

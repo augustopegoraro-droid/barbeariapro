@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Runtime enxuto: build standalone (`node server.js`), menos RSS na VM 4 GB.
+  output: "standalone",
   // O site é servido atrás do nginx da VM (apex). Sem rewrites em prod: o browser
   // fala direto com a API pública (NEXT_PUBLIC_API_URL) com credentials: 'include'.
   poweredByHeader: false,

@@ -35,6 +35,11 @@ services:
     image: postgres:16
     container_name: barbeariapro-postgres
     restart: unless-stopped
+    # VM de 4 GB — teto de memória por serviço (cgroup). Não é reserva: o uso real
+    # fica abaixo disso; o teto só evita que um serviço sozinho estoure a VM.
+    mem_limit: 512m
+    mem_reservation: 256m
+    cpus: 1.0
     ports:
       - "5432:5432"
     environment:
@@ -60,6 +65,12 @@ services:
     image: redis:7-alpine
     container_name: barbeariapro-redis
     restart: unless-stopped
+    # Só usado pelo backend local (.venv fora de Docker). Em produção o backend
+    # roda no docker-compose.app.yml e usa o redis DE LÁ — este container pode
+    # ficar de fora do `up` em prod (ver resumo). Teto baixo por garantia.
+    mem_limit: 96m
+    cpus: 0.25
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
     ports:
       - "6379:6379"
     networks:
@@ -69,17 +80,48 @@ services:
   # n8n — orquestrador de automação (chatbot WhatsApp)
   # ──────────────────────────────────────────────────────────────
   n8n:
+    # NOTA SRE: trocar `latest` por uma versão fixada (ex.: n8nio/n8n:1.footer)
+    # assim que possível — `latest` num restart pode trazer regressão de memória.
     image: docker.n8n.io/n8nio/n8n:latest
     container_name: n8n
     restart: unless-stopped
-    ports:
-      - "5678:5678"
+    mem_limit: 512m
+    mem_reservation: 256m
+    cpus: 0.75
     environment:
       N8N_RELEASE_TYPE: stable
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       # Fuso dos schedule triggers (crons de lembrete/reativação)
       GENERIC_TIMEZONE: America/Sao_Paulo
       TZ: America/Sao_Paulo
+
+      # ── Redução de footprint de memória (VM 4 GB) ──────────────────────────
+      # Cap do heap V8 — GC roda antes de o cgroup (mem_limit) matar o processo.
+      NODE_OPTIONS: "--max-old-space-size=384"
+      # Executa os nós no processo principal em vez de subir um task-runner
+      # separado (2º processo Node). Com a carga atual — poucos crons — 1
+      # processo gasta menos RAM total.
+      N8N_RUNNERS_ENABLED: "false"
+      # Sem fila/Bull, sem worker dedicado.
+      EXECUTIONS_MODE: regular
+      # Não persistir payload de execução bem-sucedida (crons rodam o tempo todo).
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_ON_PROGRESS: "false"
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "false"
+      # Poda o histórico que sobra (só erros) — 7 dias / 1000 execuções.
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: "1000"
+      # Telemetria / banners / templates — CPU e RAM à toa.
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_HIRING_BANNER_ENABLED: "false"
+      N8N_METRICS: "false"
+      # ──────────────────────────────────────────────────────────────────────
+
       # Segredos do chatbot — referenciados no workflow como $env.VAR
       BOT_API_KEY: ${BOT_API_KEY}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
@@ -98,7 +140,10 @@ services:
   evolution-postgres:
     image: postgres:15
     container_name: evolution_postgres
-    restart: always
+    restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
+    cpus: 0.5
     environment:
       POSTGRES_DB: evolution
       POSTGRES_USER: evolution
@@ -111,20 +156,28 @@ services:
   evolution-redis:
     image: redis:latest
     container_name: evolution_redis
-    restart: always
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.25
+    command: ["redis-server", "--maxmemory", "48mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
     networks:
       - evolution
 
   evolution-api:
     image: evoapicloud/evolution-api:latest
     container_name: evolution_api
-    restart: always
+    restart: unless-stopped
+    mem_limit: 384m
+    mem_reservation: 192m
+    cpus: 0.75
     depends_on:
       - evolution-postgres
       - evolution-redis
     ports:
       - "8080:8080"
     environment:
+      # Cap do heap V8 — GC antes de o cgroup matar o processo.
+      NODE_OPTIONS: "--max-old-space-size=256"
       SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8080}
       AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
       POSTGRES_DATABASE: evolution

@@ -20,21 +20,16 @@ ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:20-alpine AS prod-deps
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
-
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3200
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/public ./public
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/next.config.ts ./next.config.ts
+ENV HOSTNAME=0.0.0.0
+# Build standalone: server.js + node_modules mínimo vêm de .next/standalone.
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
 EXPOSE 3200
 USER node
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
