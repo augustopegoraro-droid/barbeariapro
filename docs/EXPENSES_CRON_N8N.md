@@ -8,7 +8,12 @@ corrente (`competence_month` = 1º dia do mês; `due_date` = dia `day_of_month`)
 Mesmo molde do "BarbeariaPro Cron - Lembrete 24h" / D-96 / D-98. **Não** editar
 `workflows.json` local (diverge da VM); criar o workflow direto no n8n da VM.
 
-## Workflow
+## Workflow — ✅ CRIADO E ATIVO na VM (2026-08-31)
+
+`CronExpenseRecur1` · **"BarbeariaPro Cron - Despesas Recorrentes"** · `active=true`
+(importado via `n8n import:workflow` clonando o "Push Lembrete Ultima Hora" +
+`publish:workflow` + restart do container; testado ao vivo → `HTTP 200
+{"created":0,"skipped":0}`, 0 porque a org 1 ainda não tem recorrência cadastrada).
 
 - **Schedule Trigger (cron):** `0 6 1 * *` (dia 1 de cada mês, ~6h).
 - **HTTP Request:**
@@ -16,6 +21,11 @@ Mesmo molde do "BarbeariaPro Cron - Lembrete 24h" / D-96 / D-98. **Não** editar
   - URL: `http://host.docker.internal:8000/internal/expenses/run`
   - Headers: `X-Bot-Token: {{ $env.BOT_API_KEY }}`, `Content-Type: application/json`
 - Resposta: `{ created, skipped }`.
+
+> Para recriar do zero: exporte um cron existente (`n8n export:workflow --id=…`),
+> troque `name` / `cronExpression` / `url`, `n8n import:workflow --input=…`,
+> `n8n publish:workflow --id=…` e **reinicie o container do n8n** (a ativação só
+> vale após restart quando o n8n está rodando).
 
 ## Idempotência
 

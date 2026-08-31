@@ -32,8 +32,10 @@ Enriquecer `Expense` (era raso: categoria + valor + competência + nota) e destr
   (migration `0063`→`0064`, rebuild backend+frontend+public). Smoke OK (`/health` 200, rotas novas 401
   sem token, `/docs` 404, app./apex 200, RLS+FORCE, índices, GRANT sem DELETE; `expenses` com 0 linhas
   → backfill no-op; 5 containers healthy, logs limpos).
-- **Falta:** validação visual autenticada no browser; **o dono cria o cron mensal `0 6 1 * *` →
-  `POST /internal/expenses/run` no n8n** (`docs/EXPENSES_CRON_N8N.md`).
+- **Cron do n8n ✅ criado e ativo** (2026-08-31): `CronExpenseRecur1` "BarbeariaPro Cron - Despesas
+  Recorrentes" (`0 6 1 * *` → `POST /internal/expenses/run`), via `n8n import:workflow` + restart do
+  container; testado ao vivo → 200 `{created:0,skipped:0}`; os outros 4 crons seguem ativos.
+- **Falta:** validação visual autenticada no browser.
 
 ---
 

@@ -3629,9 +3629,14 @@ sem intervenção). Smoke: `/health` 200, `/financeiro/despesas` + `/financeiro/
 `dre_monthly_lines`/`payment_transactions`, não o `Expense` vivo — backfill de `status='pago'` foi
 no-op, 0 nulos); 5 containers healthy, logs do backend limpos.
 
-**Falta:** validação visual autenticada no browser (sem credencial de prod à mão nesta sessão);
-**o dono cria o cron mensal `0 6 1 * *` → `POST /internal/expenses/run` no n8n**
-(`docs/EXPENSES_CRON_N8N.md`) — sem ele as despesas recorrentes não se materializam sozinhas.
+**Cron do n8n ✅ CRIADO E ATIVO na VM (2026-08-31):** `CronExpenseRecur1` "BarbeariaPro Cron -
+Despesas Recorrentes" (`0 6 1 * *` → `POST /internal/expenses/run` com `X-Bot-Token`), importado via
+`n8n import:workflow` clonando o "Push Lembrete Ultima Hora" (D-96) + `publish:workflow` + restart do
+container n8n (ativação só vale após restart). Testado ao vivo com o `BOT_API_KEY` real → `HTTP 200
+{"created":0,"skipped":0}` (0 porque a org 1 ainda não tem recorrência cadastrada). Os outros 4 crons
+seguem `active=true` após o restart (sem regressão).
+
+**Falta:** validação visual autenticada no browser (sem credencial de prod à mão nesta sessão).
 
 **Follow-up (fora de escopo):** vincular `payee` a `suppliers`; painel de contas a pagar no
 `/admin/gestor`; tópico "contas a pagar" no Kernel IA; conciliação despesa × `payment_transactions`.

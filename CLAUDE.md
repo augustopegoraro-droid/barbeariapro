@@ -223,8 +223,9 @@ beneficiário/toggle "Já paguei", `mensal-view.tsx` com badge de status; `hooks
 `["financeiro"]`+`["caixa"]`). Suíte **883 pass / 2 ambientais / 1 skip / 0 regressões**
 (`tests/test_despesas.py`, +14). **✅ DEPLOYADO em prod 2026-08-31** (backend `3692154` + frontend
 `a8d9dfc`; `deploy/update.sh` de ponta a ponta, migration `0063`→`0064`; `expenses` tem 0 linhas em
-prod → backfill no-op). **Falta:** o dono criar o cron mensal `0 6 1 * *` → `POST
-/internal/expenses/run` no n8n (`docs/EXPENSES_CRON_N8N.md`). Detalhes em DECISIONS.md D-102.
+prod → backfill no-op). **Cron do n8n ✅ criado e ativo** (`CronExpenseRecur1` "BarbeariaPro Cron -
+Despesas Recorrentes", `0 6 1 * *` → `POST /internal/expenses/run`; testado → 200
+`{created:0,skipped:0}`). Detalhes em DECISIONS.md D-102.
 
 - **Ainda não existe:** consumo de produtos no atendimento além da venda anexada, pacotes/assinaturas
   no fluxo do caixa.
