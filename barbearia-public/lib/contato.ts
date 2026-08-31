@@ -10,6 +10,32 @@
    não é preciso mexer aqui. */
 
 import type { PublicInfo } from "@/lib/api";
+import { dateLong, timeHM } from "@/lib/format";
+
+/** Número (com DDI) que recebe a confirmação do agendamento feito pelo site: ao
+ * concluir, o cliente é redirecionado para o WhatsApp com a mensagem pronta e só
+ * aperta enviar. Fixo de propósito — é o número operacional que a recepção
+ * acompanha, independente do que estiver no cadastro da empresa. */
+export const WHATSAPP_AGENDAMENTO_DIGITS = "5563984566175";
+
+/** `https://wa.me/<num>?text=...` com serviço, profissional e horário do
+ * agendamento pré-preenchidos. */
+export function whatsappConfirmUrl(
+  appt: { service_name: string; barber_name: string; start_at: string },
+  rescheduled = false,
+): string {
+  const abertura = rescheduled
+    ? "Olá! Confirmo meu horário *remarcado* na Taylor & Thedy:"
+    : "Olá! Confirmo meu agendamento na Taylor & Thedy:";
+  const msg = [
+    abertura,
+    "",
+    `✂️ Serviço: ${appt.service_name}`,
+    `💈 Profissional: ${appt.barber_name}`,
+    `📅 ${dateLong(appt.start_at)} às ${timeHM(appt.start_at)}`,
+  ].join("\n");
+  return `https://wa.me/${WHATSAPP_AGENDAMENTO_DIGITS}?text=${encodeURIComponent(msg)}`;
+}
 
 const VERIFICADO = {
   whatsapp: "(63) 98456-6175",

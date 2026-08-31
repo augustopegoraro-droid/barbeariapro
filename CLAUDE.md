@@ -628,6 +628,14 @@ que ela mesma criou** (`created_by_client_session_id`); `verified_at` reservado 
 API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs novos na VM: `PUBLIC_COOKIE_DOMAIN`,
 `PUBLIC_API_URL`, `PUBLIC_TENANT_SLUG=app`, `PUBLIC_SITE_URL`. Pendências: validação visual mobile real, OTP,
 "meus dispositivos", fidelidade no site, logo real (lê `public_info.logo_url` quando existir). Ver D-79.
+> **Confirmação por WhatsApp ao concluir o agendamento (2026-08-31 — ✅ DEPLOYADO em prod):** a tela de
+> sucesso (`components/booking/booking-success.tsx`) redireciona o cliente para `wa.me/5563984566175` com
+> a mensagem pronta (serviço · profissional · data/hora) após ~1,8s — ele só aperta enviar. Botão
+> "Confirmar no WhatsApp" fica visível como ação principal e fallback (redirect bloqueado / cliente voltou
+> da conversa); guarda por `sessionStorage` (`wa-confirm-sent:<public_id>`) evita reenvio ao voltar.
+> Helper puro `whatsappConfirmUrl` + const `WHATSAPP_AGENDAMENTO_DIGITS` em `lib/contato.ts` (fixo de
+> propósito — número operacional da recepção, independente do cadastro da empresa). Sem backend, sem
+> migration. Deploy só do serviço `public`.
 > **Hero cinematográfico com vídeo de drone (D-80, 2026-07-17/18 — ✅ DEPLOYADO em prod 2026-07-20, apex
 > `taylorethedy.com`, commit `e29a9d6`):** a home abre
 > com `components/hero-cinematic.tsx` (client) — vídeo de drone da barbearia em tela cheia com **scroll-scrubbing**

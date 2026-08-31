@@ -29,6 +29,7 @@ import {
   type PublicService,
 } from "@/lib/api";
 import { localDayISO, localWeekday } from "@/lib/format";
+import { whatsappConfirmUrl } from "@/lib/contato";
 import type { Step } from "@/components/booking/types";
 import { StepHeader } from "@/components/booking/step-header";
 import { StepService } from "@/components/booking/step-service";
@@ -237,7 +238,13 @@ export default function BookingFlow({ info }: { info: PublicInfo }) {
   ]);
 
   if (done) {
-    return <BookingSuccess done={done} rescheduled={!!rescheduleId} />;
+    return (
+      <BookingSuccess
+        done={done}
+        rescheduled={!!rescheduleId}
+        whatsappUrl={whatsappConfirmUrl(done, !!rescheduleId)}
+      />
+    );
   }
 
   return (
