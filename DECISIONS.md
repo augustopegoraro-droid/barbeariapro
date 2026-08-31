@@ -3418,7 +3418,7 @@ teste em `admin.taylorethedy.com/admin/empresa` → "Recebimentos online".
 
 ---
 
-### D-101 — Módulo de Caixa vivo (abrir/fechar turno em tempo real) — 2026-08-27 (implementado, só dev/staging)
+### D-101 — Módulo de Caixa vivo (abrir/fechar turno em tempo real) — 2026-08-27 (✅ DEPLOYADO em prod 2026-08-31, head `0063`)
 
 **Problema.** Só existia o **histórico de caixa migrado da Trinks** (`cash_daily_closings`,
 migration 0026 / D-59), read-only. Não havia como abrir/fechar caixa em tempo real: a recepção
@@ -3508,11 +3508,21 @@ atualizado.
 **concluir atendimento em dinheiro e vender em dinheiro retornam 409** — para admin e barbeiro. É o
 comportamento pedido. O toggle em `/admin/empresa` desliga por organização.
 
-**Pendente:** deploy em prod (backup → `0063` via container avulso como `postgres` +
-`sync_authz_catalog.py` à parte + rebuild backend/frontend com `-f docker-compose.app.yml` apenas —
-molde D-93/D-94); validação visual no browser. Follow-up (fora de escopo): agregado
-`cash_sessions_report` em `management.py` para Gestor/DRE; tópico `caixa` no Kernel IA
-(`consultar_financas`); múltiplas unidades.
+**✅ DEPLOYADO em prod 2026-08-31** (backend `d055fc0` + frontend `277983a`; molde D-93/D-94):
+backup `~/predeploy_d101_20260831_095748.sql.gz` na VM → `git pull` + `git submodule update`
+(lição D-100) → migration `0063` via `Dockerfile.migrate` (`0062`→`0063`, head confirmado) →
+rebuild `backend`+`frontend` com **`-f docker-compose.app.yml` apenas** (lição D-89) →
+`scripts/sync_authz_catalog.py` via container avulso do backend montando o repo do host
+(78 perms / 9 papéis / 323 vínculos) → **`UPDATE organizations SET cash_register_enforced = false
+WHERE id = 1`** (decisão do dono no deploy: subir DESLIGADO para não travar a operação; ele liga em
+`/admin/empresa` quando a Raquel estiver treinada). Smoke: `/health` 200, `/caixa/*` 401 sem token,
+`api./docs` 404 (V12 intacto), `app.` 307→login, apex 200, `/admin/caixa` 307 (rota buildada),
+`cash_sessions`/`cash_movements` com RLS+FORCE, `cash_movements` append-only (só SELECT/INSERT ao
+`barber_app`), logs do backend sem erro. **Falta só:** validação visual autenticada no browser (sem
+credencial de prod à mão nesta sessão) e o dono ligar o enforcement quando quiser.
+
+**Follow-up (fora de escopo):** agregado `cash_sessions_report` em `management.py` para Gestor/DRE;
+tópico `caixa` no Kernel IA (`consultar_financas`); múltiplas unidades.
 
 ---
 

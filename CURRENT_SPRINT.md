@@ -4,7 +4,7 @@
 
 ---
 
-## 🟢 Sessão 2026-08-27 — Módulo de Caixa vivo (D-101) — implementado, só dev/staging
+## 🟢 Sessão 2026-08-27/31 — Módulo de Caixa vivo (D-101) — ✅ DEPLOYADO em prod 2026-08-31
 
 Abrir/fechar turno de caixa em tempo real (a gaveta física); antes só existia o histórico migrado da
 Trinks (D-59). Plano em `~/.claude/plans/vivid-wishing-starfish.md`.
@@ -18,9 +18,14 @@ Trinks (D-59). Plano em `~/.claude/plans/vivid-wishing-starfish.md`.
 - **Frontend:** `/admin/caixa` + `hooks/use-caixa.ts` + `components/caixa/*` + item na sidebar;
   toggle em `/admin/empresa`; 409 tratado em `concluir-dialog`/`venda-rapida-dialog` (`getErrorCode`).
 - **Testes:** `tests/test_caixa.py` (+17); suíte **869 pass / 2 ambientais / 0 regressões**.
-- **Verificado:** migration up/down/up + `sync_authz_catalog.py` (78/9/323) no staging; `tsc`/
+- **Verificado (staging):** migration up/down/up + `sync_authz_catalog.py` (78/9/323); `tsc`/
   `eslint`/`next build` limpos; graphify atualizado.
-- **Pendente:** deploy em prod (molde D-93/D-94); validação visual no browser.
+- **✅ DEPLOYADO em prod 2026-08-31** (backend `d055fc0` + frontend `277983a`): backup
+  `~/predeploy_d101_20260831_095748.sql.gz` → `git pull`+`submodule update` → `0063` via
+  `Dockerfile.migrate` → rebuild backend+frontend (`-f docker-compose.app.yml` só) → sync catalog →
+  **`cash_register_enforced=false` na org 1** (subir sem travar; dono liga depois). Smoke OK
+  (health 200, `/caixa/*` 401, RLS+FORCE, append-only, `/docs` 404, app./apex OK, logs limpos).
+- **Pendente:** validação visual autenticada no browser; dono ligar o enforcement quando quiser.
 
 ---
 

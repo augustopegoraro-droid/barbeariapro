@@ -173,7 +173,7 @@ dentro do frontend de tenant.
 - Comissão = receita × `Barber.commission_pct`. Despesas via `Expense` (com `competence_month`).
 - `Payment` é registrado **independente** do Appointment (sem vínculo transacional — débito conhecido).
 
-**Caixa vivo — abrir/fechar turno em tempo real (D-101, 2026-08-27 — implementado, só dev/staging;
+**Caixa vivo — abrir/fechar turno em tempo real (D-101, 2026-08-27 — ✅ DEPLOYADO em prod 2026-08-31;
 migration `0063`, head `0063`):** não confundir com `cash_daily_closings` (histórico Trinks, D-59,
 read-only). Camada nova: `cash_sessions` (turno; ≤1 `aberto` por unidade via índice único parcial;
 GRANT sem DELETE; `expected_amount`/`difference` são snapshots do fechamento) + `cash_movements`
@@ -184,9 +184,10 @@ GRANT sem DELETE; `expected_amount`/`difference` são snapshots do fechamento) +
 `barbeiro.py::concluir_atendimento` → `venda_servico` (valor + gorjeta); `vendas.py::criar_venda` →
 `venda_produto`; `financeiro.py::criar_despesa` com `paid_in_cash` → `despesa`; cancelar venda /
 remover despesa → `ajuste` compensatório no caixa **aberto atual**. **Bloqueio:**
-`organizations.cash_register_enforced` (default `true`, org 1 herda `true`) → sem caixa aberto,
-receber em dinheiro devolve **409 `{code:"cash_register_closed"}`** (admin e barbeiro); toggle em
-`/admin/empresa` desliga por org. Router `app/api/caixa.py` (`/caixa/atual|abrir|fechar|movimentos`;
+`organizations.cash_register_enforced` (default `true`) → sem caixa aberto, receber em dinheiro
+devolve **409 `{code:"cash_register_closed"}`** (admin e barbeiro); toggle em `/admin/empresa`
+desliga por org. **Em prod a org 1 subiu com `enforced=false`** (decisão do dono no deploy, para não
+travar a operação) — ele liga quando a Raquel estiver treinada. Router `app/api/caixa.py` (`/caixa/atual|abrir|fechar|movimentos`;
 histórico `GET /caixa`, `GET /caixa/{id}`). Permissões `cash.session.view`/`cash.session.operate`
 (bloco `_OPERATIONS` → owner/manager/**recepção**; barbeiro fora). Frontend: `/admin/caixa` +
 `hooks/use-caixa.ts` + `components/caixa/*` + item "Caixa" na sidebar (GESTÃO). Suíte
