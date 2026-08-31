@@ -4,7 +4,7 @@
 
 ---
 
-## 🟡 Sessão 2026-08-31 — Despesas ricas + contas a pagar + despesas recorrentes (D-102) — implementado, só staging
+## 🟢 Sessão 2026-08-31 — Despesas ricas + contas a pagar + despesas recorrentes (D-102) — ✅ DEPLOYADO em prod 2026-08-31
 
 Enriquecer `Expense` (era raso: categoria + valor + competência + nota) e destravar **contas a pagar**
 + **despesas fixas que se relançam sozinhas** todo mês. Plano em `~/.claude/plans/vivid-wishing-starfish.md`.
@@ -27,8 +27,13 @@ Enriquecer `Expense` (era raso: categoria + valor + competência + nota) e destr
   (baseline D-101: 869).
 - **Verificado (staging):** migration up/down/up (RLS+FORCE, GRANTs, índices, backfill `pago`);
   `tsc`/`eslint`/`next build` limpos; graphify atualizado; `docs/EXPENSES_CRON_N8N.md` criado.
-- **Pendente:** validação visual no browser (dev local); deploy prod (molde D-93/D-94/D-101) + o dono
-  criar o cron mensal `/internal/expenses/run` no n8n.
+- **✅ DEPLOYADO em prod 2026-08-31** (backend `3692154` + frontend `a8d9dfc`): backup
+  `~/predeploy_d102_20260831_152901.sql.gz` → `git pull` + `git submodule update` → `deploy/update.sh`
+  (migration `0063`→`0064`, rebuild backend+frontend+public). Smoke OK (`/health` 200, rotas novas 401
+  sem token, `/docs` 404, app./apex 200, RLS+FORCE, índices, GRANT sem DELETE; `expenses` com 0 linhas
+  → backfill no-op; 5 containers healthy, logs limpos).
+- **Falta:** validação visual autenticada no browser; **o dono cria o cron mensal `0 6 1 * *` →
+  `POST /internal/expenses/run` no n8n** (`docs/EXPENSES_CRON_N8N.md`).
 
 ---
 

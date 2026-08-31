@@ -194,8 +194,8 @@ histórico `GET /caixa`, `GET /caixa/{id}`). Permissões `cash.session.view`/`ca
 **869 pass / 2 ambientais / 0 regressões** (`tests/test_caixa.py`, +17; `conftest.py` ganhou autouse
 `_relax_cash_register`). Detalhes em DECISIONS.md D-101.
 
-**Despesas ricas + contas a pagar + despesas recorrentes (D-102, 2026-08-31 — implementado, só
-staging; migration `0064`, head `0064`):** o registro de despesa (`Expense`) era raso (categoria +
+**Despesas ricas + contas a pagar + despesas recorrentes (D-102, 2026-08-31 — ✅ DEPLOYADO em prod
+2026-08-31; migration `0064`, head `0064`):** o registro de despesa (`Expense`) era raso (categoria +
 valor + competência + nota). Enums PG novos `expense_method` (dinheiro/pix/cartao/transferencia/
 boleto/debito_automatico/outro) e `expense_status` (pago/a_pagar). Colunas aditivas em `expenses`:
 `method`, `subgroup` (mesmos slugs do `dre_monthly_lines`/D-65), `payee`, `status` NOT NULL DEFAULT
@@ -221,7 +221,10 @@ Frontend: aba **"A pagar"** em `/admin/financeiro` (`components/financeiro/apaga
 beneficiário/toggle "Já paguei", `mensal-view.tsx` com badge de status; `hooks/use-financeiro.ts`
 (`useDespesas`/`useUpdateDespesa`/`useMarcarDespesaPaga`/`useRecorrencias`/...; invalida
 `["financeiro"]`+`["caixa"]`). Suíte **883 pass / 2 ambientais / 1 skip / 0 regressões**
-(`tests/test_despesas.py`, +14). Detalhes em DECISIONS.md D-102.
+(`tests/test_despesas.py`, +14). **✅ DEPLOYADO em prod 2026-08-31** (backend `3692154` + frontend
+`a8d9dfc`; `deploy/update.sh` de ponta a ponta, migration `0063`→`0064`; `expenses` tem 0 linhas em
+prod → backfill no-op). **Falta:** o dono criar o cron mensal `0 6 1 * *` → `POST
+/internal/expenses/run` no n8n (`docs/EXPENSES_CRON_N8N.md`). Detalhes em DECISIONS.md D-102.
 
 - **Ainda não existe:** consumo de produtos no atendimento além da venda anexada, pacotes/assinaturas
   no fluxo do caixa.
@@ -1246,8 +1249,8 @@ ocupam a largura — a entrada fica no perfil). `app/api/revalidate/route.ts` pa
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
 **Pendente (visão do produto):** ~~Caixa~~ (✅ D-101 — abrir/fechar turno em tempo real, só dev/
-staging) · ~~Despesas ricas / contas a pagar / despesas recorrentes~~ (✅ D-102 — só staging) ·
-Consumo de produtos no atendimento · Estoque/Produtos ·
+staging) · ~~Despesas ricas / contas a pagar / despesas recorrentes~~ (✅ D-102 — DEPLOYADO em prod
+2026-08-31) · Consumo de produtos no atendimento · Estoque/Produtos ·
 Renovação **automática** de mensalidade (a manual já existe — D-44) · Dashboard executivo
 (comercial, financeiro, operacional, **leads fora do horário comercial / faturamento gerado pela IA**) ·
 Multi-tenant real no frontend · Arquitetura de múltiplos agentes.

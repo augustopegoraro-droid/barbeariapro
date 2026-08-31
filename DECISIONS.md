@@ -3526,7 +3526,7 @@ tópico `caixa` no Kernel IA (`consultar_financas`); múltiplas unidades.
 
 ---
 
-### D-102 — Despesas ricas + contas a pagar + despesas recorrentes — 2026-08-31 (implementado, só staging; head `0064`)
+### D-102 — Despesas ricas + contas a pagar + despesas recorrentes — 2026-08-31 (✅ DEPLOYADO em prod 2026-08-31, head `0064`)
 
 **Problema.** O registro de despesa (`Expense`, `POST /financeiro/despesas`) era **raso**: só
 categoria (texto livre), valor, mês de competência e nota. Sem forma de pagamento estruturada,
@@ -3616,11 +3616,22 @@ nas 2 tabelas, GRANT de `expense_recurrences` = SELECT/INSERT/UPDATE sem DELETE,
 `idx_expenses_status_due` + `expenses_recurrence_month_unique` criados, `status` NOT NULL DEFAULT
 `pago`). Frontend: `tsc` limpo, `eslint` limpo, `next build` OK. graphify atualizado.
 
-**Pendente para prod (molde D-93/D-94/D-101):** backup → `git pull` + `git submodule update` →
-migration `0064` via `Dockerfile.migrate` → rebuild `backend`+`frontend` com `-f
-docker-compose.app.yml` apenas → smoke (`/health` 200, `/financeiro/despesas` 401 sem token,
-`/internal/expenses/run` 401 sem `X-Bot-Token`, app./apex OK) → **o dono cria o cron mensal
-`/internal/expenses/run` no n8n**. Validação visual no browser (dev local) ainda não feita.
+**✅ DEPLOYADO em prod 2026-08-31** (backend `3692154` + frontend `a8d9dfc`; molde D-93/D-94/D-101):
+backup `~/predeploy_d102_20260831_152901.sql.gz` na VM → `git pull` (`46f0d38`→`3692154`) +
+`git submodule update` (`277983a`→`a8d9dfc`) → `deploy/update.sh` de ponta a ponta (migration `0064`
+via `Dockerfile.migrate` — head `0063`→`0064` confirmado; rebuild `backend`+`frontend`+`public` via
+`-f docker-compose.app.yml`; `ADMIN_DATABASE_URL` **já está no `.env` da VM** agora, script rodou
+sem intervenção). Smoke: `/health` 200, `/financeiro/despesas` + `/financeiro/despesas/recorrencias`
++ `/internal/expenses/run` todos 401 sem token, `api./docs` 404 (V12 intacto), `app.` 200, apex 200,
+`/admin/financeiro` 307→login (rota buildada); `expenses` com 7 colunas novas + RLS+FORCE,
+`expense_recurrences` RLS+FORCE + GRANT `arw` (sem DELETE), índices `idx_expenses_status_due` +
+`expenses_recurrence_month_unique` criados; **`expenses` tem 0 linhas em prod** (a org 1 usa
+`dre_monthly_lines`/`payment_transactions`, não o `Expense` vivo — backfill de `status='pago'` foi
+no-op, 0 nulos); 5 containers healthy, logs do backend limpos.
+
+**Falta:** validação visual autenticada no browser (sem credencial de prod à mão nesta sessão);
+**o dono cria o cron mensal `0 6 1 * *` → `POST /internal/expenses/run` no n8n**
+(`docs/EXPENSES_CRON_N8N.md`) — sem ele as despesas recorrentes não se materializam sozinhas.
 
 **Follow-up (fora de escopo):** vincular `payee` a `suppliers`; painel de contas a pagar no
 `/admin/gestor`; tópico "contas a pagar" no Kernel IA; conciliação despesa × `payment_transactions`.
