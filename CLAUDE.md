@@ -717,8 +717,12 @@ API). Lembrete 24h cobre agendamentos do site de graça. Suíte 603 pass. Envs n
 
 **Criação de usuário pelo gestor (D-83, 2026-07-29 — ✅ DEPLOYADO em prod 2026-07-29):** `POST /admin/security/users`
 gated por `security.users.manage` (sem migration, sem permissão nova) — cria o login, grava o papel de sistema em
-`user_units.role` (só `owner|manager|reception|barber`), opcionalmente vincula um `barber_id` (papel Barbeiro) e
+`user_units.role` (só `owner|manager|reception|barber`), opcionalmente vincula um `barber_id` e
 devolve a senha inicial **uma única vez** (definida pelo gestor ou gerada), sempre com `must_change_password=True`.
+**Ajuste 2026-08-31:** o vínculo `barber_id` deixou de exigir `role=barber` — vale para qualquer papel
+(a recepcionista que também atende, o dono que corta cabelo). Seguro: a restrição "só a própria agenda" é
+amarrada ao **papel** (`resolve_current_role_with_barber` só devolve `barber_id` quando `role='barber'`), não à
+presença do vínculo. `create-user-dialog.tsx` passou a mostrar "Profissional na agenda" para todos os papéis.
 Só o proprietário cria outro proprietário (403 — anti-escalada). Auditado (`security.users.create`). Frontend:
 botão "Novo usuário" + `components/usuarios/create-user-dialog.tsx` em `/admin/usuarios`.
 **+ `PATCH /admin/security/users/{id}`** troca o **e-mail** (credencial de login) de quem já existe — 409 em
