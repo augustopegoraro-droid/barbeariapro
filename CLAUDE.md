@@ -1055,7 +1055,16 @@ antes do deploy.
 > agendamento. `VendaRapidaDialog` ganhou props opcionais `appointmentId`/`clientId`/`clientName`
 > (sem elas, é a venda de balcão pura de `/admin/vendas`, comportamento inalterado); passa
 > `appointment_id`/`client_id` ao `POST /vendas`, que já os aceitava (D-91 Fase 3). Sem backend,
-> sem migration. `tsc`/`eslint` limpos.
+> sem migration. `tsc`/`eslint` limpos. **✅ DEPLOYADO em prod 2026-09-01** (frontend `8926f9c`,
+> backend `91df7a7`; deploy só-frontend, `sudo docker compose -f docker-compose.app.yml up -d
+> --build frontend` — ver [[deploy-vm-gotchas-2026-09]] item 6).
+
+> **ProdutoPicker pré-seleciona a variação (2026-09-01 — só frontend, ✅ DEPLOYADO em prod, frontend
+> `7ac2c89`):** a "Variação *" do `components/vendas/produto-picker.tsx` cai automaticamente na 1ª
+> variação ativa quando nada foi escolhido (no caso comum é a única, "Único" — poupa um clique).
+> Derivado no render (`effectiveVariantId`), sem estado extra nem `useEffect` (evita o lint
+> `react-hooks/set-state-in-effect`); repõe sozinho ao trocar de produto ou após "Adicionar ao
+> carrinho". Vale para Venda rápida, o atalho da Agenda e o bloco "+ Produtos" da conclusão.
 prod 2026-08-04):** `suppliers`/`purchase_orders`/`purchase_order_items` (migration `0054`, molde
 `sales`/0053 — RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — arquivar fornecedor via `active`,
 cancelar pedido via `status`, nunca apagar linha). `PurchaseOrder` nasce `rascunho` →
