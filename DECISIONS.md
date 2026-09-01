@@ -3643,6 +3643,82 @@ seguem `active=true` após o restart (sem regressão).
 
 ---
 
+### D-103 — Otimização de memória do stack Docker + downgrade da VM (e2-standard-2 → e2-medium) — 2026-08-31 (✅ EXECUTADO em prod)
+
+**Problema.** A VM de produção era `e2-standard-2` (2 vCPU / **8 GB RAM**) e o custo mensal não se
+justificava: o uso real do stack (backend + 3 apps Next + n8n + Evolution + 3 Postgres + 3 Redis)
+cabia com folga em bem menos. Consumo observado antes: n8n ~420 MB (com task-runner em processo
+separado), uvicorn ~205 MB, Evolution `dist/main` ~155 MB, 3 `next-server` ~370 MB somados, sem
+nenhum `mem_limit` — um serviço podia crescer sem teto.
+
+**Diagnóstico (correções à premissa inicial).**
+- As **"3 instâncias Next.js" não são zumbis/redundantes** — são 3 apps distintos: `barbearia-frontend`
+  (:3000, painel), `barbearia-public` (:3200, site do apex), `barbearia-superadmin` (:3100, painel de
+  plataforma, ativo em prod desde a D-56). Cada um roda seu próprio `node server.js`. Consolidar em 1
+  é impossível; o ganho vem de cortar o RSS de cada um.
+- O **"outro backend Node.js `dist/main`"** é a **Evolution API** (`evoapicloud/evolution-api`,
+  NestJS). Não é processo misterioso.
+- O **uvicorn já roda 1 processo só** (o `CMD` nunca passou `--workers`). Adicionar `--workers 1` só
+  criaria um supervisor + 1 filho (mais RAM). Mantido single-process.
+
+**Mudanças de código (commits `055f23c` no pai + `7618d59` frontend + `3de6b47` superadmin).**
+- **Limites de cgroup** em **todos** os serviços dos dois compose: `mem_limit` + `mem_reservation` +
+  `cpus` + `restart: unless-stopped` (Evolution saiu de `always`). Soma dos tetos ≈ **3,15 GB** →
+  ~700–850 MB de folga numa VM de 4 GB. Tetos (não reservas): postgres-app 512m/1.0, n8n 512m/0.75,
+  evolution-api 384m/0.75, backend 384m/1.0, frontend/public 320m/0.5, superadmin 256m/0.5,
+  evolution-postgres 256m/0.5, os 3 Redis 64–96m/0.25.
+- **n8n footprint** (`docker-compose.yml`): `N8N_RUNNERS_ENABLED=false` (nós rodam no processo
+  principal — 1 processo em vez de 2; era a causa dos ~420 MB), `EXECUTIONS_MODE=regular`,
+  `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none` (+ `ON_PROGRESS`/`MANUAL` false), poda de histórico
+  (`EXECUTIONS_DATA_PRUNE=true`, 168 h / 1000 execuções, só erros), telemetria/banners/templates off
+  (`N8N_DIAGNOSTICS_ENABLED`, `N8N_VERSION_NOTIFICATIONS_ENABLED`, `N8N_TEMPLATES_ENABLED`,
+  `N8N_PERSONALIZATION_ENABLED`, `N8N_HIRING_BANNER_ENABLED`, `N8N_METRICS`),
+  `NODE_OPTIONS=--max-old-space-size=384`.
+- **Next.js `output: "standalone"`** nos 3 `next.config.ts`. Os 4 Dockerfiles Next perderam o stage
+  `prod-deps`; o runtime copia só `.next/standalone` + `.next/static` + `public` e roda
+  **`node server.js`** (sem `npm start`/`next start`, sem `node_modules` completo). `PORT`/`HOSTNAME`
+  passaram para env (o `-p 3200`/`-p 3100` do `next start` deixou de existir). Heap V8 capado por
+  `NODE_OPTIONS=--max-old-space-size` no compose (256 tenant/público, 224 superadmin).
+- **Backend** (`Dockerfile`): `MALLOC_ARENA_MAX=2` + `MALLOC_TRIM_THRESHOLD_=100000` baked na imagem
+  (glibc abre ~1 arena de malloc por thread → RSS infla muito além do heap real do Python; maior
+  corte de memória do uvicorn nesta carga, sem custo de latência). Flag `--no-server-header` no `CMD`.
+- **Redis** (app + infra + evolution): `--maxmemory` + `--maxmemory-policy allkeys-lru` + `--save ""`
+  (sem snapshot em disco → sem fork/pico de RAM). O redis do `docker-compose.yml` só serve o backend
+  local fora de Docker — em prod é redundante e pode ficar de fora do `up`.
+
+**Deploy (executado pelo dono na VM).**
+- Ownership de `/opt/barbeariapro` ajustado para o usuário de deploy (`taylorethedy63`); chaves SSH
+  dos submódulos (`bfrontend_deploy`, `bsuperadmin_deploy`) + `config` copiadas de `/root/.ssh/` para
+  `~/.ssh/` (600/644, `IdentityFile` corrigido).
+- `git submodule update --init --recursive` (o `deploy/update.sh` **não** atualiza submódulos —
+  achado da D-100).
+- Infra recriada (`docker compose -f docker-compose.yml up -d`), app buildada **sequencialmente**
+  (backend → frontend → public, para o `next build` não estourar a RAM durante o deploy) e subida
+  (`docker compose -f docker-compose.app.yml up -d`).
+
+**Resultado validado.**
+- `/health` → `{"status":"ok"}`; frontend + public → HTTP 200.
+- **Consumo consolidado de memória (app + infra): ~1,05 GB** (era muito mais alto e sem teto).
+- Cada app Next (standalone) estabilizou em **~95 MB** de RSS (antes ~120 MB+ só de `next start`).
+- **VM redimensionada de `e2-standard-2` (8 GB) → `e2-medium` (2 vCPU / 4 GB)** no GCP Compute Engine
+  (stop → change machine type → start). Redução direta de custo mensal mantendo ~3 GB de folga.
+
+**A observar (margem agora é 4 GB, não 8 GB).**
+- OOM-kill: `dmesg -T | grep -i 'killed process'` após picos reais (movimento + janelas de cron do
+  n8n). Candidato provável: `postgres` (512m) num relatório/DRE pesado → subir para 640–768m se
+  ocorrer.
+- CPU steal: `e2-medium` é shared-core com burst por créditos; os `cpus` são tetos que sobre-alocam
+  de propósito. Contenção momentânea possível se n8n + Evolution + rebuild coincidirem.
+- `N8N_RUNNERS_ENABLED=false` loga aviso de depreciação em versões recentes do n8n mas funciona; se
+  um upgrade remover a flag, trocar por `N8N_RUNNERS_MODE=internal`.
+
+**Efeito colateral do deploy:** o submódulo `barbearia-superadmin` estava em detached HEAD com `main`
+local 3 commits atrás do remoto; `checkout main` + `pull --rebase` + push avançou o ponteiro no repo
+pai de `775fd71` para `3de6b47` (inclui 3 commits que já estavam no remoto do superadmin, nada
+perdido).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

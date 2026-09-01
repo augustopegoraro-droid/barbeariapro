@@ -384,8 +384,15 @@ gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-ea
 | VM | `barbeariapro` |
 | Zona | `southamerica-east1-a` |
 | IP externo | `34.95.199.134` |
+| Machine type | **`e2-medium` (2 vCPU / 4 GB RAM)** — downgrade de `e2-standard-2` (8 GB) em 2026-08-31 (D-103) |
 | Acesso SSH | `gcloud compute ssh barbeariapro --project=barberiapro-app --zone=southamerica-east1-a` |
 | App na VM | `/opt/barbeariapro` |
+
+> **Memória (D-103, 2026-08-31):** todo serviço dos dois compose tem `mem_limit`/`cpus` (tetos somam
+> ~3,15 GB → ~700 MB de folga). Consumo consolidado real observado pós-otimização: **~1,05 GB**
+> (backend + 3 apps Next standalone ~95 MB cada + n8n sem task-runner + Evolution + Postgres/Redis).
+> Se a VM voltar a ficar apertada: checar `dmesg` por OOM-kill (candidato: `postgres` 512m em
+> relatório pesado) e subir o `mem_limit` do serviço específico. Detalhe completo em `DECISIONS.md` D-103.
 
 > **Atenção:** A VM já foi desligada involuntariamente em 2026-06-25 (ficou TERMINATED).
 > Verificar status antes de qualquer sessão: `gcloud compute instances describe barbeariapro --project=barberiapro-app --zone=southamerica-east1-a --format="value(status)"`
