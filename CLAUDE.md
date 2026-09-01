@@ -1045,6 +1045,17 @@ antes do deploy.
 > `components/vendas/atalhos-produtos.tsx` + hook `useAtalhosProdutos` (queryKey estável); some
 > quando não há histórico de venda (barbearia nova). Sem migration. +2 testes em
 > `tests/test_relatorios_produtos.py` (`price` no payload; `only_active` descarta arquivado).
+
+> **Atalho "Vender produto" na Agenda (2026-09-01 — só frontend, não deployado):** antes, vender
+> produto para o cliente na `/admin/agenda` só existia dentro do fluxo "Concluir atendimento" (bloco
+> "+ Produtos" do `ConcluirDialog`). Agora o `AppointmentActionsDialog` (diálogo que abre ao clicar
+> num agendamento) tem um botão **"Vender produto"** — gated por `sales.create`, visível em qualquer
+> status exceto `cancelado` (cobre também o cliente que já concluiu e volta para comprar pomada) —
+> que abre a `VendaRapidaDialog` já pré-vinculada ao `appointment_id`/`client_id` daquele
+> agendamento. `VendaRapidaDialog` ganhou props opcionais `appointmentId`/`clientId`/`clientName`
+> (sem elas, é a venda de balcão pura de `/admin/vendas`, comportamento inalterado); passa
+> `appointment_id`/`client_id` ao `POST /vendas`, que já os aceitava (D-91 Fase 3). Sem backend,
+> sem migration. `tsc`/`eslint` limpos.
 prod 2026-08-04):** `suppliers`/`purchase_orders`/`purchase_order_items` (migration `0054`, molde
 `sales`/0053 — RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — arquivar fornecedor via `active`,
 cancelar pedido via `status`, nunca apagar linha). `PurchaseOrder` nasce `rascunho` →
