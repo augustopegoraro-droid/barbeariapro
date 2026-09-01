@@ -5,6 +5,44 @@
 
 ---
 
+## 0.00000000 SESSÃO 2026-09-01 — Agenda (header sticky + reordenar colunas) + deploy do D-103 em produção
+
+> ✅ **DEPLOYADO em prod 2026-09-01.** Backend `main` na VM = **`10a58d9`**; frontend submódulo = **`56734b0`**.
+> Containers `backend`/`frontend`/`public`/`redis`/`superadmin` **healthy**; n8n + Evolution intocados.
+> Sem migration (head inalterado). Backup: `~/predeploy_agenda_20260901_130613.sql` na VM.
+
+- **Feature (frontend):** grade da Agenda do dia ganhou **cabeçalho sticky** (linha de profissionais +
+  canto do eixo de horas `sticky top-0`, bg sólido; grade virou scroller próprio `max-h+overflow-auto`;
+  eixo de horas segue `sticky left-0`) e **reordenação das colunas por drag-and-drop** (cabeçalho
+  `draggable`, `dataTransfer` type `application/x-agenda-column` — sem colidir com o drag de
+  reagendamento; ordem persistida em `localStorage` via `hooks/use-column-order.ts`, opera sobre TODOS
+  os profissionais). Validado no browser (dev local) antes do deploy. Detalhe em `barbearia-frontend/AGENTS.md` (F3b+).
+- **D-103 foi junto** (estava commitado em `main` mas nunca deployado): Dockerfiles Next com
+  `output:"standalone"`, `mem_limit`/`cpus`/`NODE_OPTIONS` no `docker-compose.app.yml`, `MALLOC_*` no
+  `Dockerfile` do backend. Rebuild dos 3 serviços Next + backend. `docker-compose.yml` (limites de
+  n8n/evolution/redis-infra) **NÃO foi aplicado** — `deploy/update.sh` só toca o `docker-compose.app.yml`;
+  aplicar os limites da infra do bot fica para uma janela própria.
+- **⚠️ 2 achados no deploy (corrigidos):**
+  1. **Submódulo do frontend com remote `https://github.com`** (não o alias SSH `git@github-bfrontend`
+     que o setup original usava — foi clobberado em algum momento). `git pull` recursivo do super-projeto
+     falhava com *"could not read Username for https://github.com"*. Corrigido **na VM**: `git config`
+     de `remote.origin.url` (em `.git/modules/barbearia-frontend/config` **e** `barbearia-frontend/.git/config`)
+     de volta para `git@github-bfrontend:augustopegoraro-droid/barbearia-frontend.git` (deploy key
+     `~taylorethedy63/.ssh/bfrontend_deploy` já existia e autentica). Deploy do super-projeto agora com
+     `git -c submodule.recurse=false pull --ff-only` + `git submodule update` à parte.
+  2. **Healthcheck dos apps Next ficava `unhealthy`** apesar de responderem 200: pós-standalone o
+     `node server.js` (`HOSTNAME=0.0.0.0`) escuta **só IPv4**, e o `wget` do healthcheck resolvia
+     `localhost` → `::1` → *Connection refused*. Fix commitado (`10a58d9`): healthchecks Next em
+     `docker-compose.app.yml` passam a bater em **`127.0.0.1`** (frontend :3000, public :3200, superadmin :3100).
+- **Nota operacional:** o repo `/opt/barbeariapro` na VM é de `taylorethedy63`; o usuário do
+  `gcloud compute ssh` (`apleandro`) tem sudo sem senha e está no grupo `docker`. **Git na VM →
+  `sudo -u taylorethedy63 git ...`** (senão *Permission denied* em `.git/`). Docker → direto.
+- **Pendências:** validação visual autenticada em prod (feito só em dev local); `barbearia-superadmin`
+  ficou com o ponteiro de submódulo à frente do working tree (D-103 bumpou os 2 ponteiros; superadmin é
+  `profile`, não sobe no `up` padrão — sync quando for deployá-lo).
+
+---
+
 ## 0.0000000 SESSÃO 2026-07-03 (2ª) — Redesenho dos blocos da Agenda em produção
 
 > ✅ **DEPLOYADO em prod 2026-07-03** — frontend `main` = **`e985d85`** na VM (pull + rebuild;

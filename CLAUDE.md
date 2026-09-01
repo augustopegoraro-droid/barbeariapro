@@ -93,6 +93,13 @@ Next.js 16 (frontend :3000)  ──JWT──►  FastAPI (backend :8000)  ──
   `--maxmemory`/`allkeys-lru`/`--save ""`. Deploy = `deploy/update.sh` (rebuild de tudo) ou rebuild
   seletivo por serviço; **exige `--build`** (mudou Dockerfile e next.config). O redis do
   `docker-compose.yml` só serve o backend local fora de Docker — em prod pode ficar de fora do `up`.
+  **✅ DEPLOYADO em prod 2026-09-01** (junto com a feature de Agenda dessa sessão; backend `10a58d9`,
+  frontend `56734b0`). **Só o `docker-compose.app.yml`** foi aplicado (`update.sh` não toca o
+  `docker-compose.yml`) — os limites de n8n/evolution/redis-infra do `docker-compose.yml` seguem
+  **não aplicados** em prod (janela própria, o bot está vivo). **Achado do standalone:** `node server.js`
+  com `HOSTNAME=0.0.0.0` escuta só IPv4; o `wget` do healthcheck resolvia `localhost`→`::1` e os apps
+  Next ficavam `unhealthy` respondendo 200 — corrigido em `10a58d9` (healthchecks Next batem em
+  `127.0.0.1`). Detalhes do deploy em `PROJECT_CONTEXT.md` (sessão 2026-09-01).
 
 ### Estrutura de pastas (backend)
 - `app/api/*` — 19 routers (auth, agenda, barbeiro, bot, clientes, conversations, crm, dashboard,
