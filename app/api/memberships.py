@@ -31,9 +31,12 @@ from models import (
     Appointment,
     Client,
     ClientMembership,
+    MembershipOfferOutcome,
+    MembershipOfferSurface,
     MembershipPlan,
     MembershipPlanItem,
     MembershipStatus,
+    PlanAudience,
     Service,
     User,
 )
@@ -61,6 +64,14 @@ class PlanOut(BaseModel):
     duration_days: int
     unlimited_use_value: Optional[float]
     is_active: bool
+    # ── vitrine / segmentação (0065) ─────────────────────────────────────
+    audience: str
+    category: Optional[str]
+    headline: Optional[str]
+    perks: list[str]
+    badge: Optional[str]
+    display_order: int
+    is_featured: bool
     items: list[PlanItemOut]
 
 
@@ -72,6 +83,13 @@ class PlanIn(BaseModel):
     duration_days: int = Field(..., gt=0)
     unlimited_use_value: Optional[Decimal] = Field(None, ge=Decimal("0"))
     service_ids: list[int] = Field(..., min_length=1, description="Serviços do combo (ordenados)")
+    audience: PlanAudience = PlanAudience.unissex
+    category: Optional[str] = Field(None, max_length=80)
+    headline: Optional[str] = Field(None, max_length=160)
+    perks: list[str] = Field(default_factory=list, max_length=12)
+    badge: Optional[str] = Field(None, max_length=40)
+    display_order: int = Field(0, ge=0)
+    is_featured: bool = False
 
 
 class PlanUpdate(BaseModel):
@@ -85,6 +103,13 @@ class PlanUpdate(BaseModel):
     service_ids: Optional[list[int]] = Field(None, min_length=1)
     # Quando included_uses deve passar a ilimitado num PATCH (não dá p/ enviar None).
     set_unlimited: Optional[bool] = Field(None, description="true → torna o plano ilimitado")
+    audience: Optional[PlanAudience] = None
+    category: Optional[str] = Field(None, max_length=80)
+    headline: Optional[str] = Field(None, max_length=160)
+    perks: Optional[list[str]] = Field(None, max_length=12)
+    badge: Optional[str] = Field(None, max_length=40)
+    display_order: Optional[int] = Field(None, ge=0)
+    is_featured: Optional[bool] = None
 
 
 class SellIn(BaseModel):
@@ -230,6 +255,15 @@ def _plan_out(plan: MembershipPlan, names: dict[int, str]) -> PlanOut:
             else None
         ),
         is_active=plan.is_active,
+        audience=(
+            plan.audience.value if hasattr(plan.audience, "value") else plan.audience
+        ),
+        category=plan.category,
+        headline=plan.headline,
+        perks=list(plan.perks or []),
+        badge=plan.badge,
+        display_order=plan.display_order,
+        is_featured=plan.is_featured,
         items=items,
     )
 
@@ -393,6 +427,13 @@ async def criar_plano(
         included_uses=body.included_uses,
         duration_days=body.duration_days,
         unlimited_use_value=body.unlimited_use_value,
+        audience=body.audience,
+        category=body.category,
+        headline=body.headline,
+        perks=body.perks,
+        badge=body.badge,
+        display_order=body.display_order,
+        is_featured=body.is_featured,
     )
     db.add(plan)
     await db.flush()
@@ -449,6 +490,20 @@ async def atualizar_plano(
         plan.included_uses = body.included_uses
     if body.unlimited_use_value is not None:
         plan.unlimited_use_value = body.unlimited_use_value
+    if body.audience is not None:
+        plan.audience = body.audience
+    if body.category is not None:
+        plan.category = body.category
+    if body.headline is not None:
+        plan.headline = body.headline
+    if body.perks is not None:
+        plan.perks = body.perks
+    if body.badge is not None:
+        plan.badge = body.badge
+    if body.display_order is not None:
+        plan.display_order = body.display_order
+    if body.is_featured is not None:
+        plan.is_featured = body.is_featured
 
     # Consistência: ilimitado precisa de unlimited_use_value.
     if plan.included_uses is None and plan.unlimited_use_value is None:
@@ -549,6 +604,135 @@ async def vender_assinatura(
         after={"client_id": body.client_id, "plan_id": body.plan_id},
     )
     return out
+
+
+class OfferPlanOut(BaseModel):
+    id: int
+    name: str
+    headline: Optional[str]
+    category: Optional[str]
+    badge: Optional[str]
+    price: float
+    included_uses: Optional[int]
+    duration_days: int
+    avulso_equivalente: float  # preço avulso somado do combo (base do "economize")
+
+
+class OfferOut(BaseModel):
+    plan: Optional[OfferPlanOut]
+    recent_completed: int  # atendimentos concluídos do cliente nos últimos 60d
+
+
+class OfferEventIn(BaseModel):
+    surface: MembershipOfferSurface
+    outcome: MembershipOfferOutcome
+    plan_id: Optional[int] = Field(None, gt=0)
+    client_id: Optional[int] = Field(None, gt=0)
+    appointment_id: Optional[int] = Field(None, gt=0)
+    shown_amount: Optional[Decimal] = Field(None, ge=Decimal("0"))
+
+
+class ConversaoOut(BaseModel):
+    by_surface: dict
+    total: dict
+
+
+@router.get("/oferta", response_model=OfferOut)
+async def oferta_de_assinatura(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    client_id: int = Query(..., gt=0),
+    appointment_id: Optional[int] = Query(None, gt=0),
+) -> OfferOut:
+    """Plano em destaque para oferecer a um cliente (order bump da conclusão).
+
+    Sem plano recomendado (cliente já assina, nenhum plano em destaque cobre o
+    serviço) → ``plan = null``; o frontend simplesmente não mostra o bloco.
+    """
+    await require_permission(db, current_user, "memberships.sell")
+
+    service_ids: list[int] = []
+    if appointment_id is not None:
+        appt = (
+            await db.execute(
+                select(Appointment)
+                .where(Appointment.id == appointment_id)
+                .options(selectinload(Appointment.items))
+            )
+        ).scalar_one_or_none()
+        if appt is not None:
+            service_ids = [it.service_id for it in appt.items]
+
+    plan = await svc.recommend_plan_for_context(
+        db, service_ids=service_ids or None, client_id=client_id
+    )
+    recent = await svc.recent_completed_count(db, client_id, days=60)
+    if plan is None:
+        return OfferOut(plan=None, recent_completed=recent)
+
+    avulso = await svc.plan_avulso_equivalent(db, plan)
+    return OfferOut(
+        plan=OfferPlanOut(
+            id=plan.id,
+            name=plan.name,
+            headline=plan.headline,
+            category=plan.category,
+            badge=plan.badge,
+            price=float(plan.price),
+            included_uses=plan.included_uses,
+            duration_days=plan.duration_days,
+            avulso_equivalente=float(avulso),
+        ),
+        recent_completed=recent,
+    )
+
+
+@router.post("/oferta/evento", status_code=http_status.HTTP_204_NO_CONTENT)
+async def registrar_evento_de_oferta(
+    body: OfferEventIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> None:
+    """Registra que uma oferta foi mostrada/aceita/recusada no painel.
+
+    Barato e append-only — alimenta o painel de conversão do clube. O
+    ``accepted`` "de verdade" (venda concretizada) também é logado aqui pelo
+    frontend logo após o ``POST /memberships`` retornar 201.
+    """
+    await require_permission(db, current_user, "memberships.sell")
+    await svc.log_offer_event(
+        db,
+        organization_id=current_user.organization_id,
+        surface=body.surface,
+        outcome=body.outcome,
+        plan_id=body.plan_id,
+        client_id=body.client_id,
+        appointment_id=body.appointment_id,
+        shown_amount=body.shown_amount,
+    )
+    await db.commit()
+
+
+@router.get("/conversao", response_model=ConversaoOut)
+async def conversao_do_clube(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    inicio: datetime = Query(...),
+    fim: datetime = Query(...),
+) -> ConversaoOut:
+    """Ofertas mostradas × aceitas por superfície no período (painel gerencial)."""
+    await require_permission(db, current_user, "memberships.manage")
+    if inicio.tzinfo is None or fim.tzinfo is None:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "inicio e fim devem incluir fuso horário.",
+        )
+    if fim <= inicio:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY, "fim deve ser após inicio."
+        )
+    summary = await svc.offer_conversion_summary(db, date_from=inicio, date_to=fim)
+    return ConversaoOut(**summary)
 
 
 @router.get("/clientes/{client_id}", response_model=dict)

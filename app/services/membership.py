@@ -37,9 +37,14 @@ from models import (
     BarberService,
     Client,
     ClientMembership,
+    MembershipOfferEvent,
+    MembershipOfferOutcome,
+    MembershipOfferSurface,
     MembershipPlan,
+    MembershipPlanItem,
     MembershipStatus,
     MembershipUsage,
+    PlanAudience,
     Service,
     Unit,
 )
@@ -441,6 +446,186 @@ async def resolve_membership_for_autopick(
             "Cliente tem mais de uma assinatura ativa; informe qual usar (membership_id).",
         )
     return memberships[0]
+
+
+# ─── order bumps: recomendação de plano + log de conversão ───────────────────
+
+
+async def plan_avulso_equivalent(
+    db: AsyncSession, plan: MembershipPlan
+) -> Decimal:
+    """Soma do preço avulso dos serviços do combo do plano.
+
+    É o "valor cheio" que o cliente pagaria por uma visita sem o plano — base do
+    argumento "você economiza R$X" no order bump. Usa ``plan.items`` se já
+    carregado; senão consulta.
+    """
+    if plan.items:
+        service_ids = [i.service_id for i in plan.items]
+    else:
+        service_ids = list(
+            (
+                await db.execute(
+                    select(MembershipPlanItem.service_id).where(
+                        MembershipPlanItem.plan_id == plan.id
+                    )
+                )
+            ).scalars().all()
+        )
+    if not service_ids:
+        return Decimal("0.00")
+    total = (
+        await db.execute(
+            select(func.coalesce(func.sum(Service.price), 0)).where(
+                Service.id.in_(service_ids)
+            )
+        )
+    ).scalar_one()
+    return Decimal(total).quantize(_CENTS)
+
+
+async def recent_completed_count(
+    db: AsyncSession, client_id: int, *, days: int = 60
+) -> int:
+    """Nº de atendimentos concluídos do cliente nos últimos ``days`` dias.
+
+    Gatilho do order bump da conclusão (cliente recorrente = alvo natural).
+    """
+    since = _now_utc() - timedelta(days=days)
+    return (
+        await db.execute(
+            select(func.count(Appointment.id))
+            .where(Appointment.client_id == client_id)
+            .where(Appointment.status == AppointmentStatus.concluido)
+            .where(Appointment.start_at >= since)
+        )
+    ).scalar_one()
+
+
+async def recommend_plan_for_context(
+    db: AsyncSession,
+    *,
+    audience: Optional[PlanAudience] = None,
+    service_ids: Optional[Sequence[int]] = None,
+    client_id: Optional[int] = None,
+    exclude_if_active: bool = True,
+) -> Optional[MembershipPlan]:
+    """Melhor plano ``is_featured`` para oferecer num contexto (order bump).
+
+    Filtros: só planos em destaque, ativos e não arquivados; público compatível
+    (o do contexto ou ``unissex``); e — se ``service_ids`` vier — o combo do
+    plano precisa **conter todos** os serviços do contexto (assim assinar de
+    fato cobriria aquele atendimento). Se ``client_id`` vier e
+    ``exclude_if_active``, não recomenda nada para quem já tem assinatura ativa.
+    Desempate: ``display_order`` asc, depois ``price`` asc, depois ``id``.
+    """
+    if client_id is not None and exclude_if_active:
+        if await active_memberships_for_client(db, client_id):
+            return None
+
+    stmt = (
+        select(MembershipPlan)
+        .where(MembershipPlan.is_featured.is_(True))
+        .where(MembershipPlan.is_active.is_(True))
+        .where(MembershipPlan.deleted_at.is_(None))
+        .options(selectinload(MembershipPlan.items))
+        .order_by(
+            MembershipPlan.display_order,
+            MembershipPlan.price,
+            MembershipPlan.id,
+        )
+    )
+    if audience is not None:
+        stmt = stmt.where(
+            MembershipPlan.audience.in_([audience, PlanAudience.unissex])
+        )
+    plans = (await db.execute(stmt)).scalars().all()
+
+    wanted = set(service_ids or [])
+    for plan in plans:
+        if not plan.items:
+            continue
+        combo_ids = {i.service_id for i in plan.items}
+        if wanted and not wanted.issubset(combo_ids):
+            continue
+        return plan
+    return None
+
+
+async def log_offer_event(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    surface: MembershipOfferSurface,
+    outcome: MembershipOfferOutcome,
+    plan_id: Optional[int] = None,
+    client_id: Optional[int] = None,
+    client_session_id: Optional[int] = None,
+    appointment_id: Optional[int] = None,
+    shown_amount: Optional[Decimal] = None,
+    context: Optional[dict] = None,
+) -> MembershipOfferEvent:
+    """Grava 1 evento de oferta (append-only). Não faz commit."""
+    event = MembershipOfferEvent(
+        organization_id=organization_id,
+        surface=surface,
+        outcome=outcome,
+        plan_id=plan_id,
+        client_id=client_id,
+        client_session_id=client_session_id,
+        appointment_id=appointment_id,
+        shown_amount=(
+            Decimal(shown_amount).quantize(_CENTS) if shown_amount is not None else None
+        ),
+        context=context or {},
+    )
+    db.add(event)
+    await db.flush()
+    return event
+
+
+async def offer_conversion_summary(
+    db: AsyncSession, *, date_from: datetime, date_to: datetime
+) -> dict:
+    """Agregado de conversão do clube por superfície, no período.
+
+    ``{surface: {shown, accepted, dismissed, conversion_rate}}`` + total. As
+    contagens são de EVENTOS (uma oferta que foi mostrada e depois aceita conta
+    1 em ``shown`` e 1 em ``accepted``).
+    """
+    rows = (
+        await db.execute(
+            select(
+                MembershipOfferEvent.surface,
+                MembershipOfferEvent.outcome,
+                func.count(MembershipOfferEvent.id),
+            )
+            .where(MembershipOfferEvent.created_at >= date_from)
+            .where(MembershipOfferEvent.created_at < date_to)
+            .group_by(MembershipOfferEvent.surface, MembershipOfferEvent.outcome)
+        )
+    ).all()
+
+    by_surface: dict[str, dict] = {}
+    for surface, outcome, count in rows:
+        s = surface.value if hasattr(surface, "value") else surface
+        o = outcome.value if hasattr(outcome, "value") else outcome
+        bucket = by_surface.setdefault(
+            s, {"shown": 0, "accepted": 0, "dismissed": 0}
+        )
+        bucket[o] = int(count)
+
+    total = {"shown": 0, "accepted": 0, "dismissed": 0}
+    for bucket in by_surface.values():
+        for k in total:
+            total[k] += bucket[k]
+        denom = bucket["shown"] or (bucket["accepted"] + bucket["dismissed"])
+        bucket["conversion_rate"] = (
+            round(bucket["accepted"] / denom, 4) if denom else 0.0
+        )
+    denom = total["shown"] or (total["accepted"] + total["dismissed"])
+    total["conversion_rate"] = round(total["accepted"] / denom, 4) if denom else 0.0
+    return {"by_surface": by_surface, "total": total}
 
 
 # ─── correção / reversão (ferramentas da recepcionista) ──────────────────────

@@ -343,6 +343,29 @@ agendamento existente. Combo de **catálogo** restrito a corte/barba/corte+barba
 na conclusão (sem Payment duplicado); status `vencida` derivado; auditoria `canceled_by`/`reverted_by`
 (migration `0018`); recepção passa a listar planos.
 
+**Clube de assinatura: segmentação de catálogo + order bumps (D-104, 2026-09-04 — só dev/staging;
+migration `0065`, head `0065`):** `membership_plans` ganhou campos de vitrine/segmentação
+(`audience` enum PG `plan_audience` masculino/feminino/unissex, `category`, `headline`, `perks`,
+`badge`, `display_order`, `is_featured` — todos com default, backfill no-op) + tabela append-only
+`membership_offer_events` (RLS+FORCE, GRANT só SELECT/INSERT — molde `stock_movements`): 1 linha por
+oferta de plano exibida numa das 3 superfícies (`booking`/`conclusao`/`assinatura`) com o desfecho
+(`shown`/`accepted`/`dismissed`). `app/services/membership.py`: `recommend_plan_for_context`
+(melhor plano `is_featured` que cobre o serviço, público bate, cliente sem assinatura ativa →
+função pura reusável pelos 3 bumps), `plan_avulso_equivalent`, `recent_completed_count`,
+`log_offer_event`, `offer_conversion_summary`. Rotas: `GET /memberships/oferta` +
+`POST /memberships/oferta/evento` (`memberships.sell`), `GET /memberships/conversao`
+(`memberships.manage`); `GET /public/{sub}/planos` (`PublicPlanOut`) devolve os campos novos e
+ordena por `display_order`. Frontend (só painel nesta fatia): **Bump B** em
+`components/agenda/concluir-dialog.tsx` (bloco "+ Assinatura" ao lado de "+ Produtos" — oferece o
+plano ao cliente recorrente sem assinatura, "Ativar plano agora" → `POST /memberships` + loga o
+evento) + seção "Vitrine e order bump" em `components/assinaturas/plan-form-dialog.tsx` +
+hooks em `hooks/use-assinaturas.ts`. Suíte **895 pass / 2 ambientais / 1 skip / 0 regressões**
+(`tests/test_membership_offer.py`, +8). **Fora desta fatia (desenhado, não feito):**
+`membership_addons` (add-on recorrente), Bump A (checkout do agendamento) e Bump C (add-on em
+`/assinatura`) no site público — dependem de `CONNECT_ENABLED` (adiado). Plano completo +
+pesquisa competitiva do clube de assinatura em
+`/Users/apleandro/.claude/plans/cheerful-wishing-cake.md`. Detalhes em DECISIONS.md D-104.
+
 **Fidelização por pontos** (D-50, **deployada em prod 2026-06-28**): ledger append-only
 (`loyalty_point_ledger`) + tiers/regras configuráveis por org (`loyalty_tiers`/`loyalty_rules`) + resgate
 gerando voucher (`loyalty_vouchers`); `client_loyalty.points_balance`/`current_tier_id` derivados. Ladder único

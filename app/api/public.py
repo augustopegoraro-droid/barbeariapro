@@ -1432,6 +1432,15 @@ class PublicPlanOut(BaseModel):
     included_uses: Optional[int] = None
     duration_days: int
     services: list[str]
+    # ── vitrine / order bump (0065) ──────────────────────────────────────
+    audience: str = "unissex"
+    category: Optional[str] = None
+    headline: Optional[str] = None
+    perks: list[str] = []
+    badge: Optional[str] = None
+    is_featured: bool = False
+    # Soma do preço avulso dos serviços do combo (base do "você economiza").
+    avulso_equivalente: float = 0.0
 
 
 class PublicPlansOut(BaseModel):
@@ -1497,6 +1506,24 @@ async def _plan_services(db: AsyncSession, plan_ids: list[int]) -> dict[int, lis
     return out
 
 
+async def _plan_avulso_totals(db: AsyncSession, plan_ids: list[int]) -> dict[int, float]:
+    """Preço avulso somado do combo de cada plano (base do 'você economiza')."""
+    if not plan_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(
+                MembershipPlanItem.plan_id,
+                func.coalesce(func.sum(Service.price), 0),
+            )
+            .join(Service, Service.id == MembershipPlanItem.service_id)
+            .where(MembershipPlanItem.plan_id.in_(plan_ids))
+            .group_by(MembershipPlanItem.plan_id)
+        )
+    ).all()
+    return {plan_id: float(total) for plan_id, total in rows}
+
+
 @router.get("/planos", response_model=PublicPlansOut)
 @limiter.limit("60/minute")
 async def public_plans(
@@ -1529,13 +1556,18 @@ async def public_plans(
                     select(MembershipPlan)
                     .where(MembershipPlan.is_active.is_(True))
                     .where(MembershipPlan.deleted_at.is_(None))
-                    .order_by(MembershipPlan.price, MembershipPlan.id)
+                    .order_by(
+                        MembershipPlan.display_order,
+                        MembershipPlan.price,
+                        MembershipPlan.id,
+                    )
                 )
             )
             .scalars()
             .all()
         )
         services_by_plan = await _plan_services(db, [p.id for p in rows])
+        avulso_by_plan = await _plan_avulso_totals(db, [p.id for p in rows])
         plans = [
             PublicPlanOut(
                 id=p.id,
@@ -1545,6 +1577,15 @@ async def public_plans(
                 included_uses=p.included_uses,
                 duration_days=p.duration_days,
                 services=services_by_plan.get(p.id, []),
+                audience=(
+                    p.audience.value if hasattr(p.audience, "value") else p.audience
+                ),
+                category=p.category,
+                headline=p.headline,
+                perks=list(p.perks or []),
+                badge=p.badge,
+                is_featured=p.is_featured,
+                avulso_equivalente=avulso_by_plan.get(p.id, 0.0),
             )
             for p in rows
             # plano sem combo não é vendável (a criação da assinatura recusaria)

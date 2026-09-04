@@ -3719,6 +3719,70 @@ perdido).
 
 ---
 
+### D-104 — Clube de assinatura do cliente final: segmentação de catálogo + order bumps — 2026-09-04 (implementado, só dev/staging; head `0065`)
+
+**Contexto.** O prompt pediu "pacotes de assinatura em camadas + order bumps no checkout". Nas
+perguntas de clarificação o dono redirecionou: **não** é o preço do BarbeariaPro (SaaS) — é o
+**clube de assinatura que a BARBEARIA vende ao CLIENTE FINAL** ("planos para homens e mulheres…
+corte+barba 2x/mês, escova 2x/mês"). Portanto **não toca** em `models/organization.py`
+(`Plan`/`Subscription`), `app/services/billing/*` nem no superadmin — evolui o módulo de
+mensalidade do cliente final (D-44/D-46/D-47/D-48 e D-100 Feature 2). Pesquisa competitiva +
+proposta de pacotes em `/Users/apleandro/.claude/plans/cheerful-wishing-cake.md`.
+
+**O que entrou (fatia 1 — catálogo + rastreio de conversão; sem add-ons/Bump C).** Migration
+**`0065`** (aditiva, molde `sales`/0053): `membership_plans` += `audience` (enum PG `plan_audience`:
+masculino/feminino/unissex, default `unissex`), `category`, `headline`, `perks` jsonb, `badge`,
+`display_order`, `is_featured` (todos com default → backfill no-op); tabela nova
+**`membership_offer_events`** (append-only, RLS+FORCE, GRANT só SELECT/INSERT — molde `stock_movements`):
+uma linha por oferta de plano exibida numa das 3 superfícies (`booking`/`conclusao`/`assinatura`)
+com o desfecho (`shown`/`accepted`/`dismissed`) + `shown_amount` (valor avulso comunicado).
+
+Models: `models/enums.py` (`PlanAudience`, `MembershipOfferSurface`, `MembershipOfferOutcome`);
+`models/membership.py` (`MembershipPlan` estendido + `MembershipOfferEvent`).
+
+`app/services/membership.py` (funções puras, molde do módulo): `recommend_plan_for_context(db, *,
+audience?, service_ids?, client_id?)` — melhor plano `is_featured` (ativo, não arquivado; público
+compatível ou `unissex`; combo cobre os serviços do contexto; `None` se o cliente já tem assinatura
+ativa); `plan_avulso_equivalent` (soma do preço avulso do combo — base do "você economiza");
+`recent_completed_count` (gatilho "cliente recorrente"); `log_offer_event`; `offer_conversion_summary`
+(agregado por superfície).
+
+Rotas em `app/api/memberships.py` (RBAC reusando permissões existentes): `PlanOut`/`PlanIn`/`PlanUpdate`
++ `_plan_out` expõem os campos novos; `GET /memberships/oferta?client_id=&appointment_id=`
+(`memberships.sell`) → plano recomendado + `avulso_equivalente` + `recent_completed`;
+`POST /memberships/oferta/evento` (`memberships.sell`, 204) → log append-only;
+`GET /memberships/conversao?inicio=&fim=` (`memberships.manage`). `app/api/public.py`:
+`PublicPlanOut` += `audience`/`category`/`headline`/`perks`/`badge`/`is_featured`/`avulso_equivalente`;
+`GET /public/{sub}/planos` ordena por `display_order` e devolve os campos novos (segue gateado por
+`_sells_online`/Connect + cache `public-plans`).
+
+Frontend (só painel nesta fatia — Bumps A/C do site público dependem de Connect, ainda não deployado):
+`hooks/use-assinaturas.ts` — tipos `MembershipPlan`/`PlanPayload` estendidos, `useOfertaAssinatura`,
+`useRegistrarEventoOferta`, `useConversaoClube`. `components/agenda/concluir-dialog.tsx` — **Bump B**:
+bloco "+ Assinatura" (ao lado de "+ Produtos"), gated por `memberships.sell`, só aparece quando o
+cliente não tem assinatura ativa e `GET /memberships/oferta` devolve um plano; mostra a economia por
+visita e "Ativar plano agora" → `POST /memberships` + loga `shown`/`accepted`/`dismissed`.
+`components/assinaturas/plan-form-dialog.tsx` — seção "Vitrine e order bump" (público, ordem,
+modalidade, frase de venda, selo, benefícios, checkbox "usar como oferta").
+
+Suíte: **895 pass / 2 ambientais / 1 skip / 0 regressões** (`tests/test_membership_offer.py`, +8:
+campos de vitrine, recomendação contextual, `plan=null` quando o cliente já assina, log + conversão
+com medição por delta, RBAC barbeiro↔recepção↔gestor). `tsc`/`eslint`/`next build` limpos.
+
+**Fora desta fatia (desenhado no plano, não implementado):** `membership_addons` /
+`client_membership_addons` (add-on recorrente — pomada/uso avulso/escopo), Bump A (checkout do
+agendamento no site público), Bump C (add-on em `/assinatura`), wiring do webhook Connect para
+aplicar add-ons e logar `accepted` do site, painel "Conversão do clube" em `/admin/assinaturas`.
+Motivo: add-ons tocam o caminho intrincado de `create_membership`/`renew`/rateio + checkout Connect
+(risco alto), e as 2 superfícies do site público só funcionam com `CONNECT_ENABLED`, que o dono
+adiou ([[feed-e-stripe-connect-d100]]).
+
+**Deploy pendente:** aplicar `0065` (`deploy/update.sh`, via admin — `barber_app` não cria tipo),
+rebuild `backend`+`frontend`; `membership_offer_events` nasce vazia em prod. O dono cadastra os
+planos reais (números-exemplo no plano, a validar).
+
+---
+
 ## Dívida técnica conhecida (não resolver sem discussão)
 
 | Item | Arquivo | Severidade | Observação |

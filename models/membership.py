@@ -39,11 +39,18 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-from .enums import MembershipStatus, pg_enum
+from .enums import (
+    MembershipOfferOutcome,
+    MembershipOfferSurface,
+    MembershipStatus,
+    PlanAudience,
+    pg_enum,
+)
 
 if TYPE_CHECKING:
     from .appointment import Appointment
     from .client import Client
+    from .client_session import ClientSession
     from .organization import Organization
     from .service import Service
     from .user import User
@@ -76,6 +83,30 @@ class MembershipPlan(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    # ── vitrine / segmentação (migration 0065) ────────────────────────────
+    audience: Mapped[PlanAudience] = mapped_column(
+        pg_enum(PlanAudience, "plan_audience"),
+        nullable=False,
+        server_default=text("'unissex'"),
+    )
+    # Rótulo livre de modalidade ("Corte & Barba", "Escova", "Manutenção"…).
+    category: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Frase curta de venda exibida na vitrine e no order bump.
+    headline: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Lista de benefícios extras exibíveis (["10% em produtos", "sem fila"]).
+    perks: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    # Selo ("Mais vendido", "Melhor custo").
+    badge: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Ordena a vitrine sem depender do preço.
+    display_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    # Elegível a aparecer como order bump contextual.
+    is_featured: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     # NULL = ilimitado.
     included_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     duration_days: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -355,3 +386,70 @@ class MembershipUsage(Base):
     reverted_by: Mapped[Optional["User"]] = relationship(
         foreign_keys=[reverted_by_user_id]
     )
+
+
+class MembershipOfferEvent(Base):
+    """Log append-only de cada oferta de plano (order bump) exibida ao cliente.
+
+    Uma linha por evento: a oferta foi mostrada (`shown`), aceita (`accepted`)
+    ou recusada (`dismissed`), em uma das 3 superfícies (`booking` no checkout
+    do agendamento, `conclusao` na conclusão do atendimento no painel,
+    `assinatura` na página /assinatura). Alimenta o painel "Conversão do clube"
+    e serve de guarda contra reexibir a mesma oferta no mesmo fluxo.
+
+    `shown_amount` = valor avulso que o cliente estava prestes a pagar quando a
+    oferta foi exibida (para medir a economia comunicada). GRANT só
+    SELECT/INSERT — nunca se edita nem se apaga (migration 0065).
+    """
+
+    __tablename__ = "membership_offer_events"
+    __table_args__ = (
+        CheckConstraint(
+            "shown_amount IS NULL OR shown_amount >= 0",
+            name="membership_offer_events_amount_nonneg",
+        ),
+        Index(
+            "idx_membership_offer_events_org_created",
+            "organization_id",
+            "created_at",
+        ),
+        Index(
+            "idx_membership_offer_events_org_surface",
+            "organization_id",
+            "surface",
+            "outcome",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    surface: Mapped[MembershipOfferSurface] = mapped_column(
+        pg_enum(MembershipOfferSurface, "membership_offer_surface"), nullable=False
+    )
+    outcome: Mapped[MembershipOfferOutcome] = mapped_column(
+        pg_enum(MembershipOfferOutcome, "membership_offer_outcome"), nullable=False
+    )
+    plan_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("membership_plans.id", ondelete="SET NULL")
+    )
+    client_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("clients.id", ondelete="SET NULL")
+    )
+    client_session_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("client_sessions.id", ondelete="SET NULL")
+    )
+    appointment_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("appointments.id", ondelete="SET NULL")
+    )
+    shown_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2))
+    context: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    organization: Mapped["Organization"] = relationship()
+    plan: Mapped[Optional["MembershipPlan"]] = relationship()

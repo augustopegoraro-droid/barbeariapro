@@ -47,6 +47,30 @@ class MembershipStatus(str, enum.Enum):
     cancelada = "cancelada"
 
 
+class PlanAudience(str, enum.Enum):
+    """Público-alvo de um plano do clube de assinatura (vitrine/segmentação)."""
+
+    masculino = "masculino"
+    feminino = "feminino"
+    unissex = "unissex"
+
+
+class MembershipOfferSurface(str, enum.Enum):
+    """Onde uma oferta de plano (order bump) foi exibida ao cliente."""
+
+    booking = "booking"        # checkout do agendamento (site público)
+    conclusao = "conclusao"    # conclusão do atendimento (painel)
+    assinatura = "assinatura"  # página /assinatura (site público)
+
+
+class MembershipOfferOutcome(str, enum.Enum):
+    """Desfecho de uma oferta de plano."""
+
+    shown = "shown"
+    accepted = "accepted"
+    dismissed = "dismissed"
+
+
 class UnitRole(str, enum.Enum):
     owner = "owner"
     manager = "manager"

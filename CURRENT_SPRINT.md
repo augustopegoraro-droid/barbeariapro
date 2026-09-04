@@ -4,6 +4,34 @@
 
 ---
 
+## 🟡 Sessão 2026-09-04 — Clube de assinatura: segmentação de catálogo + order bumps (D-104) — só dev/staging
+
+O prompt pedia "pacotes de assinatura + order bumps"; o dono clarificou que é o **clube de
+assinatura que a barbearia vende ao cliente final** (planos masculino/feminino, corte+barba 2x/mês,
+escova 2x/mês), não o preço do SaaS. Pesquisa competitiva + proposta de pacotes em
+`~/.claude/plans/cheerful-wishing-cake.md`.
+
+- **Backend:** migration `0065` (head `0065`) — `membership_plans` += `audience` (enum PG
+  `plan_audience`), `category`, `headline`, `perks`, `badge`, `display_order`, `is_featured` (todos
+  com default, backfill no-op); tabela append-only `membership_offer_events` (RLS+FORCE, GRANT só
+  SELECT/INSERT). `app/services/membership.py`: `recommend_plan_for_context`, `plan_avulso_equivalent`,
+  `recent_completed_count`, `log_offer_event`, `offer_conversion_summary`. Rotas:
+  `GET /memberships/oferta` + `POST /memberships/oferta/evento` (`memberships.sell`),
+  `GET /memberships/conversao` (`memberships.manage`); `GET /public/{sub}/planos` devolve os campos
+  novos + ordena por `display_order`.
+- **Frontend (só painel):** Bump B em `components/agenda/concluir-dialog.tsx` (bloco "+ Assinatura"
+  ao lado de "+ Produtos") + seção "Vitrine e order bump" em
+  `components/assinaturas/plan-form-dialog.tsx` + hooks em `hooks/use-assinaturas.ts`.
+- **Testes:** `tests/test_membership_offer.py` (+8). Suíte **895 pass / 2 ambientais / 1 skip /
+  0 regressões**. `tsc`/`eslint`/`next build` limpos.
+- **Fora desta fatia (desenhado, não feito):** `membership_addons` (add-on recorrente), Bump A
+  (checkout do agendamento) e Bump C (add-on em `/assinatura`) no site público — dependem de
+  `CONNECT_ENABLED`, adiado pelo dono.
+- **Deploy pendente:** `0065` via `deploy/update.sh` (admin — `barber_app` não cria tipo) + rebuild
+  `backend`/`frontend`. O dono cadastra os planos reais.
+
+---
+
 ## 🟢 Sessão 2026-08-31 — Botões de acesso rápido na venda de produtos — ✅ DEPLOYADO em prod
 
 Otimização da recepção: o `ProdutoPicker` (Venda rápida + bloco "+ Produtos" da conclusão de
