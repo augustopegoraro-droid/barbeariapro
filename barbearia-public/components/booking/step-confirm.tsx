@@ -4,6 +4,7 @@ import { AppointmentSummary } from "@/components/ui/appointment-summary";
 import { IdentificacaoFields } from "@/components/ui/identificacao";
 import { SolidButton, Spinner } from "@/components/ui/buttons";
 import { BackButton } from "@/components/booking/back-button";
+import { OfertaAssinatura } from "@/components/booking/oferta-assinatura";
 
 export function StepConfirm({
   service,
@@ -59,6 +60,8 @@ export function StepConfirm({
           price={service.price}
         />
       </div>
+
+      <OfertaAssinatura servicoId={service.id} />
 
       {needsIdentify ? (
         <form

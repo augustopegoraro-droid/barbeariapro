@@ -27,6 +27,7 @@ from .enums import (
     LoyaltyNivel,
     LoyaltyStatus,
     LoyaltyVoucherStatus,
+    MembershipAddonKind,
     MembershipOfferOutcome,
     MembershipOfferSurface,
     MembershipStatus,
@@ -108,6 +109,8 @@ from .lead import Lead, LeadEvent
 from .conversation import Attachment, Conversation, Message
 from .membership import (
     ClientMembership,
+    ClientMembershipAddon,
+    MembershipAddon,
     MembershipOfferEvent,
     MembershipOrder,
     MembershipPlan,
@@ -133,6 +136,7 @@ __all__ = [
     "DeliveryStatus",
     "IntegrationProvider",
     "IntegrationStatus",
+    "MembershipAddonKind",
     "MembershipOfferOutcome",
     "MembershipOfferSurface",
     "MembershipStatus",
@@ -259,6 +263,9 @@ __all__ = [
     "ClientMembership",
     "MembershipUsage",
     "MembershipOfferEvent",
+    # add-ons do clube de assinatura (Bump C, D-104 Fase 4)
+    "MembershipAddon",
+    "ClientMembershipAddon",
     # compra online de assinatura (Stripe Connect, Feature 2)
     "MembershipOrder",
     # auditoria (Fase 4)

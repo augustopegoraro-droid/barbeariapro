@@ -22,6 +22,7 @@ import json
 import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Annotated, Optional
 from zoneinfo import ZoneInfo
 
@@ -84,6 +85,9 @@ from models import (
     ConsentStatus,
     ContactChannel,
     FeedPost,
+    MembershipAddon,
+    MembershipOfferOutcome,
+    MembershipOfferSurface,
     MembershipOrder,
     MembershipPlan,
     MembershipPlanItem,
@@ -1424,6 +1428,13 @@ async def public_unregister_device(
 # confirmar o pagamento — assim ninguém ganha pacote abandonando o checkout.
 
 
+class PublicAddonOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    price: float
+
+
 class PublicPlanOut(BaseModel):
     id: int
     name: str
@@ -1441,14 +1452,40 @@ class PublicPlanOut(BaseModel):
     is_featured: bool = False
     # Soma do preço avulso dos serviços do combo (base do "você economiza").
     avulso_equivalente: float = 0.0
+    # Add-ons compatíveis (Bump C, D-104 Fase 4) — só populado quando
+    # `is_featured` (o bump só aparece em planos em destaque, por design).
+    # "Compatível" = mesma org + ativo (catálogo é por org, não por plano).
+    addons: list[PublicAddonOut] = []
 
 
 class PublicPlansOut(BaseModel):
     plans: list[PublicPlanOut]
 
 
+class OfertaPlanOut(BaseModel):
+    id: int
+    name: str
+    headline: Optional[str] = None
+    badge: Optional[str] = None
+    price: float
+    included_uses: Optional[int] = None
+    duration_days: int
+    avulso_equivalente: float = 0.0
+
+
+class OfertaOut(BaseModel):
+    plan: Optional[OfertaPlanOut] = None
+
+
+class OfertaEventoIn(BaseModel):
+    outcome: MembershipOfferOutcome
+    plan_id: Optional[int] = Field(None, gt=0)
+    shown_amount: Optional[Decimal] = Field(None, ge=Decimal("0"))
+
+
 class CheckoutIn(BaseModel):
     plan_id: int
+    addon_ids: list[int] = Field(default_factory=list)
 
 
 class CheckoutOut(BaseModel):
@@ -1524,6 +1561,30 @@ async def _plan_avulso_totals(db: AsyncSession, plan_ids: list[int]) -> dict[int
     return {plan_id: float(total) for plan_id, total in rows}
 
 
+async def _active_org_addons(db: AsyncSession) -> list[PublicAddonOut]:
+    """Add-ons ativos da org (RLS já escopa) — reusado por planos featured."""
+    rows = (
+        (
+            await db.execute(
+                select(MembershipAddon)
+                .where(MembershipAddon.is_active.is_(True))
+                .order_by(MembershipAddon.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        PublicAddonOut(
+            id=a.id,
+            name=a.name,
+            kind=a.kind.value if hasattr(a.kind, "value") else a.kind,
+            price=float(a.price),
+        )
+        for a in rows
+    ]
+
+
 @router.get("/planos", response_model=PublicPlansOut)
 @limiter.limit("60/minute")
 async def public_plans(
@@ -1568,6 +1629,9 @@ async def public_plans(
         )
         services_by_plan = await _plan_services(db, [p.id for p in rows])
         avulso_by_plan = await _plan_avulso_totals(db, [p.id for p in rows])
+        addons = (
+            await _active_org_addons(db) if any(p.is_featured for p in rows) else []
+        )
         plans = [
             PublicPlanOut(
                 id=p.id,
@@ -1586,6 +1650,7 @@ async def public_plans(
                 badge=p.badge,
                 is_featured=p.is_featured,
                 avulso_equivalente=avulso_by_plan.get(p.id, 0.0),
+                addons=addons if p.is_featured else [],
             )
             for p in rows
             # plano sem combo não é vendável (a criação da assinatura recusaria)
@@ -1600,6 +1665,94 @@ async def public_plans(
     except Exception:
         pass
     return out
+
+
+async def _client_session_from_cookie(
+    request: Request, db: AsyncSession
+) -> Optional[ClientSession]:
+    """Sessão do cliente pelo cookie, se houver — SEM exigir (≠
+    `get_client_session`). Usado pelo Bump A: o cartão de oferta funciona para
+    quem ainda não se identificou (só não exclui quem já é assinante)."""
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    return (
+        await db.execute(
+            select(ClientSession)
+            .where(ClientSession.token_hash == hash_refresh_token(token))
+            .where(ClientSession.revoked_at.is_(None))
+        )
+    ).scalar_one_or_none()
+
+
+@router.get("/oferta", response_model=OfertaOut)
+@limiter.limit("60/minute")
+async def oferta_publica(
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+    servico_id: Optional[int] = Query(None, gt=0),
+) -> OfertaOut:
+    """Plano em destaque para oferecer no checkout do agendamento (Bump A).
+
+    Simplificação deliberada em relação ao desenho original: o gatilho é "o
+    combo de um plano em destaque cobre o serviço escolhido" (sem filtrar por
+    público, que o `Service` não carrega). Sem plano recomendado (org não
+    vende online, nenhum destaque cobre o serviço, ou o visitante já assina)
+    → `plan: null`; o frontend simplesmente não mostra o cartão.
+    """
+    org = await _load_org(db, org_id)
+    if not _sells_online(org):
+        return OfertaOut(plan=None)
+
+    session = await _client_session_from_cookie(request, db)
+    plan = await membership_svc.recommend_plan_for_context(
+        db,
+        service_ids=[servico_id] if servico_id else None,
+        client_id=session.client_id if session else None,
+    )
+    if plan is None:
+        return OfertaOut(plan=None)
+
+    avulso = await membership_svc.plan_avulso_equivalent(db, plan)
+    return OfertaOut(
+        plan=OfertaPlanOut(
+            id=plan.id,
+            name=plan.name,
+            headline=plan.headline,
+            badge=plan.badge,
+            price=float(plan.price),
+            included_uses=plan.included_uses,
+            duration_days=plan.duration_days,
+            avulso_equivalente=float(avulso),
+        )
+    )
+
+
+@router.post("/oferta/evento", status_code=http_status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
+async def registrar_evento_oferta_publica(
+    body: OfertaEventoIn,
+    request: Request,
+    subdomain: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    org_id: Annotated[int, Depends(get_public_org)],
+) -> None:
+    """Espelho de `POST /memberships/oferta/evento` (painel) para a sessão
+    pública — grava `shown`/`accepted`/`dismissed` do Bump A. Barato e
+    append-only, alimenta o painel de conversão do clube."""
+    session = await _client_session_from_cookie(request, db)
+    await membership_svc.log_offer_event(
+        db,
+        organization_id=org_id,
+        surface=MembershipOfferSurface.booking,
+        outcome=body.outcome,
+        plan_id=body.plan_id,
+        client_session_id=session.id if session else None,
+        shown_amount=body.shown_amount,
+    )
+    await db.commit()
 
 
 @router.post(
@@ -1644,7 +1797,24 @@ async def create_membership_checkout(
             http_status.HTTP_409_CONFLICT, "Você já tem uma assinatura ativa."
         )
 
+    addon_snapshots: list[dict] = []
+    if body.addon_ids:
+        addons = (
+            await db.execute(
+                select(MembershipAddon)
+                .where(MembershipAddon.id.in_(body.addon_ids))
+                .where(MembershipAddon.is_active.is_(True))
+            )
+        ).scalars().all()
+        if {a.id for a in addons} != set(body.addon_ids):
+            raise HTTPException(
+                http_status.HTTP_404_NOT_FOUND, "Add-on não encontrado ou arquivado."
+            )
+        addon_snapshots = [membership_svc.addon_snapshot(a) for a in addons]
+
     amount_cents = int((plan.price * 100).to_integral_value())
+    for snap in addon_snapshots:
+        amount_cents += int((Decimal(str(snap["price"])) * 100).to_integral_value())
     fee_cents = connect_svc.resolve_fee_cents(org, amount_cents)
 
     client = (
@@ -1663,6 +1833,7 @@ async def create_membership_checkout(
         included_uses=plan.included_uses,
         duration_days=plan.duration_days,
         combo_snapshot=servicos,
+        addons_snapshot=addon_snapshots,
         status="pending",
         provider="stripe_connect",
         connected_account_id=org.stripe_connected_account_id,

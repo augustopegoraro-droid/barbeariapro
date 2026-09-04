@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.inventory import apply_stock_movement
 from app.services.scheduling import barber_has_conflict
 from models import (
     Appointment,
@@ -37,6 +38,9 @@ from models import (
     BarberService,
     Client,
     ClientMembership,
+    ClientMembershipAddon,
+    MembershipAddon,
+    MembershipAddonKind,
     MembershipOfferEvent,
     MembershipOfferOutcome,
     MembershipOfferSurface,
@@ -46,6 +50,7 @@ from models import (
     MembershipUsage,
     PlanAudience,
     Service,
+    StockMovementType,
     Unit,
 )
 
@@ -203,6 +208,7 @@ async def create_membership(
     unlimited_use_value=_UNSET,
     price=_UNSET,
     duration_days=_UNSET,
+    addons: Optional[Sequence[dict]] = None,
 ) -> ClientMembership:
     """Cria uma assinatura gravando os snapshots imutáveis a partir de uma spec.
 
@@ -214,6 +220,10 @@ async def create_membership(
 
     ``unit_recognized_value`` é SEMPRE recomputado da spec final (nunca herdado
     do plano). Sem restrição de forma do combo aqui — isso é só do catálogo.
+
+    ``addons`` (opcional, Bump A/C, D-104 Fase 4): snapshots já resolvidos
+    (ver ``resolve_addons_for_sale``/``MembershipOrder.addons_snapshot``) —
+    aplicados por ``apply_membership_addons`` depois da assinatura criada.
     """
     client = (
         await db.execute(select(Client).where(Client.id == client_id))
@@ -337,6 +347,10 @@ async def create_membership(
     )
     db.add(membership)
     await db.flush()
+    if addons:
+        await apply_membership_addons(
+            db, membership, addons, created_by_user_id=sold_by_user_id
+        )
     return membership
 
 
@@ -348,6 +362,7 @@ async def sell_membership(
     plan_id: int,
     sold_by_user_id: Optional[int],
     start_at: Optional[datetime] = None,
+    addons: Optional[Sequence[dict]] = None,
 ) -> ClientMembership:
     """Contrata um plano de catálogo (caso particular de ``create_membership``)."""
     return await create_membership(
@@ -357,6 +372,7 @@ async def sell_membership(
         sold_by_user_id=sold_by_user_id,
         start_at=start_at,
         plan_id=plan_id,
+        addons=addons,
     )
 
 
@@ -376,6 +392,34 @@ async def renew_membership(
         old.status = MembershipStatus.vencida
     start = _now_utc()
     end = compute_end_at(start, old.duration_days)
+
+    # `old.price_paid`/`included_uses`/`combo_snapshot` já têm o efeito dos
+    # add-ons contratados embutido (apply_membership_addons soma em cima do
+    # que já existia). Clonar isso E reaplicar os add-ons de novo abaixo
+    # contaria o efeito 2×. Por isso subtraímos aqui a contribuição dos
+    # add-ons antigos, reconstruindo a base "só plano" — que os add-ons
+    # clonados voltam a inflar do zero, dando o MESMO total de antes (steady
+    # state), não um total crescente a cada renovação.
+    old_addons = (
+        await db.execute(
+            select(ClientMembershipAddon).where(
+                ClientMembershipAddon.client_membership_id == old.id
+            )
+        )
+    ).scalars().all()
+    base_price = Decimal(old.price_paid)
+    base_included_uses = old.included_uses
+    base_combo = list(old.combo_snapshot or [])
+    for a in old_addons:
+        base_price -= Decimal(a.price_snapshot)
+        if a.kind_snapshot == MembershipAddonKind.uso_extra and base_included_uses is not None:
+            base_included_uses -= int(a.extra_uses_snapshot or 0)
+        elif a.kind_snapshot == MembershipAddonKind.escopo and a.extra_service_id_snapshot is not None:
+            base_combo = [
+                c for c in base_combo
+                if c["service_id"] != a.extra_service_id_snapshot
+            ]
+
     membership = ClientMembership(
         organization_id=old.organization_id,
         client_id=old.client_id,
@@ -383,16 +427,28 @@ async def renew_membership(
         status=MembershipStatus.ativa,
         start_at=start,
         end_at=end,
-        price_paid=Decimal(old.price_paid),
-        included_uses=old.included_uses,
+        price_paid=base_price,
+        included_uses=base_included_uses,
         used_uses=0,
         unit_recognized_value=Decimal(old.unit_recognized_value),
-        combo_snapshot=old.combo_snapshot,
+        combo_snapshot=base_combo,
         duration_days=old.duration_days,
         sold_by_user_id=sold_by_user_id,
     )
     db.add(membership)
     await db.flush()
+
+    # Clona os add-ons ativos da assinatura anterior — reaplica o efeito
+    # (inclusive baixa de estoque de add-on "produto") a cada renovação
+    # manual, que É o ciclo de cobrança recorrente hoje (D-51: renovação
+    # manual, sem auto-billing).
+    if old_addons:
+        await apply_membership_addons(
+            db,
+            membership,
+            [_client_addon_snapshot(a) for a in old_addons],
+            created_by_user_id=sold_by_user_id,
+        )
     return membership
 
 
@@ -446,6 +502,137 @@ async def resolve_membership_for_autopick(
             "Cliente tem mais de uma assinatura ativa; informe qual usar (membership_id).",
         )
     return memberships[0]
+
+
+# ─── add-ons do clube (Bump C, D-104 Fase 4) ──────────────────────────────────
+
+
+def addon_snapshot(addon: MembershipAddon) -> dict:
+    """Snapshot serializável (JSONB-friendly) de um ``MembershipAddon`` ativo."""
+    return {
+        "addon_id": addon.id,
+        "name": addon.name,
+        "kind": addon.kind.value if hasattr(addon.kind, "value") else addon.kind,
+        "price": str(Decimal(addon.price).quantize(_CENTS)),
+        "extra_uses": addon.extra_uses,
+        "extra_service_id": addon.extra_service_id,
+        "variant_id": addon.variant_id,
+    }
+
+
+def _client_addon_snapshot(row: ClientMembershipAddon) -> dict:
+    """Mesmo formato de ``_addon_snapshot``, a partir de um add-on já
+    contratado (usado para clonar na renovação)."""
+    return {
+        "addon_id": row.addon_id,
+        "name": row.name_snapshot,
+        "kind": (
+            row.kind_snapshot.value
+            if hasattr(row.kind_snapshot, "value")
+            else row.kind_snapshot
+        ),
+        "price": str(Decimal(row.price_snapshot).quantize(_CENTS)),
+        "extra_uses": row.extra_uses_snapshot,
+        "extra_service_id": row.extra_service_id_snapshot,
+        "variant_id": row.variant_id_snapshot,
+    }
+
+
+async def resolve_addons_for_sale(
+    db: AsyncSession, *, organization_id: int, addon_ids: Sequence[int]
+) -> list[dict]:
+    """Resolve ids de add-on em snapshots prontos p/ ``apply_membership_addons``.
+
+    Só aceita add-ons ATIVOS da própria org (a venda no painel exige o add-on
+    "fresco" no momento da venda — diferente do checkout público, que trava o
+    snapshot em ``MembershipOrder.addons_snapshot`` e nunca re-resolve).
+    """
+    if not addon_ids:
+        return []
+    addons = (
+        await db.execute(
+            select(MembershipAddon)
+            .where(MembershipAddon.id.in_(addon_ids))
+            .where(MembershipAddon.organization_id == organization_id)
+            .where(MembershipAddon.is_active.is_(True))
+        )
+    ).scalars().all()
+    found = {a.id for a in addons}
+    missing = set(addon_ids) - found
+    if missing:
+        raise HTTPException(
+            http_status.HTTP_404_NOT_FOUND,
+            "Add-on não encontrado ou arquivado.",
+        )
+    return [addon_snapshot(a) for a in addons]
+
+
+async def apply_membership_addons(
+    db: AsyncSession,
+    membership: ClientMembership,
+    addon_snapshots: Sequence[dict],
+    *,
+    created_by_user_id: Optional[int] = None,
+) -> None:
+    """Aplica o efeito de cada add-on snapshot na assinatura + grava
+    ``ClientMembershipAddon`` (histórico append-only).
+
+    Chamado tanto pela venda/renovação no painel (snapshots "frescos", vindos
+    de ``resolve_addons_for_sale``) quanto pelo webhook do Connect (snapshot já
+    travado em ``MembershipOrder.addons_snapshot`` no checkout — não re-resolve
+    ``MembershipAddon``, evita o caso do add-on ter sido arquivado entre o
+    checkout e a confirmação do pagamento). Efeito por ``kind``:
+    - ``produto`` → soma o preço + baixa 1 unidade da variação via
+      ``apply_stock_movement`` (409 se saldo insuficiente).
+    - ``uso_extra`` → soma o preço + acrescenta usos ao ciclo (no-op se o plano
+      já é ilimitado).
+    - ``escopo`` → soma o preço + acrescenta o serviço ao combo da assinatura.
+    Não faz commit.
+    """
+    for snap in addon_snapshots:
+        price = Decimal(str(snap["price"])).quantize(_CENTS)
+        kind = snap["kind"]
+        row = ClientMembershipAddon(
+            organization_id=membership.organization_id,
+            client_membership_id=membership.id,
+            addon_id=snap["addon_id"],
+            name_snapshot=snap["name"],
+            kind_snapshot=kind,
+            price_snapshot=price,
+            extra_uses_snapshot=snap.get("extra_uses"),
+            extra_service_id_snapshot=snap.get("extra_service_id"),
+            variant_id_snapshot=snap.get("variant_id"),
+        )
+        db.add(row)
+        membership.price_paid = Decimal(membership.price_paid) + price
+
+        if kind == MembershipAddonKind.uso_extra.value:
+            if membership.included_uses is not None:
+                membership.included_uses += int(snap["extra_uses"])
+        elif kind == MembershipAddonKind.escopo.value:
+            combo = list(membership.combo_snapshot or [])
+            combo.append(
+                {
+                    "service_id": snap["extra_service_id"],
+                    "base_price": "0.00",
+                    "position": len(combo) + 1,
+                }
+            )
+            membership.combo_snapshot = combo
+        elif kind == MembershipAddonKind.produto.value:
+            await db.flush()  # garante row.id p/ reference_id
+            await apply_stock_movement(
+                db,
+                organization_id=membership.organization_id,
+                variant_id=snap["variant_id"],
+                movement_type=StockMovementType.saida_ajuste,
+                qty_delta=Decimal("-1"),
+                reason="Consumo de add-on de assinatura",
+                reference_type="membership_addon",
+                reference_id=row.id,
+                created_by_user_id=created_by_user_id,
+            )
+    await db.flush()
 
 
 # ─── order bumps: recomendação de plano + log de conversão ───────────────────

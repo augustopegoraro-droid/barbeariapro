@@ -41,6 +41,11 @@ PUBLIC_PATHS = {
     "/public/{subdomain}/feed",  # mural de novidades: conteúdo de vitrine, sem sessão
     "/public/{subdomain}/auth/session",
     "/public/{subdomain}/planos",  # vitrine de assinaturas: público, sem sessão
+    # Bump A (D-104 Fase 4): funciona sem sessão de propósito (o visitante
+    # pode ainda não estar identificado no checkout do agendamento); escopado
+    # por subdomínio/RLS como as demais rotas de vitrine acima.
+    "/public/{subdomain}/oferta",
+    "/public/{subdomain}/oferta/evento",
 }
 
 # Pontos de entrada de autenticação: se um deles aparece na árvore de deps da

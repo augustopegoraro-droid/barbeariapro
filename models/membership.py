@@ -40,6 +40,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 from .enums import (
+    MembershipAddonKind,
     MembershipOfferOutcome,
     MembershipOfferSurface,
     MembershipStatus,
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
     from .client import Client
     from .client_session import ClientSession
     from .organization import Organization
+    from .product import ProductVariant
     from .service import Service
     from .user import User
 
@@ -243,6 +245,9 @@ class ClientMembership(Base):
     usages: Mapped[List["MembershipUsage"]] = relationship(
         back_populates="membership", cascade="all, delete-orphan"
     )
+    addons: Mapped[List["ClientMembershipAddon"]] = relationship(
+        back_populates="membership", cascade="all, delete-orphan"
+    )
 
 
 class MembershipOrder(Base):
@@ -301,6 +306,12 @@ class MembershipOrder(Base):
     included_uses: Mapped[Optional[int]] = mapped_column(Integer)
     duration_days: Mapped[Optional[int]] = mapped_column(Integer)
     combo_snapshot: Mapped[Optional[list]] = mapped_column(JSONB)
+    # Add-ons escolhidos no checkout — travados aqui, aplicados pelo webhook
+    # (`_confirm_order`) sem precisar re-resolver `MembershipAddon` (evita o
+    # caso do add-on ter sido arquivado entre o checkout e a confirmação).
+    addons_snapshot: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     # ── ciclo de vida / gateway ────────────────────────────────────────────
     status: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'pending'")
@@ -453,3 +464,110 @@ class MembershipOfferEvent(Base):
 
     organization: Mapped["Organization"] = relationship()
     plan: Mapped[Optional["MembershipPlan"]] = relationship()
+
+
+class MembershipAddon(Base):
+    """Catálogo de add-ons do clube de assinatura (Bump C, D-104 Fase 4).
+
+    Por org, não por plano — "compatível" com um order bump = mesma org + ativo.
+    3 efeitos possíveis (`kind`): `produto` (soma preço + baixa de estoque de
+    uma `ProductVariant`), `uso_extra` (soma preço + acrescenta usos ao ciclo),
+    `escopo` (soma preço + acrescenta um serviço ao combo). Nunca se apaga, só
+    se arquiva (`is_active=false`) — quem já contratou mantém o snapshot em
+    `ClientMembershipAddon`.
+    """
+
+    __tablename__ = "membership_addons"
+    __table_args__ = (
+        CheckConstraint("price >= 0", name="membership_addons_price_nonneg"),
+        CheckConstraint(
+            "extra_uses IS NULL OR extra_uses > 0",
+            name="membership_addons_extra_uses_pos",
+        ),
+        CheckConstraint(
+            "(kind = 'produto' AND variant_id IS NOT NULL) OR "
+            "(kind = 'uso_extra' AND extra_uses IS NOT NULL) OR "
+            "(kind = 'escopo' AND extra_service_id IS NOT NULL)",
+            name="membership_addons_target_matches_kind",
+        ),
+        Index("idx_membership_addons_org", "organization_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[MembershipAddonKind] = mapped_column(
+        pg_enum(MembershipAddonKind, "membership_addon_kind"), nullable=False
+    )
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    variant_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("product_variants.id", ondelete="RESTRICT")
+    )
+    extra_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    extra_service_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("services.id", ondelete="RESTRICT")
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    organization: Mapped["Organization"] = relationship()
+    variant: Mapped[Optional["ProductVariant"]] = relationship()
+    extra_service: Mapped[Optional["Service"]] = relationship()
+
+
+class ClientMembershipAddon(Base):
+    """Add-on contratado por uma assinatura (1 linha por add-on ativo).
+
+    Snapshot imutável no momento da venda/renovação — mesmo racional de
+    `ClientMembership.combo_snapshot`. Append-only: nunca se edita um add-on já
+    contratado (cancelar = cancelar a assinatura inteira). GRANT sem UPDATE/
+    DELETE, molde `MembershipOfferEvent`/0065.
+    """
+
+    __tablename__ = "client_membership_addons"
+    __table_args__ = (
+        CheckConstraint(
+            "price_snapshot >= 0", name="client_membership_addons_price_nonneg"
+        ),
+        Index("idx_client_membership_addons_membership", "client_membership_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    client_membership_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("client_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    addon_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("membership_addons.id", ondelete="RESTRICT"), nullable=False
+    )
+    name_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    kind_snapshot: Mapped[MembershipAddonKind] = mapped_column(
+        pg_enum(MembershipAddonKind, "membership_addon_kind"), nullable=False
+    )
+    price_snapshot: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    extra_uses_snapshot: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    extra_service_id_snapshot: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("services.id", ondelete="SET NULL")
+    )
+    variant_id_snapshot: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("product_variants.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    organization: Mapped["Organization"] = relationship()
+    membership: Mapped["ClientMembership"] = relationship(
+        back_populates="addons", foreign_keys=[client_membership_id]
+    )
+    addon: Mapped["MembershipAddon"] = relationship()

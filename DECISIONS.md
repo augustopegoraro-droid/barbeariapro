@@ -3788,6 +3788,121 @@ sem token, `/docs` 404, `app.`/apex/`api.` OK por HTTPS, logs do backend sem err
 `/admin/assinaturas` (números-exemplo no plano, a validar) e marcar "usar como oferta" nos que devem
 virar order bump.
 
+### D-104 — Fase 4: Bump A + Bump C + `membership_addons` — 2026-09-04 (código completo, ⛔ NÃO
+DEPLOYADO, migration `0066`)
+
+**Escopo.** Fecha o que a fatia 1 deixou fora: `membership_addons`, Bump A (checkout do
+agendamento, site público) e Bump C (add-on em `/assinatura`, site público). Plano em
+`/Users/apleandro/.claude/plans/piped-percolating-kazoo.md`, derivado do plano original
+(`cheerful-wishing-cake.md`, seções 3.3/Fase 4) após dois agentes de exploração confirmarem contra
+o código real o que já existia (fatia 1 inteira + Bump B) vs. o que faltava (só isto).
+
+**Schema (migration `0066`, `down_revision=0065`, molde `product_purchase_requests`/0057 +
+`membership_offer_events`/0065).** `membership_addons` — catálogo por org (`id`, `name`, `kind`
+enum `membership_addon_kind` [`produto`/`uso_extra`/`escopo`], `price`, `variant_id`/`extra_uses`/
+`extra_service_id` conforme o `kind`, CHECK "alvo bate com o kind" — molde do CHECK de alvo do
+D-98 —, `is_active`; RLS+FORCE, GRANT SELECT/INSERT/UPDATE sem DELETE — arquiva via `is_active`).
+`client_membership_addons` — add-ons contratados (1 linha por add-on ativo numa `ClientMembership`,
+snapshot imutável: `name_snapshot`/`kind_snapshot`/`price_snapshot`/etc.; RLS+FORCE, GRANT só
+SELECT/INSERT — append-only, nunca se edita um add-on já contratado). `membership_orders` +=
+`addons_snapshot` jsonb (trava os add-ons escolhidos no checkout público, consumido pelo webhook
+sem re-resolver `MembershipAddon` — evita o caso do add-on ter sido arquivado entre o checkout e a
+confirmação do pagamento).
+
+**Serviço (`app/services/membership.py`).** `resolve_addons_for_sale` (ids → snapshots, só
+add-ons ATIVOS da org — usado pela venda "fresca" do painel) e `apply_membership_addons` (aplica o
+efeito por `kind` + grava `ClientMembershipAddon`; chamada tanto por `create_membership`/venda do
+painel quanto pelo webhook do Connect, que já tem o snapshot pronto). Efeito por `kind`: `produto`
+→ soma o preço + baixa 1 unidade da variação via `apply_stock_movement` (reusa o valor de enum já
+existente `saida_ajuste` — **não** cria valor novo, `ALTER TYPE ADD VALUE` não roda na mesma
+transação que já o usaria, lição da Fase 2/D-90); `uso_extra` → soma o preço + acrescenta usos ao
+`included_uses` (no-op se já ilimitado); `escopo` → soma o preço + acrescenta o serviço ao
+`combo_snapshot`. `create_membership`/`sell_membership` ganham `addons: Optional[list[dict]]`
+opcional (retrocompatível — `None`/vazio = comportamento idêntico a antes).
+
+**Bug real achado e corrigido nesta sessão (`renew_membership`).** A implementação inicial clonava
+`old.price_paid`/`included_uses`/`combo_snapshot` (que JÁ embutem o efeito de qualquer add-on
+contratado, aplicado por cima na venda original) e depois reaplicava os mesmos add-ons clonados —
+dobrando o valor a cada renovação (2 add-ons de R$19,90 numa assinatura de R$139,90 virava R$179,70
+na renovação, não R$159,80). Corrigido: `renew_membership` agora subtrai a contribuição de cada
+add-on antigo (`price_snapshot`, `extra_uses_snapshot`, o `service_id` do `escopo`) do que está
+sendo clonado, reconstruindo a base "só plano" — que os add-ons clonados voltam a inflar do zero,
+dando o MESMO total do ciclo anterior (steady state), não um total crescente.
+`tests/test_membership_addons.py::test_renovacao_clona_addon_produto_e_baixa_estoque_de_novo` foi
+quem pegou o bug (escrito ANTES do fix, falhou com `179.70 != 159.80` na 1ª rodada).
+
+**API painel (`app/api/memberships.py`).** CRUD `/memberships/addons` (`GET` com
+`memberships.view`; `POST`/`PATCH`/`DELETE→arquiva` com `memberships.manage` — **decisão desta
+sessão: reusa a permissão existente**, sem permissão nova, sem precisar rodar
+`scripts/sync_authz_catalog.py` no próximo deploy). `SellIn` ganha `addon_ids: list[int]`;
+`vender_assinatura` resolve via `resolve_addons_for_sale` antes de chamar `create_membership`.
+
+**API público (`app/api/public.py`).** `GET /public/{sub}/oferta?servico_id=` (Bump A) — **não
+exige sessão** (o visitante pode ainda não estar identificado no checkout do agendamento; só não
+exclui quem já assina quando há cookie), gatilho simplificado em relação ao plano original: "o
+combo de um plano `is_featured` cobre o serviço" (sem filtro de público — `Service` não carrega
+audience). `POST /public/{sub}/oferta/evento` — espelho público do endpoint do painel, grava
+`shown`/`accepted`/`dismissed` com `surface="booking"`. Ambas as rotas novas adicionadas a
+`PUBLIC_PATHS` em `tests/test_authz_coverage.py` (o teste de cobertura de auth barrou a 1ª tentativa
+sem isso — funcionando como desenhado). `PublicPlanOut.addons` — todos os `MembershipAddon` ativos
+da org, só populado quando `is_featured` (compatibilidade = mesma org + ativo, o schema não tem
+vínculo add-on↔plano). `CheckoutIn.addon_ids` soma no `amount_cents` e grava `addons_snapshot`.
+
+**Webhook Connect (`app/api/connect.py::_confirm_order`).** Aplica `order.addons_snapshot` na
+`ClientMembership` recém-criada (sem re-resolver `MembershipAddon`) e loga
+`log_offer_event(surface=assinatura, outcome=accepted)` — antes o webhook não gravava conversão
+nenhuma do Bump C.
+
+**Frontend site público (`barbearia-public/`).** `lib/api.ts`: `MembershipPlanPublic` ganha os
+campos de vitrine que o backend já devolvia desde a fatia 1 mas não estavam tipados
+(`audience`/`category`/`headline`/`perks`/`badge`/`avulso_equivalente`/`addons`); `api.oferta`/
+`api.registrarEventoOferta` novos; `api.checkout` ganha `addonIds`. `components/booking/
+oferta-assinatura.tsx` (novo, client) — plugado em `step-confirm.tsx` entre o resumo e o form de
+confirmação; loga `shown` ao montar, `accepted`/`dismissed` na interação; nunca bloqueia o fluxo
+(sem oferta → não renderiza nada). `components/assinatura/planos.tsx` virou client component (era
+server/zero-JS): toggle Masculino/Feminino/Todos (só aparece se a vitrine tiver mais de 1 público) +
+`AddonPicker` (checkboxes) nos planos `is_featured`, "você economiza" quando `avulso_equivalente >
+price`. `checkout-button.tsx` ganha `addonIds` opcional.
+
+**Frontend painel (`barbearia-frontend/`).** `hooks/use-assinaturas.ts`: `useAddons`/
+`useSaveAddon`/`useArchiveAddon` (molde `usePlanos`/`useSavePlano`); `VenderAssinaturaPayload` ganha
+`addon_ids`. `components/assinaturas/addon-form-dialog.tsx` (novo — tipo/alvo só na criação, editar
+depois só troca nome/preço/ativo, espelhando a imutabilidade do `AddonUpdate` no backend) +
+`addon-list.tsx` (novo, molde `plan-list.tsx`). `/admin/assinaturas` ganha 3ª aba "Add-ons"
+(`TAB_OPTIONS` em `constants.ts`) + card "Conversão do clube" no topo da aba Planos, consumindo o
+hook `useConversaoClube` que já existia órfão desde a fatia 1 (só plugado, nada novo no backend).
+
+**Testes.** `tests/test_membership_addons.py` (12: CRUD + RBAC recepção-lê-não-gerencia, os 3
+`kind` na venda pelo painel — soma preço/usos/combo, baixa de estoque, 409 de saldo insuficiente,
+404 de add-on arquivado —, renovação clona e reaplica, regressão sem `addon_ids` idêntica a antes).
+`tests/test_public_membership_addons.py` (6: `GET /oferta` com e sem `CONNECT_ENABLED`, `POST
+/oferta/evento` sem exigir sessão, `GET /planos` só expõe `addons` em `is_featured`, checkout soma
+`amount_cents` e grava snapshot, webhook aplica o add-on + loga `accepted`). Suíte **913 pass / 2
+ambientais / 1 skip / 0 regressões** (baseline fatia 1: 895; +18). `tsc`/`next build` limpos nos
+dois frontends (eslint segue não executável neste repo — sem `eslint.config.*`, débito
+pré-existente, não desta sessão).
+
+**Achado colateral corrigido nesta sessão (não é regressão, é limpeza de dado de teste):**
+`tests/test_membership_offer.py` tem uma fragilidade pré-existente — `_create_featured_plan`/
+`_make_client` rodam ANTES do `try/finally` de limpeza em alguns testes; se `_make_client` falhar
+(ex.: colisão de telefone gerado por timestamp, mais provável rodando a suíte muitas vezes seguidas
+em pouco tempo), o plano `is_featured` recém-criado fica órfão (ativo, não arquivado) e passa a ser
+recomendado por engano em execuções futuras (`recommend_plan_for_context` pega o 1º `is_featured`
+que cobre o serviço). Aconteceu 2× nesta sessão (staging local, muitas execuções em sequência);
+diagnosticado e limpo via SQL direto (`DELETE FROM membership_plans/membership_plan_items WHERE
+id=...`). **Não corrigido no código** (fora do escopo desta fatia — é do arquivo de teste da fatia
+1) — registrado aqui para não reabrir a investigação se reaparecer.
+
+**Fora de escopo, decidido:** cobrança automática recorrente de add-on por cron (a renovação já é
+manual — D-51 — "cobrar no ciclo" = reaplicar no clique de renovar, não um job); toggle de público
+além de Masculino/Feminino/Todos; taxa de adesão/kit de boas-vindas (cobrança única, desenhada no
+plano original, não implementada).
+
+**Deploy:** **NÃO EXECUTADO** — mesmo motivo do D-100 Feature 2: os dois bumps do site público só
+funcionam de verdade com `CONNECT_ENABLED=true` (hoje só em modo de teste em prod,
+[[feed-e-stripe-connect-d100]]); migration `0066` fica pendente do mesmo "próximo passo do dono"
+(completar o onboarding de teste da conta connected) antes de fazer sentido subir esta fatia.
+
 ---
 
 ## Dívida técnica conhecida (não resolver sem discussão)

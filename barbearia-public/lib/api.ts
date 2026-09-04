@@ -167,6 +167,14 @@ export async function fetchFeed(
    é o que faz a página de assinatura sair do "em breve" sem esperar o ISR. */
 export const PLANS_TAG = "public-plans";
 
+/* Add-on de assinatura (Bump C) — soma preço + 1 dos 3 efeitos. */
+export type MembershipAddonPublic = {
+  id: number;
+  name: string;
+  kind: "produto" | "uso_extra" | "escopo";
+  price: number;
+};
+
 /* Plano de assinatura/pacote vendável no site. `included_uses` null = uso
    ilimitado dentro da vigência. */
 export type MembershipPlanPublic = {
@@ -177,6 +185,27 @@ export type MembershipPlanPublic = {
   included_uses: number | null;
   duration_days: number;
   services: string[];
+  // ── vitrine / order bump (0065/0066) ──────────────────────────────────
+  audience: "masculino" | "feminino" | "unissex";
+  category: string | null;
+  headline: string | null;
+  perks: string[];
+  badge: string | null;
+  is_featured: boolean;
+  avulso_equivalente: number;
+  addons: MembershipAddonPublic[];
+};
+
+/* Plano recomendado no contexto do checkout do agendamento (Bump A). */
+export type OfertaPlano = {
+  id: number;
+  name: string;
+  headline: string | null;
+  badge: string | null;
+  price: number;
+  included_uses: number | null;
+  duration_days: number;
+  avulso_equivalente: number;
 };
 
 /* Assinatura vigente do cliente da sessão atual (`GET /me/assinatura`). */
@@ -285,14 +314,31 @@ export const api = {
   /* ─── Assinatura online (Stripe Connect) ──────────────────────────────── */
   planos: () => request<{ plans: MembershipPlanPublic[] }>("/planos"),
   /* Abre o checkout na Stripe. Devolve a URL para onde redirecionar — nada é
-     confirmado aqui: quem cria a assinatura é o webhook, depois do pagamento. */
-  checkout: (planId: number) =>
+     confirmado aqui: quem cria a assinatura é o webhook, depois do pagamento.
+     `addonIds` (Bump C) somam no valor cobrado. */
+  checkout: (planId: number, addonIds: number[] = []) =>
     request<{ checkout_url: string; order_public_id: string }>(
       "/memberships/checkout",
-      { method: "POST", body: JSON.stringify({ plan_id: planId }) },
+      {
+        method: "POST",
+        body: JSON.stringify({ plan_id: planId, addon_ids: addonIds }),
+      },
     ),
   /* `null` quando a sessão não tem assinatura vigente. */
   minhaAssinatura: () => request<ActiveMembership | null>("/me/assinatura"),
+
+  /* ─── Order bump do checkout do agendamento (Bump A) ──────────────────── */
+  /* `plan: null` = nenhum plano em destaque cobre o serviço, ou a barbearia
+     não vende online, ou o visitante já assina — o card simplesmente some.
+     Funciona sem sessão (visitante ainda não identificado). */
+  oferta: (servicoId: number) =>
+    request<{ plan: OfertaPlano | null }>(`/oferta?servico_id=${servicoId}`),
+  /* Log append-only (shown/accepted/dismissed) — não bloqueia o fluxo. */
+  registrarEventoOferta: (payload: {
+    outcome: "shown" | "accepted" | "dismissed";
+    plan_id?: number;
+    shown_amount?: number;
+  }) => request<void>("/oferta/evento", { method: "POST", body: JSON.stringify(payload) }),
 
   /* ─── Push nativo (FCM, app Capacitor) ────────────────────────────────── */
   subscribeDevicePush: (token: string, platform: "ios" | "android") =>

@@ -71,6 +71,14 @@ class MembershipOfferOutcome(str, enum.Enum):
     dismissed = "dismissed"
 
 
+class MembershipAddonKind(str, enum.Enum):
+    """Tipo de efeito de um add-on de assinatura (Bump C, D-104 Fase 4)."""
+
+    produto = "produto"        # soma preço + baixa de estoque de uma variação
+    uso_extra = "uso_extra"    # soma preço + acrescenta usos ao ciclo
+    escopo = "escopo"          # soma preço + acrescenta serviço ao combo
+
+
 class UnitRole(str, enum.Enum):
     owner = "owner"
     manager = "manager"

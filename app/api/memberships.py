@@ -31,6 +31,8 @@ from models import (
     Appointment,
     Client,
     ClientMembership,
+    MembershipAddon,
+    MembershipAddonKind,
     MembershipOfferOutcome,
     MembershipOfferSurface,
     MembershipPlan,
@@ -112,6 +114,44 @@ class PlanUpdate(BaseModel):
     is_featured: Optional[bool] = None
 
 
+class AddonOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    price: float
+    variant_id: Optional[int]
+    variant_name: Optional[str] = None
+    extra_uses: Optional[int]
+    extra_service_id: Optional[int]
+    extra_service_name: Optional[str] = None
+    is_active: bool
+
+
+class AddonIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    kind: MembershipAddonKind
+    price: Decimal = Field(..., ge=Decimal("0"))
+    variant_id: Optional[int] = Field(None, gt=0)
+    extra_uses: Optional[int] = Field(None, gt=0)
+    extra_service_id: Optional[int] = Field(None, gt=0)
+
+    @model_validator(mode="after")
+    def _check_target(self) -> "AddonIn":
+        if self.kind == MembershipAddonKind.produto and self.variant_id is None:
+            raise ValueError("Add-on de produto exige variant_id.")
+        if self.kind == MembershipAddonKind.uso_extra and self.extra_uses is None:
+            raise ValueError("Add-on de uso extra exige extra_uses.")
+        if self.kind == MembershipAddonKind.escopo and self.extra_service_id is None:
+            raise ValueError("Add-on de escopo exige extra_service_id.")
+        return self
+
+
+class AddonUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=120)
+    price: Optional[Decimal] = Field(None, ge=Decimal("0"))
+    is_active: Optional[bool] = None
+
+
 class SellIn(BaseModel):
     """Venda de assinatura. ``plan_id`` = a partir do catálogo (com override
     opcional); sem ``plan_id`` = pacote personalizado do zero (spec completa)."""
@@ -128,6 +168,10 @@ class SellIn(BaseModel):
     unlimited_use_value: Optional[Decimal] = Field(None, ge=Decimal("0"))
     price: Optional[Decimal] = Field(None, ge=Decimal("0"))
     duration_days: Optional[int] = Field(None, gt=0)
+    # Add-ons do clube (Bump C, D-104 Fase 4) — resolvidos e aplicados por
+    # cima da assinatura recém-criada (soma preço, uso extra, escopo, baixa de
+    # estoque). Sempre "frescos" (ativos) no momento da venda.
+    addon_ids: list[int] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_spec(self) -> "SellIn":
@@ -557,6 +601,155 @@ async def arquivar_plano(
     await db.commit()
 
 
+# ─── catálogo de add-ons (Bump C, D-104 Fase 4) ──────────────────────────────
+
+async def _addon_out(db: AsyncSession, addon: MembershipAddon) -> AddonOut:
+    variant_name = None
+    if addon.variant_id is not None:
+        from models import ProductVariant
+
+        variant_name = (
+            await db.execute(
+                select(ProductVariant.name).where(ProductVariant.id == addon.variant_id)
+            )
+        ).scalar_one_or_none()
+    service_name = None
+    if addon.extra_service_id is not None:
+        service_name = (
+            await db.execute(
+                select(Service.name).where(Service.id == addon.extra_service_id)
+            )
+        ).scalar_one_or_none()
+    kind = addon.kind.value if hasattr(addon.kind, "value") else addon.kind
+    return AddonOut(
+        id=addon.id,
+        name=addon.name,
+        kind=kind,
+        price=float(addon.price),
+        variant_id=addon.variant_id,
+        variant_name=variant_name,
+        extra_uses=addon.extra_uses,
+        extra_service_id=addon.extra_service_id,
+        extra_service_name=service_name,
+        is_active=addon.is_active,
+    )
+
+
+@router.get("/addons", response_model=list[AddonOut])
+async def listar_addons(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    include_inactive: bool = Query(False),
+) -> list[AddonOut]:
+    role = await resolve_current_role(db, current_user)
+    await require_permission(db, current_user, "memberships.view")
+    if include_inactive and role not in MANAGER_ACCESS:
+        include_inactive = False
+
+    stmt = select(MembershipAddon).order_by(MembershipAddon.name)
+    if not include_inactive:
+        stmt = stmt.where(MembershipAddon.is_active.is_(True))
+    addons = (await db.execute(stmt)).scalars().all()
+    return [await _addon_out(db, a) for a in addons]
+
+
+@router.post("/addons", response_model=AddonOut, status_code=http_status.HTTP_201_CREATED)
+async def criar_addon(
+    body: AddonIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+) -> AddonOut:
+    # Reusa memberships.manage (mesma permissão do CRUD de planos) — sem
+    # permissão nova, sem precisar rodar sync_authz_catalog.py no deploy.
+    await require_permission(db, current_user, "memberships.manage")
+
+    addon = MembershipAddon(
+        organization_id=current_user.organization_id,
+        name=body.name,
+        kind=body.kind,
+        price=body.price,
+        variant_id=body.variant_id,
+        extra_uses=body.extra_uses,
+        extra_service_id=body.extra_service_id,
+    )
+    db.add(addon)
+    await db.flush()
+    out = await _addon_out(db, addon)
+    await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="memberships.addon.create",
+        resource_type="membership_addon",
+        resource_id=addon.id,
+        after={"name": body.name, "kind": body.kind.value},
+    )
+    return out
+
+
+@router.patch("/addons/{addon_id}", response_model=AddonOut)
+async def atualizar_addon(
+    body: AddonUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    addon_id: int = Path(..., gt=0),
+) -> AddonOut:
+    await require_permission(db, current_user, "memberships.manage")
+
+    addon = (
+        await db.execute(
+            select(MembershipAddon).where(MembershipAddon.id == addon_id)
+        )
+    ).scalar_one_or_none()
+    if not addon:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Add-on não encontrado.")
+
+    if body.name is not None:
+        addon.name = body.name
+    if body.price is not None:
+        addon.price = body.price
+    if body.is_active is not None:
+        addon.is_active = body.is_active
+
+    await db.flush()
+    out = await _addon_out(db, addon)
+    await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="memberships.addon.update",
+        resource_type="membership_addon",
+        resource_id=addon.id,
+    )
+    return out
+
+
+@router.delete("/addons/{addon_id}", status_code=http_status.HTTP_204_NO_CONTENT)
+async def arquivar_addon(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    addon_id: int = Path(..., gt=0),
+) -> None:
+    await require_permission(db, current_user, "memberships.manage")
+
+    addon = (
+        await db.execute(
+            select(MembershipAddon).where(MembershipAddon.id == addon_id)
+        )
+    ).scalar_one_or_none()
+    if not addon:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Add-on não encontrado.")
+    addon.is_active = False
+    await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="memberships.addon.archive",
+        resource_type="membership_addon",
+        resource_id=addon.id,
+    )
+
+
 # ─── venda / gestão de assinaturas (admin) ───────────────────────────────────
 
 @router.post("", response_model=MembershipOut, status_code=http_status.HTTP_201_CREATED)
@@ -583,6 +776,12 @@ async def vender_assinatura(
         kwargs["included_uses"] = body.included_uses
         kwargs["unlimited_use_value"] = None
 
+    addons = await svc.resolve_addons_for_sale(
+        db,
+        organization_id=current_user.organization_id,
+        addon_ids=body.addon_ids,
+    )
+
     membership = await svc.create_membership(
         db,
         organization_id=current_user.organization_id,
@@ -590,6 +789,7 @@ async def vender_assinatura(
         sold_by_user_id=current_user.id,
         start_at=body.start_at,
         plan_id=body.plan_id,
+        addons=addons,
         **kwargs,
     )
     await db.refresh(membership, ["usages"])

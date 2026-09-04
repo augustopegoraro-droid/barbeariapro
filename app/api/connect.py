@@ -51,10 +51,16 @@ from app.services.audit import record_event
 from app.services.connect import service as connect_svc
 from app.services.connect.provider import ConnectProviderError
 from app.services.connect.registry import get_connect_provider
-from app.services.membership import create_membership
+from app.services.membership import apply_membership_addons, create_membership, log_offer_event
 from app.services.public_cache import PLANS_TAG, REVALIDATE_TAG, invalidate_public_tags
 from app.services.tenant import org_id_by_connected_account
-from models import MembershipOrder, Organization, User
+from models import (
+    MembershipOfferOutcome,
+    MembershipOfferSurface,
+    MembershipOrder,
+    Organization,
+    User,
+)
 
 router = APIRouter(prefix="/connect", tags=["connect"])
 internal_router = APIRouter(prefix="/internal/connect", tags=["connect-internal"])
@@ -381,6 +387,23 @@ async def _confirm_order(org_id: int, obj: dict[str, Any]) -> str:
                 plan_id=order.plan_id,
             )
             await session.flush()
+
+            # Add-ons escolhidos no checkout (Bump C, D-104 Fase 4) — snapshot
+            # já travado em `order.addons_snapshot`, não re-resolve
+            # `MembershipAddon` (pode ter sido arquivado nesse meio-tempo).
+            if order.addons_snapshot:
+                await apply_membership_addons(
+                    session, membership, order.addons_snapshot
+                )
+            await log_offer_event(
+                session,
+                organization_id=org_id,
+                surface=MembershipOfferSurface.assinatura,
+                outcome=MembershipOfferOutcome.accepted,
+                plan_id=order.plan_id,
+                client_id=order.client_id,
+                client_session_id=order.client_session_id,
+            )
 
             order.status = "paid"
             order.paid_at = datetime.now(timezone.utc)

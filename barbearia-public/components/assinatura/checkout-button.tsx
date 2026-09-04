@@ -21,9 +21,12 @@ const KNOWN_NAME_KEY = "tt_client_name";
 export function CheckoutButton({
   planId,
   planName,
+  addonIds = [],
 }: {
   planId: number;
   planName: string;
+  /* Add-ons marcados no Bump C — somam no valor cobrado no checkout. */
+  addonIds?: number[];
 }) {
   const [identificando, setIdentificando] = useState(false);
   const [name, setName] = useState("");
@@ -35,9 +38,9 @@ export function CheckoutButton({
   /* Redireciona para a Stripe. `window.location.href` (e não `router.push`):
      o destino é externo. */
   const irParaCheckout = useCallback(async () => {
-    const { checkout_url } = await api.checkout(planId);
+    const { checkout_url } = await api.checkout(planId, addonIds);
     window.location.href = checkout_url;
-  }, [planId]);
+  }, [planId, addonIds]);
 
   const assinar = useCallback(async () => {
     setErro(null);

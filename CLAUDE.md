@@ -362,11 +362,44 @@ evento) + seção "Vitrine e order bump" em `components/assinaturas/plan-form-di
 hooks em `hooks/use-assinaturas.ts`. Suíte **895 pass / 2 ambientais / 1 skip / 0 regressões**
 (`tests/test_membership_offer.py`, +8). **✅ DEPLOYADO em prod 2026-09-04** (backend `da50ac2` +
 frontend `9bb4e68`; backup `~/predeploy_d104_*.dump` na VM; ver [[deploy-vm-gotchas-2026-09]]).
-**Fora desta fatia (desenhado, não feito):**
-`membership_addons` (add-on recorrente), Bump A (checkout do agendamento) e Bump C (add-on em
-`/assinatura`) no site público — dependem de `CONNECT_ENABLED` (adiado). Plano completo +
-pesquisa competitiva do clube de assinatura em
-`/Users/apleandro/.claude/plans/cheerful-wishing-cake.md`. Detalhes em DECISIONS.md D-104.
+**Fase 4 — Bump A + Bump C + `membership_addons` — 2026-09-04 (implementado, código completo,
+⛔ NÃO DEPLOYADO; migration `0066`):** fecha a fatia 1 acima. **`membership_addons`** (catálogo por
+org, molde `product_purchase_requests`/0057: CHECK "alvo bate com o `kind`") + **`client_membership_addons`**
+(add-ons contratados, snapshot imutável, append-only — molde `membership_offer_events`/0065) +
+`membership_orders.addons_snapshot` (trava o que foi escolhido no checkout público). 3 `kind`:
+`produto` (soma preço + baixa 1un. via `apply_stock_movement`/`saida_ajuste`), `uso_extra` (soma
+preço + usos no ciclo), `escopo` (soma preço + acrescenta serviço ao combo). `app/services/
+membership.py`: `apply_membership_addons` (efeito + grava o contratado; usada por
+`create_membership`/venda no painel E pelo webhook do Connect) + `resolve_addons_for_sale` (só
+add-ons ativos, painel). **`renew_membership` corrigido nesta sessão:** clonar
+`old.price_paid`/`included_uses`/`combo_snapshot` (que já embutem o efeito dos add-ons) E reaplicar
+os add-ons por cima duplicava o valor a cada renovação — a função agora subtrai a contribuição dos
+add-ons antigos antes de clonar, reconstruindo a base "só plano" (coberto por
+`tests/test_membership_addons.py::test_renovacao_clona_addon_produto_e_baixa_estoque_de_novo`, que
+pegou o bug). **Bump A** (`GET /public/{sub}/oferta?servico_id=` + `POST /public/{sub}/oferta/
+evento`, ambos SEM exigir sessão — o visitante pode não estar identificado ainda; adicionados a
+`PUBLIC_PATHS` em `tests/test_authz_coverage.py`) — gatilho simplificado em relação ao plano
+original: só "o combo de um plano `is_featured` cobre o serviço" (sem filtro de público, que
+`Service` não carrega). **Bump C**: `GET /public/{sub}/planos` ganha `addons` (todos os ativos da
+org, só quando `is_featured`); `POST /public/{sub}/memberships/checkout` aceita `addon_ids` (soma
+no `amount_cents`, grava `addons_snapshot`); o webhook (`app/api/connect.py::_confirm_order`)
+aplica o snapshot (sem re-resolver — evita add-on arquivado entre checkout e confirmação) e loga
+`accepted` em `membership_offer_events` (antes o webhook não logava nada). CRUD `/memberships/
+addons` reusa a permissão `memberships.manage` (decisão desta sessão — sem permissão nova, sem
+`sync_authz_catalog.py` no próximo deploy). Frontend: **site público**
+(`barbearia-public/components/booking/oferta-assinatura.tsx` novo, plugado em `step-confirm.tsx`;
+`components/assinatura/planos.tsx` virou client component — toggle Masculino/Feminino/Todos +
+`AddonPicker` nos planos `is_featured`; `checkout-button.tsx` ganhou `addonIds`) + **painel**
+(`components/assinaturas/addon-form-dialog.tsx` + `addon-list.tsx` novos; 3ª aba "Add-ons" em
+`/admin/assinaturas`; card "Conversão do clube" plugado no topo da aba Planos — o hook
+`useConversaoClube` já existia órfão desde a fatia 1). Suíte **913 pass / 2 ambientais / 1 skip / 0
+regressões** (+18: `tests/test_membership_addons.py` +12, `tests/test_public_membership_addons.py`
++6). `tsc`/`next build` limpos nos dois frontends (eslint não é executável neste repo — sem
+`eslint.config.*`, débito pré-existente). Plano completo desta fatia em
+`/Users/apleandro/.claude/plans/piped-percolating-kazoo.md`; pesquisa competitiva original em
+`/Users/apleandro/.claude/plans/cheerful-wishing-cake.md`. **Falta:** deploy (migration `0066` +
+rebuild backend/frontend/public — segue adiado pelo mesmo motivo do D-100 Feature 2: o Bump A/C só
+funcionam de fato com `CONNECT_ENABLED=true`, hoje só em modo de teste). Detalhes em DECISIONS.md D-104.
 
 **Fidelização por pontos** (D-50, **deployada em prod 2026-06-28**): ledger append-only
 (`loyalty_point_ledger`) + tiers/regras configuráveis por org (`loyalty_tiers`/`loyalty_rules`) + resgate
