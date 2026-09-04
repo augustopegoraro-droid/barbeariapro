@@ -4,7 +4,7 @@
 
 ---
 
-## 🟡 Sessão 2026-09-04 — Clube de assinatura: segmentação de catálogo + order bumps (D-104) — só dev/staging
+## 🟢 Sessão 2026-09-04 — Clube de assinatura: segmentação de catálogo + order bumps (D-104) — ✅ DEPLOYADO em prod
 
 O prompt pedia "pacotes de assinatura + order bumps"; o dono clarificou que é o **clube de
 assinatura que a barbearia vende ao cliente final** (planos masculino/feminino, corte+barba 2x/mês,
@@ -27,8 +27,11 @@ escova 2x/mês), não o preço do SaaS. Pesquisa competitiva + proposta de pacot
 - **Fora desta fatia (desenhado, não feito):** `membership_addons` (add-on recorrente), Bump A
   (checkout do agendamento) e Bump C (add-on em `/assinatura`) no site público — dependem de
   `CONNECT_ENABLED`, adiado pelo dono.
-- **Deploy pendente:** `0065` via `deploy/update.sh` (admin — `barber_app` não cria tipo) + rebuild
-  `backend`/`frontend`. O dono cadastra os planos reais.
+- **✅ DEPLOYADO em prod 2026-09-04** (backend `da50ac2` + frontend `9bb4e68`; migration `0065`
+  aplicada via `deploy/update.sh`, head `0065`; backup `~/predeploy_d104_20260904_142721.dump` na VM).
+  Validado: 5 containers healthy, `/health` 200, `/memberships/oferta` e `/memberships/conversao` 401
+  sem token, `/docs` 404, `app.`/apex/`api.` OK por HTTPS, logs do backend sem erro. Falta: o dono
+  cadastrar os planos reais em `/admin/assinaturas` (marcar "usar como oferta" nos featured).
 
 ---
 

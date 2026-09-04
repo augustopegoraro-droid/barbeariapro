@@ -343,8 +343,8 @@ agendamento existente. Combo de **catálogo** restrito a corte/barba/corte+barba
 na conclusão (sem Payment duplicado); status `vencida` derivado; auditoria `canceled_by`/`reverted_by`
 (migration `0018`); recepção passa a listar planos.
 
-**Clube de assinatura: segmentação de catálogo + order bumps (D-104, 2026-09-04 — só dev/staging;
-migration `0065`, head `0065`):** `membership_plans` ganhou campos de vitrine/segmentação
+**Clube de assinatura: segmentação de catálogo + order bumps (D-104, 2026-09-04 — ✅ DEPLOYADO em
+prod 2026-09-04; migration `0065`, head `0065`):** `membership_plans` ganhou campos de vitrine/segmentação
 (`audience` enum PG `plan_audience` masculino/feminino/unissex, `category`, `headline`, `perks`,
 `badge`, `display_order`, `is_featured` — todos com default, backfill no-op) + tabela append-only
 `membership_offer_events` (RLS+FORCE, GRANT só SELECT/INSERT — molde `stock_movements`): 1 linha por
@@ -360,7 +360,9 @@ ordena por `display_order`. Frontend (só painel nesta fatia): **Bump B** em
 plano ao cliente recorrente sem assinatura, "Ativar plano agora" → `POST /memberships` + loga o
 evento) + seção "Vitrine e order bump" em `components/assinaturas/plan-form-dialog.tsx` +
 hooks em `hooks/use-assinaturas.ts`. Suíte **895 pass / 2 ambientais / 1 skip / 0 regressões**
-(`tests/test_membership_offer.py`, +8). **Fora desta fatia (desenhado, não feito):**
+(`tests/test_membership_offer.py`, +8). **✅ DEPLOYADO em prod 2026-09-04** (backend `da50ac2` +
+frontend `9bb4e68`; backup `~/predeploy_d104_*.dump` na VM; ver [[deploy-vm-gotchas-2026-09]]).
+**Fora desta fatia (desenhado, não feito):**
 `membership_addons` (add-on recorrente), Bump A (checkout do agendamento) e Bump C (add-on em
 `/assinatura`) no site público — dependem de `CONNECT_ENABLED` (adiado). Plano completo +
 pesquisa competitiva do clube de assinatura em

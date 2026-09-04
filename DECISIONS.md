@@ -3719,7 +3719,7 @@ perdido).
 
 ---
 
-### D-104 — Clube de assinatura do cliente final: segmentação de catálogo + order bumps — 2026-09-04 (implementado, só dev/staging; head `0065`)
+### D-104 — Clube de assinatura do cliente final: segmentação de catálogo + order bumps — 2026-09-04 (✅ DEPLOYADO em prod 2026-09-04, head `0065`)
 
 **Contexto.** O prompt pediu "pacotes de assinatura em camadas + order bumps no checkout". Nas
 perguntas de clarificação o dono redirecionou: **não** é o preço do BarbeariaPro (SaaS) — é o
@@ -3777,9 +3777,16 @@ Motivo: add-ons tocam o caminho intrincado de `create_membership`/`renew`/rateio
 (risco alto), e as 2 superfícies do site público só funcionam com `CONNECT_ENABLED`, que o dono
 adiou ([[feed-e-stripe-connect-d100]]).
 
-**Deploy pendente:** aplicar `0065` (`deploy/update.sh`, via admin — `barber_app` não cria tipo),
-rebuild `backend`+`frontend`; `membership_offer_events` nasce vazia em prod. O dono cadastra os
-planos reais (números-exemplo no plano, a validar).
+**✅ DEPLOYADO em prod 2026-09-04** (backend `da50ac2` + frontend `9bb4e68`, molde D-93/D-100: pull na
+VM como `taylorethedy63` — stash/pop do pin da Evolution em `docker-compose.yml`, `git submodule
+update --init --recursive` manual [`deploy/update.sh` não atualiza submódulos, débito conhecido] —
+seguido de `deploy/update.sh` [migration `0065` via `Dockerfile.migrate`+`ADMIN_DATABASE_URL`, head
+`0065`; rebuild backend/frontend/public]). Backup `~/predeploy_d104_20260904_142721.dump` na VM.
+Validado: 5 containers healthy, `/health` 200, `/memberships/oferta`+`/memberships/conversao` 401
+sem token, `/docs` 404, `app.`/apex/`api.` OK por HTTPS, logs do backend sem erro.
+`membership_offer_events` nasceu vazia (0 linhas). **Falta só:** o dono cadastrar os planos reais em
+`/admin/assinaturas` (números-exemplo no plano, a validar) e marcar "usar como oferta" nos que devem
+virar order bump.
 
 ---
 
