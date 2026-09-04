@@ -3898,10 +3898,23 @@ manual — D-51 — "cobrar no ciclo" = reaplicar no clique de renovar, não um 
 além de Masculino/Feminino/Todos; taxa de adesão/kit de boas-vindas (cobrança única, desenhada no
 plano original, não implementada).
 
-**Deploy:** **NÃO EXECUTADO** — mesmo motivo do D-100 Feature 2: os dois bumps do site público só
-funcionam de verdade com `CONNECT_ENABLED=true` (hoje só em modo de teste em prod,
-[[feed-e-stripe-connect-d100]]); migration `0066` fica pendente do mesmo "próximo passo do dono"
-(completar o onboarding de teste da conta connected) antes de fazer sentido subir esta fatia.
+**✅ DEPLOYADO em prod 2026-09-04** (backend `efef9bc` + frontend `25043a4`; molde D-90/D-93/D-94,
+runbook de gotchas em [[deploy-vm-gotchas-2026-09]]): decisão do dono — subir mesmo com o Stripe
+Connect ainda em modo de teste, para apresentar o fluxo completo ao proprietário da barbearia antes
+de virar chave live. Backup `~/predeploy_d104_fase4_20260904_205215.sql` na VM. `git pull` como
+`sudo -u taylorethedy63` (stash/pop do pin da Evolution em `docker-compose.yml`) → `git submodule
+update --init --recursive barbearia-frontend` (à parte, `deploy/update.sh` não atualiza submódulos)
+→ migration `0066` via `Dockerfile.migrate`+`ADMIN_DATABASE_URL` (`sudo docker build`/`run`, head
+`0065`→`0066` confirmado) → `sudo docker compose -f docker-compose.app.yml up -d --build`
+(gotcha #6: sem `sudo` o buildx trava por lock de outro usuário). Validado: 5 containers healthy,
+`/health` 200, `/memberships/addons` 401 sem token, `/public/app/oferta` 200 `{"plan":null}`,
+`/public/app/planos` 200 `{"plans":[]}`, `/docs` 404 (V12 intacto), apex/`/assinatura` 200,
+`app.`/`/admin/assinaturas` 307 (rota protegida, buildada), logs do backend sem erro;
+`membership_addons`/`client_membership_addons` com RLS+FORCE e GRANTs corretos (INSERT/SELECT/
+UPDATE sem DELETE no catálogo; só INSERT/SELECT no append-only), 0 linhas nas duas — nasceu vazio
+como esperado. **Sem permissão nova** — não precisou rodar `sync_authz_catalog.py`. **Falta:** o
+dono cadastrar add-ons reais e testar o checkout de ponta a ponta com a Stripe em modo de teste
+antes de decidir ir para chaves live (`CONNECT_ENABLED` já estava `true` desde o D-100).
 
 ---
 

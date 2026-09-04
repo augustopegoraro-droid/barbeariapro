@@ -362,8 +362,8 @@ evento) + seção "Vitrine e order bump" em `components/assinaturas/plan-form-di
 hooks em `hooks/use-assinaturas.ts`. Suíte **895 pass / 2 ambientais / 1 skip / 0 regressões**
 (`tests/test_membership_offer.py`, +8). **✅ DEPLOYADO em prod 2026-09-04** (backend `da50ac2` +
 frontend `9bb4e68`; backup `~/predeploy_d104_*.dump` na VM; ver [[deploy-vm-gotchas-2026-09]]).
-**Fase 4 — Bump A + Bump C + `membership_addons` — 2026-09-04 (implementado, código completo,
-⛔ NÃO DEPLOYADO; migration `0066`):** fecha a fatia 1 acima. **`membership_addons`** (catálogo por
+**Fase 4 — Bump A + Bump C + `membership_addons` — 2026-09-04 (✅ DEPLOYADO em prod 2026-09-04,
+migration `0066`):** fecha a fatia 1 acima. **`membership_addons`** (catálogo por
 org, molde `product_purchase_requests`/0057: CHECK "alvo bate com o `kind`") + **`client_membership_addons`**
 (add-ons contratados, snapshot imutável, append-only — molde `membership_offer_events`/0065) +
 `membership_orders.addons_snapshot` (trava o que foi escolhido no checkout público). 3 `kind`:
@@ -397,9 +397,10 @@ regressões** (+18: `tests/test_membership_addons.py` +12, `tests/test_public_me
 +6). `tsc`/`next build` limpos nos dois frontends (eslint não é executável neste repo — sem
 `eslint.config.*`, débito pré-existente). Plano completo desta fatia em
 `/Users/apleandro/.claude/plans/piped-percolating-kazoo.md`; pesquisa competitiva original em
-`/Users/apleandro/.claude/plans/cheerful-wishing-cake.md`. **Falta:** deploy (migration `0066` +
-rebuild backend/frontend/public — segue adiado pelo mesmo motivo do D-100 Feature 2: o Bump A/C só
-funcionam de fato com `CONNECT_ENABLED=true`, hoje só em modo de teste). Detalhes em DECISIONS.md D-104.
+`/Users/apleandro/.claude/plans/cheerful-wishing-cake.md`. **✅ DEPLOYADO em prod 2026-09-04**
+(backend `efef9bc` + frontend `25043a4`; decisão do dono: subir mesmo com Stripe Connect em modo de
+teste, para apresentar ao proprietário da barbearia). Tabelas nascem vazias — falta o dono
+cadastrar add-ons reais e testar o checkout de ponta a ponta. Detalhes em DECISIONS.md D-104.
 
 **Fidelização por pontos** (D-50, **deployada em prod 2026-06-28**): ledger append-only
 (`loyalty_point_ledger`) + tiers/regras configuráveis por org (`loyalty_tiers`/`loyalty_rules`) + resgate
