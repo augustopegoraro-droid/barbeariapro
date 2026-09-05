@@ -81,14 +81,57 @@ def apply_account_flags(org: Organization, data: dict) -> bool:
     return before != org.stripe_connect_charges_enabled
 
 
+def estimate_stripe_fee_cents(amount_cents: int) -> int:
+    """Estimativa (em centavos) do que a Stripe cobra da connected account
+    numa cobrança de cartão nacional: `pct% + fixo` (`STRIPE_DOMESTIC_FEE_PCT`/
+    `_FIXED_CENTS`, default 3,99% + R$0,39 — stripe.com/br/pricing).
+
+    Função **pura**, só para dimensionar `application_fee_amount` no momento
+    da cobrança — não é o valor real (a Stripe não devolve a taxa antes de
+    processar; a taxa efetiva pode variar por bandeira/parcelamento/cartão
+    internacional). Arredonda a favor da Stripe (`ROUND_CEILING` na parte
+    percentual) para nunca **superestimar** a fatia livre para a comissão —
+    o alvo (`resolve_fee_cents`) é um teto, não pode estourar por causa de um
+    centavo de estimativa otimista.
+    """
+    if amount_cents <= 0:
+        return 0
+    try:
+        pct = Decimal(str(settings.stripe_domestic_fee_pct))
+    except (InvalidOperation, ValueError):
+        logger.warning(
+            "STRIPE_DOMESTIC_FEE_PCT inválido (%r) — assumindo 0.",
+            settings.stripe_domestic_fee_pct,
+        )
+        pct = Decimal(0)
+    variable = (Decimal(amount_cents) * pct / Decimal(100)).to_integral_value(
+        rounding="ROUND_CEILING"
+    )
+    fixed = max(0, int(settings.stripe_domestic_fee_fixed_cents))
+    return min(int(variable) + fixed, amount_cents)
+
+
 def resolve_fee_cents(org: Organization, amount_cents: int) -> int:
-    """Fatia (em centavos) que a plataforma retém da venda.
+    """Fatia (em centavos) que a PLATAFORMA retém da venda — não o total
+    descontado do cliente final (esse é `amount_cents`, cobrado por inteiro).
+
+    `org.platform_fee_pct` (ou o default) é o **percentual total desejado**
+    sobre a venda somando taxa da Stripe + comissão da plataforma — decisão de
+    negócio: "minha comissão é o que sobra até bater X% no total", não um
+    percentual isolado. A fórmula é:
+
+        comissão = (alvo% × valor) − taxa_stripe_estimada(valor)
 
     Função **pura** e testável isoladamente. Regras:
     - `org.platform_fee_pct` manda; NULL cai no `PLATFORM_FEE_PCT_DEFAULT`;
-    - trunca para baixo (`floor`) — nunca cobra um centavo a mais do que a %;
-    - clamp `0 <= fee <= amount_cents`: a taxa jamais é negativa nem engole a
-      venda inteira (a Stripe recusaria, e a CHECK da 0062 também).
+    - a parte alvo trunca para baixo (`floor`) — nunca cobra um centavo a mais
+      do que o % pedido; a taxa da Stripe é estimada à parte (arredondada a
+      favor da Stripe, ver `estimate_stripe_fee_cents`) e subtraída;
+    - clamp `0 <= fee <= amount_cents`: quando a taxa estimada da Stripe já
+      consome o alvo inteiro (típico em valores baixos, onde o R$0,39 fixo
+      pesa mais), a comissão da plataforma cai para 0 — nunca fica negativa
+      nem engole a venda inteira (a Stripe recusaria, e a CHECK da 0062
+      também).
     """
     if amount_cents <= 0:
         return 0
@@ -104,7 +147,8 @@ def resolve_fee_cents(org: Organization, amount_cents: int) -> int:
             pct = Decimal(0)
     if pct <= 0:
         return 0
-    fee = int((Decimal(amount_cents) * Decimal(pct) / Decimal(100)).to_integral_value(
+    target = int((Decimal(amount_cents) * Decimal(pct) / Decimal(100)).to_integral_value(
         rounding="ROUND_FLOOR"
     ))
+    fee = target - estimate_stripe_fee_cents(amount_cents)
     return max(0, min(fee, amount_cents))

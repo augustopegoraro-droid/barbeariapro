@@ -23,7 +23,7 @@ from sqlalchemy import func, select, text
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.services.connect.mock_provider import MOCK_SIGNATURE
-from app.services.connect.service import resolve_fee_cents
+from app.services.connect.service import estimate_stripe_fee_cents, resolve_fee_cents
 from app.services.public_cache import plans_cache_key
 from models import (
     AppointmentItem,
@@ -214,17 +214,26 @@ def _org(pct):
     return org
 
 
+def _zero_stripe_fee(monkeypatch):
+    """Zera a estimativa de taxa da Stripe p/ testar a % alvo isoladamente."""
+    monkeypatch.setattr(settings, "stripe_domestic_fee_pct", "0")
+    monkeypatch.setattr(settings, "stripe_domestic_fee_fixed_cents", 0)
+
+
 def test_fee_usa_pct_da_org_quando_definido(monkeypatch):
+    _zero_stripe_fee(monkeypatch)
     monkeypatch.setattr(settings, "platform_fee_pct_default", "10.0")
     assert resolve_fee_cents(_org(Decimal("5.00")), 10_000) == 500
 
 
 def test_fee_cai_no_default_quando_org_nao_define(monkeypatch):
+    _zero_stripe_fee(monkeypatch)
     monkeypatch.setattr(settings, "platform_fee_pct_default", "10.0")
     assert resolve_fee_cents(_org(None), 10_000) == 1_000
 
 
 def test_fee_trunca_centavos_para_baixo(monkeypatch):
+    _zero_stripe_fee(monkeypatch)
     monkeypatch.setattr(settings, "platform_fee_pct_default", "10.0")
     # 3,33 * 10% = 0,333 → 33 centavos (floor), nunca 34
     assert resolve_fee_cents(_org(None), 333) == 33
@@ -232,6 +241,7 @@ def test_fee_trunca_centavos_para_baixo(monkeypatch):
 
 
 def test_fee_nunca_negativo_nem_maior_que_o_total(monkeypatch):
+    _zero_stripe_fee(monkeypatch)
     monkeypatch.setattr(settings, "platform_fee_pct_default", "10.0")
     assert resolve_fee_cents(_org(Decimal("0")), 10_000) == 0
     assert resolve_fee_cents(_org(Decimal("100.00")), 10_000) == 10_000
@@ -239,6 +249,29 @@ def test_fee_nunca_negativo_nem_maior_que_o_total(monkeypatch):
     # default corrompido no .env não vira exceção nem taxa negativa
     monkeypatch.setattr(settings, "platform_fee_pct_default", "abc")
     assert resolve_fee_cents(_org(None), 10_000) == 0
+
+
+# ─── alvo total (Stripe + comissão) — "minha comissão é o que sobra até X%" ──
+
+
+def test_estimate_stripe_fee_cents_taxa_padrao():
+    # 3,99% + R$0,39 sobre R$120,00 (stripe.com/br/pricing)
+    assert estimate_stripe_fee_cents(12_000) == 518
+    assert estimate_stripe_fee_cents(0) == 0
+
+
+def test_fee_alvo_total_desconta_taxa_stripe_estimada(monkeypatch):
+    # Alvo 5% de R$120,00 = R$6,00; a taxa da Stripe (R$5,18) sai primeiro,
+    # a plataforma fica só com o restante (R$0,82).
+    monkeypatch.setattr(settings, "platform_fee_pct_default", "5.0")
+    assert resolve_fee_cents(_org(None), 12_000) == 600 - 518
+
+
+def test_fee_alvo_menor_que_taxa_stripe_vira_zero(monkeypatch):
+    # Valor baixo: o fixo de R$0,39 da Stripe sozinho já passa dos 5% alvo —
+    # a comissão da plataforma nunca fica negativa, só zera.
+    monkeypatch.setattr(settings, "platform_fee_pct_default", "5.0")
+    assert resolve_fee_cents(_org(None), 500) == 0
 
 
 # ─── gate: org sem charges_enabled não vende ─────────────────────────────────

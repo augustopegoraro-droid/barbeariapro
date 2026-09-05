@@ -74,9 +74,21 @@ class Settings(BaseSettings):
     stripe_connect_secret_key: str = ""
     stripe_connect_publishable_key: str = ""
     stripe_connect_webhook_secret: str = ""
-    # Taxa da plataforma (%) quando a org não define a sua (`platform_fee_pct`).
+    # `platform_fee_pct` (da org, ou este default quando ela não define) é o
+    # PERCENTUAL TOTAL desejado sobre a venda — taxa da Stripe + comissão da
+    # plataforma somadas, não só a comissão isolada (decisão de negócio: "minha
+    # comissão é o que sobra até bater X% no total"). `resolve_fee_cents`
+    # subtrai a taxa estimada da Stripe (`estimate_stripe_fee_cents` abaixo)
+    # desse alvo para achar a fatia que a plataforma de fato retém.
     # String p/ virar Decimal sem passar por float (dinheiro).
-    platform_fee_pct_default: str = "10.0"
+    platform_fee_pct_default: str = "5.0"
+    # Estimativa da taxa que a Stripe cobra da connected account por cobrança
+    # de cartão nacional (https://stripe.com/br/pricing, 2026): 3,99% + R$0,39.
+    # É só uma ESTIMATIVA usada para calcular `application_fee_amount` no
+    # momento da cobrança — a taxa real pode variar por bandeira/parcelamento/
+    # cartão internacional; ver `estimate_stripe_fee_cents`.
+    stripe_domestic_fee_pct: str = "3.99"
+    stripe_domestic_fee_fixed_cents: int = 39
     connect_enabled: bool = False
 
     # Bot / n8n chatbot
