@@ -1124,6 +1124,18 @@ antes do deploy.
 > Derivado no render (`effectiveVariantId`), sem estado extra nem `useEffect` (evita o lint
 > `react-hooks/set-state-in-effect`); repõe sozinho ao trocar de produto ou após "Adicionar ao
 > carrinho". Vale para Venda rápida, o atalho da Agenda e o bloco "+ Produtos" da conclusão.
+
+> **Saudação com efeito de digitação na Agenda (2026-09-14 — código pronto, ⛔ ainda sem
+> validação/deploy):** `users` nunca guardou nome próprio (só e-mail) — `MeResponse`
+> (`GET /auth/me`) ganhou o campo `name` via `app/deps.py::resolve_current_display_name`: usa o
+> nome do `Barber` vinculado (`user_units.barber_id`, D-83 — vale para qualquer papel, não só
+> barbeiro) e, na ausência de vínculo, deriva do e-mail (`_display_name_from_email`, capitaliza a
+> parte local). Sem migration. Frontend: `hooks/use-me.ts` (`useAuthedQuery` sobre `/auth/me`) +
+> `components/agenda/greeting-typewriter.tsx` (efeito de "digitando" com `setInterval`, sem lib) —
+> "Seja bem-vindo(a), *primeiro nome*, esta é sua agenda de hoje..." abaixo do título "Agenda" em
+> `/admin/agenda`; reanima a cada vez que a página monta (cobre "todo login", já que o login
+> redireciona para a Agenda). `tsc`/`eslint` limpos. **Falta:** rodar a suíte de testes do
+> backend (Docker parado nesta sessão) e validar no browser.
 prod 2026-08-04):** `suppliers`/`purchase_orders`/`purchase_order_items` (migration `0054`, molde
 `sales`/0053 — RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — arquivar fornecedor via `active`,
 cancelar pedido via `status`, nunca apagar linha). `PurchaseOrder` nasce `rascunho` →
@@ -1367,6 +1379,21 @@ do cliente foi **extraída** de `booking/step-confirm.tsx` para `components/ui/i
 ocupam a largura — a entrada fica no perfil). `app/api/revalidate/route.ts` passou a aceitar a tag
 `public-plans` na allowlist (o backend já a enviava e ela era ignorada em silêncio).
 `tsc`/`next build` limpos nos dois frontends. **Falta:** o deploy. Ver D-100 em `DECISIONS.md`.
+> **Comissão da plataforma = "o que sobra até bater X% no total" (2026-09-05, código pronto,
+> ⛔ ainda sem deploy — commits `2fb74a2` backend + `5c76b5a` frontend):** decisão do dono —
+> `platform_fee_pct` (org ou `PLATFORM_FEE_PCT_DEFAULT`) deixou de significar a comissão isolada da
+> plataforma e passou a ser o **percentual TOTAL desejado sobre a venda** (taxa da Stripe + comissão
+> da plataforma somadas). `app/services/connect/service.py::estimate_stripe_fee_cents()` (nova, pura)
+> estima a taxa que a Stripe cobra da connected account num cartão nacional (3,99% + R$0,39 —
+> stripe.com/br/pricing, configurável via `STRIPE_DOMESTIC_FEE_PCT`/`_FIXED_CENTS`); `resolve_fee_cents()`
+> passa a calcular `comissão = (alvo% × valor) − taxa_stripe_estimada`, clampada em 0 quando a taxa
+> estimada já consome o alvo inteiro (típico em valores baixos, onde o fixo de R$0,39 pesa mais).
+> `PLATFORM_FEE_PCT_DEFAULT` ajustado de `10.0` para `5.0` (o alvo que o dono definiu). É só
+> **estimativa** — a Stripe não devolve a taxa real antes de processar (varia por bandeira/parcelamento/
+> cartão internacional), então não há reconciliação pós-fato; ficaria para uma fase futura se o alvo
+> precisar ser exato sobre o valor líquido real. Label do painel (`recebimentos-panel.tsx`) ajustada
+> para "Taxa total (Stripe + plataforma)". Suíte **916 pass / 2 ambientais / 0 regressões** (+5 em
+> `tests/test_connect_checkout.py`). Sem migration (só muda a interpretação de um campo já existente).
 
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)

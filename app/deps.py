@@ -19,7 +19,7 @@ from app.db.redis import get_redis
 from app.db.session import AsyncSessionLocal, set_current_org
 from app.schemas.auth import TokenData
 from app.services.tenant import org_id_by_wa_instance
-from models import Unit, User, UserUnit
+from models import Barber, Unit, User, UserUnit
 
 bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -200,3 +200,26 @@ async def resolve_current_role_with_barber(
 ) -> tuple[str, Optional[int]]:
     """(role, barber_id) escopado à org atual; barber_id só quando role='barber'."""
     return resolve_role_with_barber(await _org_scoped_unit_links(db, user))
+
+
+def _display_name_from_email(email: str) -> str:
+    """`users` não guarda nome (só email) — deriva um nome legível como
+    fallback quando não há profissional vinculado."""
+    local_part = email.split("@", 1)[0]
+    words = [w for w in local_part.replace(".", " ").replace("_", " ").replace("-", " ").split() if w]
+    return " ".join(w.capitalize() for w in words) or email
+
+
+async def resolve_current_display_name(db: AsyncSession, user: User) -> str:
+    """Nome para saudação/UI: nome do profissional vinculado (`barber_id` do
+    D-83, vale para qualquer papel, não só barbeiro) ou, na ausência, um
+    nome derivado do e-mail."""
+    links = await _org_scoped_unit_links(db, user)
+    barber_id = next((link.barber_id for link in links if link.barber_id is not None), None)
+    if barber_id is not None:
+        barber = (
+            await db.execute(select(Barber.name).where(Barber.id == barber_id))
+        ).scalar_one_or_none()
+        if barber:
+            return barber
+    return _display_name_from_email(user.email)

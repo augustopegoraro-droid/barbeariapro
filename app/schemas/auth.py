@@ -131,6 +131,9 @@ class MeResponse(BaseModel):
     user_id: int
     organization_id: int
     email: EmailStr
+    # Nome do profissional vinculado (D-83) ou derivado do e-mail — `users`
+    # não guarda nome próprio. Usado na saudação da UI.
+    name: str
     is_active: bool
     role: str
     must_change_password: bool = False

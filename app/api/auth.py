@@ -32,7 +32,13 @@ from app.core.security import (
 )
 from app.db.redis import get_redis
 from app.db.session import get_db, set_current_org
-from app.deps import get_current_user, get_tenant_db, get_token_data, resolve_current_role
+from app.deps import (
+    get_current_user,
+    get_tenant_db,
+    get_token_data,
+    resolve_current_display_name,
+    resolve_current_role,
+)
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
@@ -486,10 +492,12 @@ async def me(
         await db.execute(select(func.count()).select_from(Organization))
     ).scalar_one()
     me_role = await resolve_current_role(db, current_user)
+    display_name = await resolve_current_display_name(db, current_user)
     return MeResponse(
         user_id=current_user.id,
         organization_id=current_user.organization_id,
         email=current_user.email,
+        name=display_name,
         is_active=current_user.is_active,
         role=me_role,
         must_change_password=current_user.must_change_password,
