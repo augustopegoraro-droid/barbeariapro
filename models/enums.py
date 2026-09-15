@@ -115,6 +115,35 @@ class PaymentMethod(str, enum.Enum):
     dinheiro = "dinheiro"
     cartao = "cartao"
     pix = "pix"
+    # Saldo da carteira de crédito do cliente (migration 0067).
+    credito_cliente = "credito_cliente"
+
+
+class CardType(str, enum.Enum):
+    """Crédito ou débito — só preenchido quando `PaymentMethod.cartao` (migration 0067)."""
+
+    credito = "credito"
+    debito = "debito"
+
+
+class CardBrand(str, enum.Enum):
+    """Bandeira do cartão — lista fechada (migration 0067)."""
+
+    visa = "visa"
+    mastercard = "mastercard"
+    elo = "elo"
+    amex = "amex"
+    hipercard = "hipercard"
+    outro = "outro"
+
+
+class ClientWalletMovementType(str, enum.Enum):
+    """Tipo de movimentação na carteira de crédito do cliente (migration 0068)."""
+
+    credito_manual = "credito_manual"
+    uso_pagamento = "uso_pagamento"
+    estorno = "estorno"
+    ajuste = "ajuste"
 
 
 class ConsentStatus(str, enum.Enum):

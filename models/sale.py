@@ -41,7 +41,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-from .enums import PaymentMethod, SaleStatus, pg_enum
+from .enums import CardBrand, CardType, PaymentMethod, SaleStatus, pg_enum
 
 if TYPE_CHECKING:
     from .appointment import Appointment
@@ -127,6 +127,10 @@ class SalePayment(Base):
     __tablename__ = "sale_payments"
     __table_args__ = (
         CheckConstraint("amount > 0", name="sale_payments_amount_positive"),
+        CheckConstraint(
+            "method = 'cartao' OR (card_type IS NULL AND card_brand IS NULL)",
+            name="sale_payments_card_fields_only_when_cartao",
+        ),
         Index("idx_sale_payments_org_sale", "organization_id", "sale_id"),
     )
 
@@ -140,6 +144,12 @@ class SalePayment(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     method: Mapped[PaymentMethod] = mapped_column(
         pg_enum(PaymentMethod, "payment_method"), nullable=False
+    )
+    card_type: Mapped[Optional[CardType]] = mapped_column(
+        pg_enum(CardType, "card_type"), nullable=True
+    )
+    card_brand: Mapped[Optional[CardBrand]] = mapped_column(
+        pg_enum(CardBrand, "card_brand"), nullable=True
     )
     paid_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()

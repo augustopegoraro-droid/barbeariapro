@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, status as http_status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,8 +14,10 @@ from sqlalchemy.orm import selectinload
 from app.core.rbac import check_appointment_ownership
 from app.deps import get_current_user, get_tenant_db, resolve_current_role_with_barber
 from app.services import cash_register as cash
+from app.services import client_wallet
 from app.services.audit import record_event
 from app.services.calendar_sync import push_appointment
+from app.services.checkout import PaymentLineIn, allocate_payments
 from app.services.loyalty import (
     recalculate as _recalculate_loyalty,
     reverse_appointment_points as _reverse_loyalty_points,
@@ -26,12 +28,21 @@ from app.services.membership import (
     revert_usage,
     usage_for_appointment,
 )
-from models import Appointment, AppointmentItem, CashMovementType, ClientMembership, Payment, User
+from app.services.sales import SaleItemIn, build_sale
+from models import (
+    Appointment,
+    AppointmentItem,
+    CardBrand,
+    CardType,
+    CashMovementType,
+    ClientMembership,
+    Payment,
+    SalePayment,
+    User,
+)
 from models.enums import AppointmentStatus, PaymentMethod
 
 router = APIRouter(prefix="/barbeiro", tags=["barbeiro"])
-
-_VALID_METHODS = {m.value for m in PaymentMethod}
 
 
 async def _load_appointment(db: AsyncSession, appt_id: int) -> Appointment:
@@ -63,12 +74,39 @@ def _require_agendado(appt: Appointment) -> None:
 
 # ─── schemas ─────────────────────────────────────────────────────────────────
 
+class PagamentoIn(BaseModel):
+    """1 linha do split de pagamento. Bandeira/tipo só em `method=cartao`."""
+
+    amount: Decimal = Field(..., gt=Decimal("0"))
+    method: PaymentMethod
+    card_type: Optional[CardType] = None
+    card_brand: Optional[CardBrand] = None
+
+    @model_validator(mode="after")
+    def _cartao_exige_bandeira(self) -> "PagamentoIn":
+        if self.method == PaymentMethod.cartao:
+            if self.card_type is None or self.card_brand is None:
+                raise ValueError("Pagamento em cartão exige tipo (crédito/débito) e bandeira.")
+        elif self.card_type is not None or self.card_brand is not None:
+            raise ValueError("Tipo/bandeira de cartão só se aplicam a pagamento em cartão.")
+        return self
+
+
+class ProdutoItemIn(BaseModel):
+    variant_id: int = Field(..., gt=0)
+    qty: Decimal = Field(..., gt=Decimal("0"))
+
+
 class ConcluirRequest(BaseModel):
-    # method/amount são opcionais em atendimentos pagos por mensalidade (sem
-    # dinheiro); obrigatórios no fluxo normal (validado no endpoint).
-    method: Optional[str] = Field(None, description="dinheiro | cartao | pix")
-    amount: Optional[float] = Field(None, ge=0, description="Valor cobrado")
-    tip_amount: Optional[float] = Field(None, ge=0, description="Gorjeta (opcional)")
+    # Checkout único: o split cobre serviço + produtos + gorjeta juntos.
+    payments: list[PagamentoIn] = Field(default_factory=list)
+    # Produtos vendidos junto deste atendimento — a Sale só nasce (e fecha)
+    # aqui, na conclusão, nunca antes (D-105).
+    produtos: list[ProdutoItemIn] = Field(default_factory=list)
+    # Valor cobrado pelo SERVIÇO (sem produtos/gorjeta). Obrigatório quando o
+    # atendimento não é pago por assinatura.
+    service_amount: Optional[Decimal] = Field(None, ge=0, description="Valor cobrado pelo serviço")
+    tip_amount: Optional[Decimal] = Field(None, ge=0, description="Gorjeta (opcional)")
     # Pagar este atendimento com a assinatura do cliente (baixa 1 uso). None =
     # resolve a assinatura ativa do cliente. Atômico com a conclusão.
     membership_id: Optional[int] = Field(None, gt=0)
@@ -100,7 +138,7 @@ async def concluir_atendimento(
     _require_agendado(appt)
 
     # Checkout pago com assinatura: anexa o uso ANTES (atômico com a conclusão);
-    # o fluxo abaixo então detecta o usage e conclui sem Payment.
+    # o fluxo abaixo então detecta o usage e trata o serviço como já quitado.
     if (
         body.membership_id is not None or body.usar_assinatura
     ) and await usage_for_appointment(db, appt_id) is None:
@@ -124,115 +162,138 @@ async def concluir_atendimento(
         )
 
     usage = await usage_for_appointment(db, appt_id)
+    paid_by_membership = usage is not None
 
-    if usage is not None:
-        # Atendimento pago por mensalidade: a receita já está rateada nos
-        # AppointmentItem.price_charged (reconhecida no uso). NÃO cria Payment
-        # (sem dinheiro) e NÃO sobrescreve price_charged. A gorjeta, se houver,
-        # ainda é dinheiro e vai para Payment.
-        tip = Decimal(str(body.tip_amount)) if body.tip_amount else None
-        tip_payment: Optional[Payment] = None
-        cash_session = None
-        if tip is not None and body.method == PaymentMethod.dinheiro.value:
-            # Gorjeta em dinheiro num atendimento pago por assinatura ainda é
-            # dinheiro na gaveta (D-101). Exige caixa aberto se o enforcement
-            # estiver ligado.
-            cash_session = await cash.require_open_session(
-                db,
-                organization_id=current_user.organization_id,
-                unit_id=appt.unit_id,
-            )
-        if tip is not None:
-            tip_payment = Payment(
-                organization_id=current_user.organization_id,
-                appointment_id=appt.id,
-                amount=Decimal("0"),
-                tip_amount=tip,
-                method=PaymentMethod(body.method) if body.method in _VALID_METHODS else PaymentMethod.dinheiro,
-            )
-            db.add(tip_payment)
-        appt.status = AppointmentStatus.concluido
-        await db.flush()
-        if cash_session is not None and tip_payment is not None:
-            await cash.post_movement(
-                db,
-                cash_session,
-                type=CashMovementType.venda_servico,
-                amount=tip,
-                reference_type="payment",
-                reference_id=tip_payment.id,
-                note="Gorjeta (atendimento pago por assinatura)",
-                user_id=current_user.id,
-            )
-        await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
-        await db.commit()
-        record_event(
-            organization_id=current_user.organization_id,
-            actor_user_id=current_user.id,
-            action="appointments.complete",
-            resource_type="appointment",
-            resource_id=appt_id,
-            after={"paid_by": "membership", "tip_amount": float(tip) if tip else 0.0},
-        )
-
-        background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
-        final_total = float(appt.total_amount) + float(tip or Decimal("0"))
-        return AtendimentoOut(id=appt_id, status="concluido", total_amount=final_total)
-
-    # ── fluxo normal (pagamento em dinheiro/cartão/pix) ──────────────────────
-    if body.method not in _VALID_METHODS or body.amount is None:
+    if not paid_by_membership and body.service_amount is None:
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Informe method ({sorted(_VALID_METHODS)}) e amount.",
+            detail="Informe o valor cobrado pelo serviço (service_amount).",
         )
+    service_total = Decimal("0") if paid_by_membership else Decimal(str(body.service_amount))
+    tip_total = Decimal(str(body.tip_amount)) if body.tip_amount else Decimal("0")
 
-    amount = Decimal(str(body.amount))
-    tip = Decimal(str(body.tip_amount)) if body.tip_amount else None
-
-    # Caixa vivo (D-101): recebimento em DINHEIRO exige caixa aberto quando o
-    # enforcement da org está ligado (409 com code=cash_register_closed). Checa
-    # ANTES de mutar estado. Cartão/Pix não tocam no caixa.
-    cash_session = None
-    if body.method == PaymentMethod.dinheiro.value:
-        cash_session = await cash.require_open_session(
+    # Produtos vendidos junto — a Sale nasce (e fecha) só aqui, atomicamente
+    # com o serviço (D-105): nunca há Sale "solta" antes da conclusão.
+    sale = None
+    product_total = Decimal("0")
+    if body.produtos:
+        sale = await build_sale(
             db,
             organization_id=current_user.organization_id,
             unit_id=appt.unit_id,
+            client_id=appt.client_id,
+            appointment_id=appt.id,
+            items=[SaleItemIn(variant_id=i.variant_id, qty=i.qty) for i in body.produtos],
+            created_by_user_id=current_user.id,
+        )
+        product_total = sale.total_amount
+
+    try:
+        alloc = allocate_payments(
+            [
+                PaymentLineIn(p.amount, p.method, p.card_type, p.card_brand)
+                for p in body.payments
+            ],
+            service_total=service_total,
+            product_total=product_total,
+            tip_total=tip_total,
+        )
+    except ValueError as exc:
+        raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    # ── Payment(s) do serviço (split — 1 linha por método) ───────────────────
+    service_payments: list[Payment] = []
+    for line in alloc.service_lines:
+        payment = Payment(
+            organization_id=current_user.organization_id,
+            appointment_id=appt.id,
+            amount=line.amount,
+            method=line.method,
+            card_type=line.card_type,
+            card_brand=line.card_brand,
+        )
+        db.add(payment)
+        service_payments.append(payment)
+
+    if alloc.tip_amount > 0:
+        if service_payments:
+            service_payments[-1].tip_amount = alloc.tip_amount
+        else:
+            # Gorjeta sem nenhum pagamento de serviço em dinheiro/cartão/pix
+            # associado (ex.: serviço 100% pago por assinatura) — linha
+            # própria, mesmo padrão de antes (Payment amount=0 + tip_amount).
+            db.add(
+                Payment(
+                    organization_id=current_user.organization_id,
+                    appointment_id=appt.id,
+                    amount=Decimal("0"),
+                    tip_amount=alloc.tip_amount,
+                    method=alloc.tip_method or PaymentMethod.dinheiro,
+                    card_type=alloc.tip_card_type,
+                    card_brand=alloc.tip_card_brand,
+                )
+            )
+
+    # ── SalePayment(s) dos produtos (split) ───────────────────────────────────
+    if sale is not None:
+        for line in alloc.product_lines:
+            db.add(
+                SalePayment(
+                    organization_id=current_user.organization_id,
+                    sale_id=sale.id,
+                    amount=line.amount,
+                    method=line.method,
+                    card_type=line.card_type,
+                    card_brand=line.card_brand,
+                )
+            )
+
+    # ── Carteira de crédito do cliente (D-105) ────────────────────────────────
+    wallet_used = sum(
+        (l.amount for l in (*alloc.service_lines, *alloc.product_lines) if l.method == PaymentMethod.credito_cliente),
+        Decimal("0"),
+    )
+    if alloc.tip_amount > 0 and alloc.tip_method == PaymentMethod.credito_cliente:
+        wallet_used += alloc.tip_amount
+    if wallet_used > 0:
+        await client_wallet.debit(
+            db,
+            organization_id=current_user.organization_id,
+            client_id=appt.client_id,
+            amount=wallet_used,
+            reference_type="appointment",
+            reference_id=appt.id,
+            created_by_user_id=current_user.id,
         )
 
-    payment = Payment(
-        organization_id=current_user.organization_id,
-        appointment_id=appt.id,
-        amount=amount,
-        tip_amount=tip,
-        method=PaymentMethod(body.method),
-    )
-    db.add(payment)
-
-    # Receita de serviço (sem gorjeta) — alinha total_amount com
-    # AppointmentItem.price_charged (base de receita/comissão do financeiro) e com
-    # a fidelidade. A gorjeta fica só em Payment.tip_amount.
+    if not paid_by_membership:
+        # Receita de serviço (sem gorjeta/produto) — alinha total_amount com
+        # AppointmentItem.price_charged (base de receita/comissão do financeiro)
+        # e com a fidelidade.
+        appt.total_amount = service_total
+        primary_item = min(appt.items, key=lambda i: i.position, default=None)
+        if primary_item is not None:
+            primary_item.price_charged = service_total
     appt.status = AppointmentStatus.concluido
-    appt.total_amount = amount
-    primary_item = min(appt.items, key=lambda i: i.position, default=None)
-    if primary_item is not None:
-        primary_item.price_charged = amount
 
     # autoflush=False: sem flush as agregações do recalculate não veem este atendimento
     await db.flush()
-    if cash_session is not None:
-        # Dinheiro que entra na gaveta = valor do serviço + gorjeta (a gorjeta
-        # em dinheiro também está fisicamente no caixa).
-        await cash.post_movement(
-            db,
-            cash_session,
-            type=CashMovementType.venda_servico,
-            amount=amount + (tip or Decimal("0")),
-            reference_type="payment",
-            reference_id=payment.id,
-            note="inclui gorjeta" if tip else None,
-            user_id=current_user.id,
-        )
+
+    # Caixa vivo (D-101): soma só as linhas em DINHEIRO do split geral
+    # (serviço + produtos + gorjeta) e lança 1 movimento único. Cartão/Pix/
+    # carteira nunca tocam no caixa.
+    await cash.resolve_and_post_cash(
+        db,
+        [(p.amount, p.method) for p in body.payments],
+        organization_id=current_user.organization_id,
+        unit_id=appt.unit_id,
+        reference_type="appointment",
+        reference_id=appt.id,
+        movement_type=CashMovementType.venda_servico,
+        note="Checkout único (serviço + produtos)" if sale is not None else None,
+        user_id=current_user.id,
+    )
+
     await _recalculate_loyalty(appt.client_id, current_user.organization_id, db)
     await db.commit()
     record_event(
@@ -241,10 +302,16 @@ async def concluir_atendimento(
         action="appointments.complete",
         resource_type="appointment",
         resource_id=appt_id,
-        after={"paid_by": body.method, "amount": float(amount), "tip_amount": float(tip) if tip else 0.0},
+        after={
+            "paid_by": "membership" if paid_by_membership else "split",
+            "service_amount": float(service_total),
+            "product_amount": float(product_total),
+            "tip_amount": float(alloc.tip_amount),
+            "payments": len(body.payments),
+        },
     )
 
-    final_total = amount + (tip or Decimal("0"))
+    final_total = float(service_total if not paid_by_membership else appt.total_amount) + float(alloc.tip_amount)
     background_tasks.add_task(push_appointment, appt_id, current_user.organization_id, "upsert")
     return AtendimentoOut(id=appt_id, status="concluido", total_amount=float(final_total))
 

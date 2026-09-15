@@ -48,6 +48,10 @@ CATALOG: tuple[Permission, ...] = (
     Permission("clients.personal_data.view", "Ver dados pessoais (telefone/email/nascimento)", "Clientes", sensitive_field=True),
     Permission("clients.export", "Exportar clientes", "Clientes", sensitive_field=True),
     Permission("clients.bot_pause", "Pausar/reativar o bot de um cliente", "Clientes"),
+    # Carteira de crédito do cliente (D-105)
+    Permission("clients.wallet.view", "Ver saldo/extrato da carteira do cliente", "Clientes"),
+    Permission("clients.wallet.manage", "Conceder crédito manual na carteira do cliente", "Clientes"),
+    Permission("clients.wallet.use_as_payment", "Usar saldo da carteira como forma de pagamento", "Clientes"),
     # CRM / Conversas
     Permission("crm.leads.view", "Ver leads/funil", "CRM"),
     Permission("crm.leads.manage", "Gerenciar leads/funil", "CRM"),
@@ -178,6 +182,9 @@ _OPERATIONS: frozenset[str] = frozenset({
     "services.view", "products.view", "inventory.view", "inventory.manage",
     "inventory.count.manage",
     "sales.view", "sales.create", "suppliers.view", "purchases.view", "purchases.request",
+    # Carteira de crédito do cliente (D-105): a recepção aceita saldo como
+    # forma de pagamento, mas não concede crédito manual (isso é `_MANAGER`).
+    "clients.wallet.view", "clients.wallet.use_as_payment",
     # Caixa vivo (D-101): a recepção (Raquel) abre/fecha o caixa e lança
     # sangria/suprimento — é operação do balcão, não financeiro sensível.
     "cash.session.view", "cash.session.operate",

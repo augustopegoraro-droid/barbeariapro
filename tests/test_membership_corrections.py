@@ -292,7 +292,8 @@ async def test_estornar_recusa_atendimento_em_dinheiro(client, auth_headers):
         # conclui em dinheiro
         conc = await client.patch(
             f"/barbeiro/atendimento/{appt}/concluir",
-            json={"method": "dinheiro", "amount": 80.0}, headers=auth_headers,
+            json={"payments": [{"amount": 80.0, "method": "dinheiro"}], "service_amount": 80.0},
+            headers=auth_headers,
         )
         assert conc.status_code == 200, conc.text
         # estornar-uso num atendimento pago em dinheiro → 409 (nada a estornar)

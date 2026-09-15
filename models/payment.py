@@ -25,7 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-from .enums import ExpenseMethod, ExpenseStatus, PaymentMethod, pg_enum
+from .enums import CardBrand, CardType, ExpenseMethod, ExpenseStatus, PaymentMethod, pg_enum
 
 # Slugs de subgrupo compartilhados com `dre_monthly_lines.subgroup` (D-65).
 _SUBGROUP_SQL = (
@@ -44,6 +44,11 @@ class Payment(Base):
         CheckConstraint("amount >= 0", name="payments_amount_nonneg"),
         CheckConstraint(
             "tip_amount IS NULL OR tip_amount >= 0", name="payments_tip_nonneg"
+        ),
+        # Bandeira/tipo só fazem sentido em pagamento por cartão (migration 0067).
+        CheckConstraint(
+            "method = 'cartao' OR (card_type IS NULL AND card_brand IS NULL)",
+            name="payments_card_fields_only_when_cartao",
         ),
         Index("idx_payments_appt", "appointment_id"),
         Index("idx_payments_org_paid", "organization_id", "paid_at"),
@@ -64,6 +69,12 @@ class Payment(Base):
     tip_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2))
     method: Mapped[PaymentMethod] = mapped_column(
         pg_enum(PaymentMethod, "payment_method"), nullable=False
+    )
+    card_type: Mapped[Optional[CardType]] = mapped_column(
+        pg_enum(CardType, "card_type"), nullable=True
+    )
+    card_brand: Mapped[Optional[CardBrand]] = mapped_column(
+        pg_enum(CardBrand, "card_brand"), nullable=True
     )
     paid_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()

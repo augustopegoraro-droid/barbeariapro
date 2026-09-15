@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
@@ -17,6 +18,7 @@ from app.core.phone import normalize_phone as _validate_phone
 from app.core.privacy import SOURCE_PANEL_SIGNUP
 from app.core.rbac import require_full_access
 from app.deps import get_current_user, get_tenant_db, resolve_current_role
+from app.services import client_wallet
 from app.services.audit import record_event
 from app.services.consent import set_consent
 from models import Client, ClientLoyalty, Conversation, User
@@ -432,3 +434,65 @@ async def toggle_bot_pause(
         after={"paused": paused},
     )
     return response
+
+
+# ── Carteira de crédito do cliente (D-105) ──────────────────────────────────
+
+class WalletSaldoOut(BaseModel):
+    client_id: int
+    balance: float
+
+
+class WalletCreditoIn(BaseModel):
+    amount: float
+    note: Optional[str] = None
+
+
+@router.get("/{client_id}/carteira/saldo", response_model=WalletSaldoOut)
+async def obter_saldo_carteira(
+    client_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    _authz: Annotated[AuthContext, Depends(require("clients.wallet.view"))] = None,
+) -> WalletSaldoOut:
+    balance = await client_wallet.get_balance(
+        db, organization_id=current_user.organization_id, client_id=client_id
+    )
+    return WalletSaldoOut(client_id=client_id, balance=float(balance))
+
+
+@router.post("/{client_id}/carteira/credito", response_model=WalletSaldoOut, status_code=http_status.HTTP_201_CREATED)
+async def conceder_credito_carteira(
+    client_id: int,
+    body: WalletCreditoIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_tenant_db)],
+    _authz: Annotated[AuthContext, Depends(require("clients.wallet.manage"))] = None,
+) -> WalletSaldoOut:
+    client = (
+        await db.execute(select(Client).where(Client.id == client_id, Client.deleted_at.is_(None)))
+    ).scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+
+    await client_wallet.credit(
+        db,
+        organization_id=current_user.organization_id,
+        client_id=client_id,
+        amount=Decimal(str(body.amount)),
+        note=body.note,
+        created_by_user_id=current_user.id,
+    )
+    balance = await client_wallet.get_balance(
+        db, organization_id=current_user.organization_id, client_id=client_id
+    )
+    await db.commit()
+    record_event(
+        organization_id=current_user.organization_id,
+        actor_user_id=current_user.id,
+        action="clients.wallet.credit",
+        resource_type="client",
+        resource_id=client_id,
+        after={"amount": body.amount, "balance": float(balance)},
+    )
+    return WalletSaldoOut(client_id=client_id, balance=float(balance))

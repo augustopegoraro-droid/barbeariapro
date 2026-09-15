@@ -163,7 +163,7 @@ async def post_movement(
     # índice único parcial `cash_movements_ref_unique` é o backstop de corrida —
     # na prática a conclusão de atendimento já é serializada pelo FOR UPDATE do
     # agendamento, e venda/despesa são inserts únicos.
-    if reference_type in ("payment", "sale", "expense") and reference_id is not None:
+    if reference_type in ("payment", "sale", "expense", "appointment") and reference_id is not None:
         existing = (
             await db.execute(
                 select(CashMovement)
@@ -283,6 +283,45 @@ async def close_session(
     session.closing_note = (note or None)
     await db.flush()
     return session
+
+
+async def resolve_and_post_cash(
+    db: AsyncSession,
+    payments: list[tuple[Decimal, PaymentMethod]],
+    *,
+    organization_id: int,
+    unit_id: int,
+    reference_type: str,
+    reference_id: int,
+    movement_type: CashMovementType,
+    note: Optional[str] = None,
+    user_id: Optional[int] = None,
+) -> Optional[CashMovement]:
+    """Soma só as linhas em DINHEIRO de uma lista de pagamentos (split) e, se
+    houver algo, garante caixa aberto (`require_open_session`) e lança 1
+    movimento único no ledger (`post_movement`). Cartão/Pix/carteira nunca
+    tocam no caixa. Reaproveitado pelo checkout único de atendimento e por
+    `app/api/vendas.py`."""
+    cash_amount = sum(
+        (amount for amount, method in payments if method == PaymentMethod.dinheiro), Decimal("0")
+    )
+    if cash_amount <= 0:
+        return None
+
+    session = await require_open_session(db, organization_id=organization_id, unit_id=unit_id)
+    if session is None:
+        return None
+
+    return await post_movement(
+        db,
+        session,
+        type=movement_type,
+        amount=cash_amount,
+        reference_type=reference_type,
+        reference_id=reference_id,
+        note=note,
+        user_id=user_id,
+    )
 
 
 async def require_open_session(

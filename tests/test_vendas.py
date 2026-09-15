@@ -185,7 +185,9 @@ async def test_estoque_insuficiente_409(client, auth_headers):
         headers=auth_headers,
         json={
             "items": [{"variant_id": variant_id, "qty": "5"}],
-            "payments": [{"amount": "25.00", "method": "cartao"}],
+            "payments": [
+                {"amount": "25.00", "method": "cartao", "card_type": "credito", "card_brand": "visa"}
+            ],
         },
     )
     assert resp.status_code == 409

@@ -247,7 +247,7 @@ async def test_concluir_dinheiro_sem_caixa_bloqueia(client, auth_headers):
     resp = await client.patch(
         f"/barbeiro/atendimento/{appt_id}/concluir",
         headers=auth_headers,
-        json={"method": "dinheiro", "amount": 50.0},
+        json={"payments": [{"amount": 50.0, "method": "dinheiro"}], "service_amount": 50.0},
     )
     assert resp.status_code == 409
     detail = resp.json()["detail"]
@@ -261,7 +261,10 @@ async def test_concluir_cartao_sem_caixa_ok(client, auth_headers):
     resp = await client.patch(
         f"/barbeiro/atendimento/{appt_id}/concluir",
         headers=auth_headers,
-        json={"method": "cartao", "amount": 50.0},
+        json={
+            "payments": [{"amount": 50.0, "method": "cartao", "card_type": "credito", "card_brand": "visa"}],
+            "service_amount": 50.0,
+        },
     )
     assert resp.status_code == 200, resp.text
 
@@ -286,7 +289,7 @@ async def test_enforcement_desligado_nao_bloqueia(client, auth_headers):
     resp = await client.patch(
         f"/barbeiro/atendimento/{appt_id}/concluir",
         headers=auth_headers,
-        json={"method": "dinheiro", "amount": 30.0},
+        json={"payments": [{"amount": 30.0, "method": "dinheiro"}], "service_amount": 30.0},
     )
     assert resp.status_code == 200, resp.text
 
@@ -301,7 +304,11 @@ async def test_concluir_dinheiro_gera_movimento(client, auth_headers):
     resp = await client.patch(
         f"/barbeiro/atendimento/{appt_id}/concluir",
         headers=auth_headers,
-        json={"method": "dinheiro", "amount": 50.0, "tip_amount": 10.0},
+        json={
+            "payments": [{"amount": 60.0, "method": "dinheiro"}],
+            "service_amount": 50.0,
+            "tip_amount": 10.0,
+        },
     )
     assert resp.status_code == 200, resp.text
 
@@ -313,7 +320,8 @@ async def test_concluir_dinheiro_gera_movimento(client, auth_headers):
     session_id = atual["session"]["id"]
     movs = (await client.get("/caixa/movimentos", headers=auth_headers, params={"session_id": session_id})).json()
     vs = [m for m in movs if m["type"] == "venda_servico"]
-    assert len(vs) == 1 and vs[0]["reference_type"] == "payment"
+    # Checkout único (D-105): 1 movimento combinado referenciando o atendimento.
+    assert len(vs) == 1 and vs[0]["reference_type"] == "appointment"
 
 
 @pytest.mark.asyncio
@@ -323,7 +331,10 @@ async def test_concluir_cartao_nao_toca_caixa(client, auth_headers):
     resp = await client.patch(
         f"/barbeiro/atendimento/{appt_id}/concluir",
         headers=auth_headers,
-        json={"method": "cartao", "amount": 50.0},
+        json={
+            "payments": [{"amount": 50.0, "method": "cartao", "card_type": "credito", "card_brand": "visa"}],
+            "service_amount": 50.0,
+        },
     )
     assert resp.status_code == 200, resp.text
     atual = (await client.get("/caixa/atual", headers=auth_headers)).json()

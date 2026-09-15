@@ -1402,6 +1402,114 @@ ocupam a largura — a entrada fica no perfil). `app/api/revalidate/route.ts` pa
 **Placeholders ("Em breve") no frontend:** `campanhas`.
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
+**Checkout único: split de pagamento + bandeira/tipo de cartão + carteira de crédito do
+cliente (D-105, 2026-09-15 — código pronto, ⛔ NÃO DEPLOYADO, migrations não aplicadas, suíte
+não validada: Docker parado nesta sessão):** plano em
+`/Users/apleandro/.claude/plans/magical-forging-iverson.md`. Fecha 3 lacunas reais do
+fechamento financeiro: (1) split de pagamento — `payments: list[PagamentoIn]` já existia solto
+no schema de `POST /vendas` mas o frontend nunca usava, e a conclusão de atendimento nem no
+backend suportava múltiplos `Payment`; (2) bandeira/tipo de cartão — `PaymentMethod` só tinha
+`dinheiro|cartao|pix`, sem bandeira/crédito-débito; (3) carteira de crédito do cliente —
+inexistente (só havia `billing_credits`, crédito da plataforma SaaS para a barbearia, D-61, sem
+relação com o cliente final). **Remodelação de fluxo (pedido explícito do dono):** produto
+vendido junto de um atendimento só fecha/registra quando o atendimento fecha — a `Sale` nasce
+dentro de `PATCH /barbeiro/atendimento/{id}/concluir`, nunca antes (elimina os 2 pagamentos
+separados de antes: 1 para serviço + 1 para produto). **Checkout único:** 1 split de pagamento
+cobre serviço + produtos + gorjeta juntos.
+
+**Modelo de dados:** migrations `0067_payment_card_split` (enums `card_type`
+credito/debito e `card_brand` visa/mastercard/elo/amex/hipercard/outro; `payment_method` ganha
+`credito_cliente`; `payments`/`sale_payments` ganham `card_type`/`card_brand` nullable, CHECK só
+preenchidos quando `method='cartao'` — **sem tabela nova**: `payments.appointment_id` nunca teve
+`UniqueConstraint`, múltiplas linhas de `Payment` por atendimento já eram estruturalmente
+livres) e `0068_client_wallet` (`client_wallet_movements`, ledger append-only — GRANT só
+SELECT/INSERT, RLS+FORCE, molde `MembershipOfferEvent`/0065 — saldo = `SUM(amount)`, sem coluna
+cacheada em `Client`; `movement_type`: credito_manual/uso_pagamento/estorno/ajuste). Head
+`0068` (ainda não aplicada em nenhum ambiente).
+
+**Backend:** `app/services/checkout.py::allocate_payments` (pura, sem DB) distribui a lista de
+pagamentos em ordem — FIFO: cada linha cobre primeiro o que resta do serviço, depois produtos,
+depois gorjeta; soma precisa bater com o total geral, senão `ValueError`→422 (testada
+isoladamente em `tests/test_checkout_allocation.py`, sem depender de Postgres — únicos testes
+rodados de fato nesta sessão). `app/services/client_wallet.py` (`get_balance`/`credit`/
+`debit`/`refund`; `debit` serializa concorrência via `pg_advisory_xact_lock(client_id)`, molde
+`agenda.py`/`membership.py`, e 409 em saldo insuficiente). `app/services/sales.py::build_sale`
+extraído de `criar_venda` (Sale/SaleItem/baixa de estoque, sem SalePayment — cada chamador decide
+como aloca pagamentos) — reaproveitado por `concluir_atendimento`, `criar_venda` e o endpoint
+novo `POST /vendas/balcao`. `app/services/cash_register.py` ganha `resolve_and_post_cash`
+(soma só as linhas em dinheiro de uma lista de pagamentos e posta 1 movimento único — elimina a
+duplicação que existia entre `barbeiro.py` e `vendas.py`); `post_movement` idempotente passa a
+incluir `reference_type="appointment"` no conjunto dedup. `PATCH /barbeiro/atendimento/{id}/
+concluir` reescrito: body ganha `payments[]` (com `card_type`/`card_brand`, exigidos quando
+`method=cartao` via `model_validator`), `produtos[]` (substitui a chamada separada a `POST
+/vendas`) e `service_amount` (renomeado de `amount`); o fluxo de assinatura (mensalidade) e o
+fluxo normal foram **unificados** num só código-caminho (antes eram 2 blocos quase duplicados) —
+`service_total=0` quando pago por assinatura já produz `service_lines` vazias naturalmente na
+alocação. **Venda de balcão** (`POST /vendas/balcao`, `app/api/vendas.py`): cliente que só quer
+comprar produto, sem cortar — decisão explícita do dono ("produto sempre amarrado a
+atendimento", sem venda 100% avulsa) — cria+conclui um atendimento sintético "Balcão (venda de
+produto)" (serviço de sistema `_get_or_create_balcao_service`, `default_duration_min=1`,
+`price=0`, semeado sob demanda por org na primeira venda) numa única transação, reaproveitando
+`build_sale`+carteira+`resolve_and_post_cash`; barbeiro do item = vínculo do usuário logado
+(`UserUnit.barber_id`) ou o 1º profissional ativo da org. `POST /vendas` (criação direta) segue
+existindo para compat/API, mas a UI não chama mais para venda avulsa. `cancelar_venda` ganha
+estorno de carteira (`client_wallet.refund`, soma só o que ESTA venda consumiu de saldo — não
+tenta reabrir o débito original por referência, que pode ter sido um lançamento combinado com o
+serviço no checkout único) — **limitação documentada:** cancelar só o produto de um checkout
+combinado (serviço+produto pagos juntos) não reabre a gaveta física sozinho, porque o dinheiro
+foi lançado como 1 movimento combinado sob `reference_type="appointment"`; o gestor corrige via
+ajuste manual do caixa se precisar. Permissões novas: `clients.wallet.view`/`.manage`/
+`.use_as_payment` (view+use_as_payment em `_OPERATIONS`, manage só `_MANAGER`/`_ALL`) —
+**catálogo ainda não sincronizado** (`scripts/sync_authz_catalog.py` não rodou). `GET/POST
+/clientes/{id}/carteira/saldo|credito` (`app/api/clientes.py`).
+
+**Frontend:** `components/vendas/payment-split.tsx` (novo) — 1+ linhas de split livremente
+combináveis, campos de bandeira/tipo só quando `method=cartao`, opção "Usar saldo do cliente" só
+aparece com saldo > 0 (`hooks/use-client-wallet.ts`, novo). `concluir-dialog.tsx` perdeu os 2
+blocos de pagamento separados (serviço e "Pagamento dos produtos") e usa 1 `PaymentSplit` só,
+cobrindo `servicoNum + produtosTotal + tipNum` — 1 chamada a `useConcluirAtendimento` (payload
+`payments[]`+`produtos[]`+`serviceAmount`, `hooks/use-agenda.ts`). `venda-rapida-dialog.tsx`
+virou o corpo do fluxo de balcão — ganhou busca/seleção de cliente embutida (molde do "Cliente *"
+de `novo-agendamento-dialog.tsx`) e chama `POST /vendas/balcao` (`useVendaBalcao`,
+`hooks/use-vendas.ts`, substitui `useCriarVenda` removido — nada mais chama `POST /vendas` na
+UI). Botão "Vender produto" do `AppointmentActionsDialog` só aparece para atendimento **já
+concluído** que volta a comprar (`appt.status === "concluido"`) — para atendimento em aberto,
+produto entra pelo "+ Produtos" da própria conclusão; `agenda-day-view.tsx` passa
+`presetClientId`/`presetClientName` (não mais `appointmentId`). `tsc --noEmit` limpo (eslint
+segue não executável neste repo, débito pré-existente).
+
+> **✅ Validado em DEV local nesta mesma sessão (2026-09-15) — ainda NÃO deployado em staging/prod:**
+> migrations `0067`/`0068` aplicadas em staging (`0011`→`0068` via `DATABASE_URL=$ADMIN_DATABASE_URL
+> alembic upgrade head`) e no Postgres de dev local (`barbeariapro-postgres`, estava em `0064`, foi
+> até `0068`); `scripts/sync_authz_catalog.py` rodado nos dois (81 permissões/9 papéis/334 vínculos).
+> **Suíte completa em staging: 918 pass / 4 fail / 2 skip** — as 4 falhas não são do D-105 (confirmado
+> isolando cada uma): as 2 ambientais já documentadas (`test_bypass_hours_is_false_in_workflow`,
+> `test_login_cria_cliente_cria_agendamento`) + 2 flakes de poluição entre execuções da suíte contra o
+> mesmo banco (`_uniq_phone()` por timestamp colidindo, `recommend_plan_for_context` pegando um plano
+> `is_featured` de uma rodada anterior) — passam limpas isoladas. **Corrigidos 7 testes que dependiam
+> do payload antigo** (`method`/`amount` → `payments[]`/`service_amount`; `cartao` sem `card_type`/
+> `card_brand` → 422 agora) em `tests/test_caixa.py` (5), `tests/test_membership_corrections.py` (1),
+> `tests/test_vendas.py` (1). `next build` do `barbearia-frontend` limpo (33 rotas).
+>
+> **Validação end-to-end no browser (dev local, Chrome, login `taylor@barbeariapro.com`):**
+> checkout único com produto+split dinheiro/cartão+bandeira+gorjeta (Payment 2 linhas + SalePayment
+> reconciliando exatamente pela alocação FIFO, conferido via `psql` — R$56 dinheiro + R$34 serviço/
+> R$6 produto/R$10 gorjeta no cartão Mastercard crédito); crédito manual na carteira +
+> "Saldo do cliente" aparecendo/soma certa no checkout + débito registrado; venda de balcão
+> (`POST /vendas/balcao`) criando o atendimento sintético "Balcão (venda de produto)" (`concluido`,
+> `total_amount=0`, 1min, barbeiro = vínculo do usuário logado) + venda anexada; cancelamento de
+> venda paga com saldo devolvendo o estorno na carteira (`estorno` positivo, `reference_type
+> ="sale_cancel"`); cancelamento de venda comum devolvendo estoque. **Achado real corrigido durante a
+> validação:** os `Select` de `card_type`/`card_brand` em `payment-split.tsx` alternavam de
+> não-controlado para controlado (`value={line.card_type ?? undefined}` — React/Base UI acusava no
+> console) porque a linha nasce com `card_type: null`; troquei a coerção do `value` do Select para
+> `?? ""` (sentinela sempre definida) nos dois selects — sem mudança de tipo/schema, só o `value` do
+> componente. Confirmado sem erro de console depois.
+>
+> **Pendências reais para produção:** aplicar `0067`/`0068` em prod (`DATABASE_URL=
+> $ADMIN_DATABASE_URL alembic upgrade head`, molde D-93/D-94), rodar `sync_authz_catalog.py` em prod,
+> deploy backend+frontend, smoke test com credencial real.
+
 **Pendente (visão do produto):** ~~Caixa~~ (✅ D-101 — abrir/fechar turno em tempo real, só dev/
 staging) · ~~Despesas ricas / contas a pagar / despesas recorrentes~~ (✅ D-102 — DEPLOYADO em prod
 2026-08-31) · Consumo de produtos no atendimento · Estoque/Produtos ·

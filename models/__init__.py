@@ -11,8 +11,11 @@ from .base import Base
 from .enums import (
     AppointmentStatus,
     AttachmentMediaType,
+    CardBrand,
+    CardType,
     CashMovementType,
     CashSessionStatus,
+    ClientWalletMovementType,
     ConsentStatus,
     ContactChannel,
     ConversationStatus,
@@ -65,6 +68,7 @@ from .authz import (
 )
 from .barber import Barber, BarberService, BarberUnit, TimeOff
 from .client import Client, ClientConsent
+from .client_wallet import ClientWalletMovement
 from .service import Service
 from .appointment import Appointment, AppointmentItem
 from .payment import Expense, ExpenseCategory, ExpenseRecurrence, Payment
@@ -144,6 +148,9 @@ __all__ = [
     "MessageSenderType",
     "MessageType",
     "PaymentMethod",
+    "CardType",
+    "CardBrand",
+    "ClientWalletMovementType",
     "PlanAudience",
     "PushChannel",
     "PushSubscriberType",
@@ -193,6 +200,7 @@ __all__ = [
     # clientes
     "Client",
     "ClientConsent",
+    "ClientWalletMovement",
     # serviços
     "Service",
     "BarberService",
