@@ -1518,9 +1518,10 @@ segue não executável neste repo, débito pré-existente).
 > minutos. **Falta só:** validação visual com credencial real de produção (a sessão fez a
 > validação completa em dev local antes do deploy, não em prod).
 
-**Divergência de pagamento vira crédito/saldo devedor na carteira (D-106, 2026-09-15 — código
-pronto e validado em dev local, ⛔ NÃO DEPLOYADO):** decisão explícita do dono — a soma dos
-pagamentos do checkout único (D-105) **não precisa mais bater exatamente** com o total geral.
+**Divergência de pagamento vira crédito/saldo devedor na carteira (D-106, 2026-09-15 — ✅
+DEPLOYADO em prod 2026-09-15, backend `cc14479` + frontend `393762f`, sem migration):** decisão
+explícita do dono — a soma dos pagamentos do checkout único (D-105) **não precisa mais bater
+exatamente** com o total geral.
 `allocate_payments` (`app/services/checkout.py`) deixou de levantar `ValueError` quando a soma
 diverge; em vez disso devolve `overpayment`/`underpayment`:
 - **Pagou a mais** (troco, ex.: serviço R$50, cliente dá R$60 em dinheiro): o excedente vira
@@ -1554,8 +1555,12 @@ renomeando o antigo `test_pagamento_nao_bate_com_total_422` para
 `curl`): atendimento de R$50 pago com R$60 em dinheiro → crédito de R$10 na carteira
 (`movement_type=ajuste`, `reference_type=appointment`); atendimento de R$50 pago com R$30 →
 saldo devedor de R$20 (`amount=-20.00`), saldo final ficou negativo (-R$4,00) sem bloquear a
-conclusão. **Falta para produção:** commit+push, deploy (sem migration, só `docker compose up -d
---build backend frontend`).
+conclusão. **✅ DEPLOYADO em prod 2026-09-15** (backend `cc14479` + frontend `393762f`, molde
+D-105): backup `~/predeploy_d106_20260915_215629.sql` na VM → `git pull` (backend) +
+`git submodule update --init --recursive` (frontend) → `docker compose -f docker-compose.app.yml
+up -d --build backend frontend` (ambos healthy, sem migration/sem permissão nova). Validado:
+`/health` 200, `/clientes` e `/vendas/balcao` 401 sem token, `app./api./apex` 200 por HTTPS,
+`/docs` 404, sem erros nos logs. **Falta só:** validação visual com credencial real de produção.
 
 **Pendente (visão do produto):** ~~Caixa~~ (✅ D-101 — abrir/fechar turno em tempo real, só dev/
 staging) · ~~Despesas ricas / contas a pagar / despesas recorrentes~~ (✅ D-102 — DEPLOYADO em prod
