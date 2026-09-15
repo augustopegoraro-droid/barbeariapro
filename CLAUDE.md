@@ -1518,6 +1518,45 @@ segue não executável neste repo, débito pré-existente).
 > minutos. **Falta só:** validação visual com credencial real de produção (a sessão fez a
 > validação completa em dev local antes do deploy, não em prod).
 
+**Divergência de pagamento vira crédito/saldo devedor na carteira (D-106, 2026-09-15 — código
+pronto e validado em dev local, ⛔ NÃO DEPLOYADO):** decisão explícita do dono — a soma dos
+pagamentos do checkout único (D-105) **não precisa mais bater exatamente** com o total geral.
+`allocate_payments` (`app/services/checkout.py`) deixou de levantar `ValueError` quando a soma
+diverge; em vez disso devolve `overpayment`/`underpayment`:
+- **Pagou a mais** (troco, ex.: serviço R$50, cliente dá R$60 em dinheiro): o excedente vira
+  crédito automático na carteira do cliente (`client_wallet.credit(..., movement_type=ajuste,
+  note="Troco do checkout virou crédito")`) — em vez de devolver troco físico.
+- **Pagou a menos** (fiado): a diferença vira saldo devedor (`client_wallet.record_shortfall`,
+  novo em `app/services/client_wallet.py` — mesmo lançamento `ajuste`, mas **sem checar saldo
+  disponível**, permitindo saldo negativo; diferente de `debit`, que é para quando o staff
+  escolhe pagar COM a carteira e aí precisa ter saldo).
+- **Sem crédito fantasma:** se a linha que "sobrou" é ela mesma `credito_cliente` (staff
+  selecionou mais saldo do que o necessário), o excedente é descartado, não vira `overpayment` —
+  não existe "troco" de um pagamento que não é dinheiro/cartão/pix real, e contar geraria crédito
+  que nunca foi de fato debitado (`tests/test_checkout_allocation.py::
+  test_excedente_de_pagamento_com_carteira_nao_vira_credito_fantasma`).
+Vale para os 3 pontos que criam `Payment`/`SalePayment` a partir de `allocate_payments`:
+`concluir_atendimento` (`app/api/barbeiro.py`), `criar_venda` e `venda_balcao`
+(`app/api/vendas.py`) — os dois últimos agora exigem `client_id` quando há divergência (422 sem
+cliente identificado, já que o troco/débito precisa de alguém pra receber). Sem migration (só
+lógica de aplicação; `client_wallet_movements`/D-105 já suporta saldo negativo, é ledger puro).
+Frontend: `PaymentSplit` troca "Faltam R$X" (vermelho, parecia erro) por texto informativo —
+"Troco de R$X vira crédito para o cliente" / "Faltam R$X — vira saldo devedor do cliente" — sem
+bloquear o envio (nunca bloqueou; era só indicativo). Suíte **922 pass / 4 fail (mesmas 2
+ambientais + 2 flakes de poluição entre execuções repetidas contra o mesmo Postgres, confirmado
+isolando cada uma) / 2 skip** (+4: `test_checkout_allocation.py` ganhou
+`test_pagou_a_mais_vira_overpayment`/`test_pagou_a_menos_vira_underpayment`/
+`test_excedente_de_pagamento_com_carteira_nao_vira_credito_fantasma`, substituindo o antigo
+`test_soma_nao_bate_levanta_value_error`; `test_vendas.py` ganhou
+`test_pagamento_a_mais_vira_credito_na_carteira`/`test_pagamento_a_menos_vira_saldo_devedor`,
+renomeando o antigo `test_pagamento_nao_bate_com_total_422` para
+`test_pagamento_divergente_sem_cliente_422`). Validado end-to-end em dev local (browser +
+`curl`): atendimento de R$50 pago com R$60 em dinheiro → crédito de R$10 na carteira
+(`movement_type=ajuste`, `reference_type=appointment`); atendimento de R$50 pago com R$30 →
+saldo devedor de R$20 (`amount=-20.00`), saldo final ficou negativo (-R$4,00) sem bloquear a
+conclusão. **Falta para produção:** commit+push, deploy (sem migration, só `docker compose up -d
+--build backend frontend`).
+
 **Pendente (visão do produto):** ~~Caixa~~ (✅ D-101 — abrir/fechar turno em tempo real, só dev/
 staging) · ~~Despesas ricas / contas a pagar / despesas recorrentes~~ (✅ D-102 — DEPLOYADO em prod
 2026-08-31) · Consumo de produtos no atendimento · Estoque/Produtos ·

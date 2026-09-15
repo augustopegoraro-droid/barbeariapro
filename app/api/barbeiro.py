@@ -36,6 +36,7 @@ from models import (
     CardType,
     CashMovementType,
     ClientMembership,
+    ClientWalletMovementType,
     Payment,
     SalePayment,
     User,
@@ -188,18 +189,12 @@ async def concluir_atendimento(
         )
         product_total = sale.total_amount
 
-    try:
-        alloc = allocate_payments(
-            [
-                PaymentLineIn(p.amount, p.method, p.card_type, p.card_brand)
-                for p in body.payments
-            ],
-            service_total=service_total,
-            product_total=product_total,
-            tip_total=tip_total,
-        )
-    except ValueError as exc:
-        raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    alloc = allocate_payments(
+        [PaymentLineIn(p.amount, p.method, p.card_type, p.card_brand) for p in body.payments],
+        service_total=service_total,
+        product_total=product_total,
+        tip_total=tip_total,
+    )
 
     # ── Payment(s) do serviço (split — 1 linha por método) ───────────────────
     service_payments: list[Payment] = []
@@ -266,6 +261,30 @@ async def concluir_atendimento(
             created_by_user_id=current_user.id,
         )
 
+    # ── Troco/saldo devedor (D-106) ───────────────────────────────────────────
+    if alloc.overpayment > 0:
+        await client_wallet.credit(
+            db,
+            organization_id=current_user.organization_id,
+            client_id=appt.client_id,
+            amount=alloc.overpayment,
+            movement_type=ClientWalletMovementType.ajuste,
+            note="Troco do checkout virou crédito",
+            reference_type="appointment",
+            reference_id=appt.id,
+            created_by_user_id=current_user.id,
+        )
+    if alloc.underpayment > 0:
+        await client_wallet.record_shortfall(
+            db,
+            organization_id=current_user.organization_id,
+            client_id=appt.client_id,
+            amount=alloc.underpayment,
+            reference_type="appointment",
+            reference_id=appt.id,
+            created_by_user_id=current_user.id,
+        )
+
     if not paid_by_membership:
         # Receita de serviço (sem gorjeta/produto) — alinha total_amount com
         # AppointmentItem.price_charged (base de receita/comissão do financeiro)
@@ -308,6 +327,8 @@ async def concluir_atendimento(
             "product_amount": float(product_total),
             "tip_amount": float(alloc.tip_amount),
             "payments": len(body.payments),
+            "overpayment_credit": float(alloc.overpayment),
+            "underpayment_debt": float(alloc.underpayment),
         },
     )
 

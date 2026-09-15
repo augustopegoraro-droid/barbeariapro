@@ -33,6 +33,7 @@ from app.deps import get_current_user, get_tenant_db
 from app.services import cash_register as cash
 from app.services import client_wallet
 from app.services.audit import record_event
+from app.services.checkout import PaymentLineIn, allocate_payments
 from app.services.inventory import apply_stock_movement
 from app.services.management import top_selling_products
 from app.services.sales import SaleItemIn, build_sale
@@ -45,6 +46,7 @@ from models import (
     CashMovement,
     CashMovementType,
     Client,
+    ClientWalletMovementType,
     ProductVariant,
     PaymentMethod,
     Sale,
@@ -305,8 +307,6 @@ async def criar_venda(
         if client is None:
             raise HTTPException(http_status.HTTP_404_NOT_FOUND, "Cliente não encontrado.")
 
-    payments_total = sum(p.amount for p in body.payments).quantize(Decimal("0.01"))
-
     unit = (
         await db.execute(select(Unit).where(Unit.deleted_at.is_(None)).order_by(Unit.id).limit(1))
     ).scalar_one_or_none()
@@ -322,39 +322,64 @@ async def criar_venda(
         items=[SaleItemIn(variant_id=i.variant_id, qty=i.qty) for i in body.items],
         created_by_user_id=current_user.id,
     )
-    if payments_total != sale.total_amount:
+
+    alloc = allocate_payments(
+        [PaymentLineIn(p.amount, p.method, p.card_type, p.card_brand) for p in body.payments],
+        service_total=Decimal("0"),
+        product_total=sale.total_amount,
+        tip_total=Decimal("0"),
+    )
+    if (alloc.overpayment > 0 or alloc.underpayment > 0) and body.client_id is None:
         raise HTTPException(
             http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Soma dos pagamentos (R$ {payments_total}) não bate com o total da venda (R$ {sale.total_amount}).",
+            "Pagamento diferente do total da venda exige um cliente identificado "
+            "(o troco/saldo devedor vira crédito/débito na carteira dele).",
         )
 
-    for payment in body.payments:
+    for line in alloc.product_lines:
         db.add(
             SalePayment(
                 organization_id=current_user.organization_id,
                 sale_id=sale.id,
-                amount=payment.amount,
-                method=payment.method,
-                card_type=payment.card_type,
-                card_brand=payment.card_brand,
+                amount=line.amount,
+                method=line.method,
+                card_type=line.card_type,
+                card_brand=line.card_brand,
             )
         )
     await db.flush()
 
     wallet_used = sum(
-        (p.amount for p in body.payments if p.method == PaymentMethod.credito_cliente), Decimal("0")
+        (l.amount for l in alloc.product_lines if l.method == PaymentMethod.credito_cliente), Decimal("0")
     )
     if wallet_used > 0:
-        if body.client_id is None:
-            raise HTTPException(
-                http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "Pagamento com saldo da carteira exige um cliente identificado.",
-            )
         await client_wallet.debit(
             db,
             organization_id=current_user.organization_id,
             client_id=body.client_id,
             amount=wallet_used,
+            reference_type="sale",
+            reference_id=sale.id,
+            created_by_user_id=current_user.id,
+        )
+    if alloc.overpayment > 0:
+        await client_wallet.credit(
+            db,
+            organization_id=current_user.organization_id,
+            client_id=body.client_id,
+            amount=alloc.overpayment,
+            movement_type=ClientWalletMovementType.ajuste,
+            note="Troco da venda virou crédito",
+            reference_type="sale",
+            reference_id=sale.id,
+            created_by_user_id=current_user.id,
+        )
+    if alloc.underpayment > 0:
+        await client_wallet.record_shortfall(
+            db,
+            organization_id=current_user.organization_id,
+            client_id=body.client_id,
+            amount=alloc.underpayment,
             reference_type="sale",
             reference_id=sale.id,
             created_by_user_id=current_user.id,
@@ -613,28 +638,28 @@ async def venda_balcao(
         created_by_user_id=current_user.id,
     )
 
-    payments_total = sum(p.amount for p in body.payments).quantize(Decimal("0.01"))
-    if payments_total != sale.total_amount:
-        raise HTTPException(
-            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Soma dos pagamentos (R$ {payments_total}) não bate com o total da venda (R$ {sale.total_amount}).",
-        )
+    alloc = allocate_payments(
+        [PaymentLineIn(p.amount, p.method, p.card_type, p.card_brand) for p in body.payments],
+        service_total=Decimal("0"),
+        product_total=sale.total_amount,
+        tip_total=Decimal("0"),
+    )
 
-    for payment in body.payments:
+    for line in alloc.product_lines:
         db.add(
             SalePayment(
                 organization_id=current_user.organization_id,
                 sale_id=sale.id,
-                amount=payment.amount,
-                method=payment.method,
-                card_type=payment.card_type,
-                card_brand=payment.card_brand,
+                amount=line.amount,
+                method=line.method,
+                card_type=line.card_type,
+                card_brand=line.card_brand,
             )
         )
     await db.flush()
 
     wallet_used = sum(
-        (p.amount for p in body.payments if p.method == PaymentMethod.credito_cliente), Decimal("0")
+        (l.amount for l in alloc.product_lines if l.method == PaymentMethod.credito_cliente), Decimal("0")
     )
     if wallet_used > 0:
         await client_wallet.debit(
@@ -642,6 +667,28 @@ async def venda_balcao(
             organization_id=current_user.organization_id,
             client_id=client.id,
             amount=wallet_used,
+            reference_type="sale",
+            reference_id=sale.id,
+            created_by_user_id=current_user.id,
+        )
+    if alloc.overpayment > 0:
+        await client_wallet.credit(
+            db,
+            organization_id=current_user.organization_id,
+            client_id=client.id,
+            amount=alloc.overpayment,
+            movement_type=ClientWalletMovementType.ajuste,
+            note="Troco da venda de balcão virou crédito",
+            reference_type="sale",
+            reference_id=sale.id,
+            created_by_user_id=current_user.id,
+        )
+    if alloc.underpayment > 0:
+        await client_wallet.record_shortfall(
+            db,
+            organization_id=current_user.organization_id,
+            client_id=client.id,
+            amount=alloc.underpayment,
             reference_type="sale",
             reference_id=sale.id,
             created_by_user_id=current_user.id,

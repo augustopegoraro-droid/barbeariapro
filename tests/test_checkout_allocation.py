@@ -1,14 +1,14 @@
-"""Alocação pura do split de pagamento do checkout único (D-105).
+"""Alocação pura do split de pagamento do checkout único (D-105/D-106).
 
 Sem DB: `allocate_payments` distribui a lista de pagamentos em ordem (FIFO)
-entre serviço, produtos e gorjeta.
+entre serviço, produtos e gorjeta. Divergência de valor não é mais erro
+(D-106): pagou a mais -> `overpayment` (vira crédito); pagou a menos ->
+`underpayment` (vira saldo devedor).
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
-
-import pytest
 
 from app.services.checkout import PaymentLineIn, allocate_payments
 from models import CardBrand, CardType, PaymentMethod
@@ -43,14 +43,42 @@ def test_split_dinheiro_e_cartao_cobrindo_servico_produto_e_gorjeta():
     assert alloc.tip_card_brand == CardBrand.visa
 
 
-def test_soma_nao_bate_levanta_value_error():
-    with pytest.raises(ValueError):
-        allocate_payments(
-            [PaymentLineIn(Decimal("10"), PaymentMethod.dinheiro)],
-            service_total=Decimal("50"),
-            product_total=Decimal("0"),
-            tip_total=Decimal("0"),
-        )
+def test_pagou_a_menos_vira_underpayment():
+    alloc = allocate_payments(
+        [PaymentLineIn(Decimal("10"), PaymentMethod.dinheiro)],
+        service_total=Decimal("50"),
+        product_total=Decimal("0"),
+        tip_total=Decimal("0"),
+    )
+    assert [l.amount for l in alloc.service_lines] == [Decimal("10")]
+    assert alloc.underpayment == Decimal("40")
+    assert alloc.overpayment == Decimal("0")
+
+
+def test_pagou_a_mais_vira_overpayment():
+    alloc = allocate_payments(
+        [PaymentLineIn(Decimal("60"), PaymentMethod.dinheiro)],
+        service_total=Decimal("50"),
+        product_total=Decimal("0"),
+        tip_total=Decimal("0"),
+    )
+    assert [l.amount for l in alloc.service_lines] == [Decimal("50")]
+    assert alloc.overpayment == Decimal("10")
+    assert alloc.underpayment == Decimal("0")
+
+
+def test_excedente_de_pagamento_com_carteira_nao_vira_credito_fantasma():
+    # Selecionar mais saldo do que o necessário não gera crédito de volta —
+    # só o que realmente foi alocado (50) é debitado da carteira depois.
+    alloc = allocate_payments(
+        [PaymentLineIn(Decimal("60"), PaymentMethod.credito_cliente)],
+        service_total=Decimal("50"),
+        product_total=Decimal("0"),
+        tip_total=Decimal("0"),
+    )
+    assert [l.amount for l in alloc.service_lines] == [Decimal("50")]
+    assert alloc.overpayment == Decimal("0")
+    assert alloc.underpayment == Decimal("0")
 
 
 def test_gorjeta_sem_pagamento_de_servico_usa_carteira():

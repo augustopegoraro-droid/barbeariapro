@@ -161,8 +161,26 @@ async def test_criar_venda_baixa_estoque(client, auth_headers):
     assert saida[0]["qty_after"] == 7.0
 
 
+async def _criar_cliente_venda_teste() -> int:
+    async with AsyncSessionLocal() as session:
+        await set_current_org(session, SEED_ORG_ID)
+        suf = uuid.uuid4().int % 1_000_000
+        cliente = Client(
+            organization_id=SEED_ORG_ID,
+            name=f"Cliente Venda Teste {suf}",
+            phone_e164=f"+5563{suf:08d}"[:15],
+        )
+        session.add(cliente)
+        await session.flush()
+        client_id = cliente.id
+        await session.commit()
+        return client_id
+
+
 @pytest.mark.asyncio
-async def test_pagamento_nao_bate_com_total_422(client, auth_headers):
+async def test_pagamento_divergente_sem_cliente_422(client, auth_headers):
+    """D-106: soma de pagamentos != total só é aceita (vira crédito/débito na
+    carteira) quando há um cliente identificado — sem cliente, 422."""
     _, variant_id = await _criar_produto(client, auth_headers, price="5.00", stock="10")
 
     resp = await client.post(
@@ -174,6 +192,52 @@ async def test_pagamento_nao_bate_com_total_422(client, auth_headers):
         },
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_pagamento_a_mais_vira_credito_na_carteira(client, auth_headers):
+    client_id = await _criar_cliente_venda_teste()
+    _, variant_id = await _criar_produto(client, auth_headers, price="5.00", stock="10")
+
+    resp = await client.post(
+        "/vendas",
+        headers=auth_headers,
+        json={
+            "client_id": client_id,
+            "items": [{"variant_id": variant_id, "qty": "2"}],
+            "payments": [{"amount": "15.00", "method": "dinheiro"}],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["total_amount"] == 10.0
+    # Só R$10 vira SalePayment (o resto — R$5 de troco — vira crédito na carteira).
+    assert resp.json()["payments"][0]["amount"] == 10.0
+
+    saldo = await client.get(f"/clientes/{client_id}/carteira/saldo", headers=auth_headers)
+    assert saldo.status_code == 200, saldo.text
+    assert saldo.json()["balance"] == 5.0
+
+
+@pytest.mark.asyncio
+async def test_pagamento_a_menos_vira_saldo_devedor(client, auth_headers):
+    client_id = await _criar_cliente_venda_teste()
+    _, variant_id = await _criar_produto(client, auth_headers, price="5.00", stock="10")
+
+    resp = await client.post(
+        "/vendas",
+        headers=auth_headers,
+        json={
+            "client_id": client_id,
+            "items": [{"variant_id": variant_id, "qty": "2"}],
+            "payments": [{"amount": "6.00", "method": "dinheiro"}],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["payments"][0]["amount"] == 6.0
+
+    saldo = await client.get(f"/clientes/{client_id}/carteira/saldo", headers=auth_headers)
+    assert saldo.status_code == 200, saldo.text
+    assert saldo.json()["balance"] == -4.0
 
 
 @pytest.mark.asyncio

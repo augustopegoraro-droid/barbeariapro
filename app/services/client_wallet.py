@@ -1,8 +1,9 @@
 """Carteira de crédito do cliente final — ledger append-only
 (`client_wallet_movements`, migration 0068).
 
-Saldo = `SUM(amount)` (ledger puro, sem coluna cacheada em `Client`). Toda
-escrita passa por `credit`/`debit`/`reverse_reference` — nunca inserir
+Saldo = `SUM(amount)` (ledger puro, sem coluna cacheada em `Client`) — pode
+ficar negativo (fiado, D-106: `record_shortfall`). Toda escrita passa por
+`credit`/`debit`/`record_shortfall`/`refund` — nunca inserir
 `ClientWalletMovement` fora deste módulo. Concorrência: não há uma linha
 "mãe" pra travar com `FOR UPDATE` (é um ledger puro), então dois débitos
 simultâneos do MESMO cliente são serializados por
@@ -88,6 +89,38 @@ async def debit(
         client_id=client_id,
         amount=-amount,
         movement_type=ClientWalletMovementType.uso_pagamento,
+        reference_type=reference_type,
+        reference_id=reference_id,
+        created_by_user_id=created_by_user_id,
+    )
+    db.add(movement)
+    await db.flush()
+    return movement
+
+
+async def record_shortfall(
+    db: AsyncSession,
+    *,
+    organization_id: int,
+    client_id: int,
+    amount: Decimal,
+    reference_type: str,
+    reference_id: int,
+    note: Optional[str] = None,
+    created_by_user_id: Optional[int] = None,
+) -> ClientWalletMovement:
+    """Registra que o cliente pagou a MENOS que o total de um checkout — vira
+    saldo devedor (fiado, D-106). Diferente de `debit`: não checa saldo
+    disponível (não é "pagar com a carteira", é "ficou devendo"), então pode
+    deixar o saldo negativo."""
+    if amount <= 0:
+        raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, "O valor do saldo devedor deve ser positivo.")
+    movement = ClientWalletMovement(
+        organization_id=organization_id,
+        client_id=client_id,
+        amount=-amount,
+        movement_type=ClientWalletMovementType.ajuste,
+        note=note or "Pagamento insuficiente no checkout — vira saldo devedor",
         reference_type=reference_type,
         reference_id=reference_id,
         created_by_user_id=created_by_user_id,
