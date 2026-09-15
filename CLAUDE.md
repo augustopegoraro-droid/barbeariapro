@@ -1125,17 +1125,21 @@ antes do deploy.
 > `react-hooks/set-state-in-effect`); repõe sozinho ao trocar de produto ou após "Adicionar ao
 > carrinho". Vale para Venda rápida, o atalho da Agenda e o bloco "+ Produtos" da conclusão.
 
-> **Saudação com efeito de digitação na Agenda (2026-09-14 — código pronto, ⛔ ainda sem
-> validação/deploy):** `users` nunca guardou nome próprio (só e-mail) — `MeResponse`
-> (`GET /auth/me`) ganhou o campo `name` via `app/deps.py::resolve_current_display_name`: usa o
-> nome do `Barber` vinculado (`user_units.barber_id`, D-83 — vale para qualquer papel, não só
-> barbeiro) e, na ausência de vínculo, deriva do e-mail (`_display_name_from_email`, capitaliza a
-> parte local). Sem migration. Frontend: `hooks/use-me.ts` (`useAuthedQuery` sobre `/auth/me`) +
-> `components/agenda/greeting-typewriter.tsx` (efeito de "digitando" com `setInterval`, sem lib) —
-> "Seja bem-vindo(a), *primeiro nome*, esta é sua agenda de hoje..." abaixo do título "Agenda" em
-> `/admin/agenda`; reanima a cada vez que a página monta (cobre "todo login", já que o login
-> redireciona para a Agenda). `tsc`/`eslint` limpos. **Falta:** rodar a suíte de testes do
-> backend (Docker parado nesta sessão) e validar no browser.
+> **Saudação com efeito de digitação na Agenda (2026-09-14 — ✅ DEPLOYADO em prod 2026-09-14,
+> backend `2e76e80` + frontend `2b3d373`; sem migration):** `users` nunca guardou nome próprio
+> (só e-mail) — `MeResponse` (`GET /auth/me`) ganhou o campo `name` via
+> `app/deps.py::resolve_current_display_name`: usa o nome do `Barber` vinculado
+> (`user_units.barber_id`, D-83 — vale para qualquer papel, não só barbeiro) e, na ausência de
+> vínculo, deriva do e-mail (`_display_name_from_email`, capitaliza a parte local). Frontend:
+> `hooks/use-me.ts` (`useAuthedQuery` sobre `/auth/me`) + `components/agenda/
+> greeting-typewriter.tsx` (efeito de "digitando" com `setInterval`, sem lib) — "Seja bem-vindo(a),
+> *primeiro nome*, esta é sua agenda de hoje..." abaixo do título "Agenda" em `/admin/agenda`;
+> reanima a cada vez que a página monta (cobre "todo login", já que o login redireciona para a
+> Agenda). `tsc`/`eslint` limpos. **Deploy trouxe junto** os commits do fix de comissão do Stripe
+> Connect (2026-09-05, `2fb74a2`/`5c76b5a`) que estavam pendentes em `main` — inertes em prod pelo
+> kill switch `CONNECT_ENABLED=False` (decisão explícita do dono, ver deploy desta sessão).
+> **Falta:** rodar a suíte de testes do backend (Docker local parado nesta sessão, deploy feito
+> sem rodar pytest) e validar visualmente no browser.
 prod 2026-08-04):** `suppliers`/`purchase_orders`/`purchase_order_items` (migration `0054`, molde
 `sales`/0053 — RLS+FORCE+GRANT SELECT/INSERT/UPDATE, sem DELETE — arquivar fornecedor via `active`,
 cancelar pedido via `status`, nunca apagar linha). `PurchaseOrder` nasce `rascunho` →
