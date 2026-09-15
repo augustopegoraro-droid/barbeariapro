@@ -1403,8 +1403,8 @@ ocupam a largura — a entrada fica no perfil). `app/api/revalidate/route.ts` pa
 (`empresa` implementada — D-45: cadastro, endereço/horário e plano via `/empresa`.)
 
 **Checkout único: split de pagamento + bandeira/tipo de cartão + carteira de crédito do
-cliente (D-105, 2026-09-15 — código pronto, ⛔ NÃO DEPLOYADO, migrations não aplicadas, suíte
-não validada: Docker parado nesta sessão):** plano em
+cliente (D-105, 2026-09-15 — ✅ DEPLOYADO em prod 2026-09-15, backend `a4d24ad` + frontend
+`ddbeff3`; migrations `0067`/`0068` aplicadas, head `0068`):** plano em
 `/Users/apleandro/.claude/plans/magical-forging-iverson.md`. Fecha 3 lacunas reais do
 fechamento financeiro: (1) split de pagamento — `payments: list[PagamentoIn]` já existia solto
 no schema de `POST /vendas` mas o frontend nunca usava, e a conclusão de atendimento nem no
@@ -1506,9 +1506,17 @@ segue não executável neste repo, débito pré-existente).
 > `?? ""` (sentinela sempre definida) nos dois selects — sem mudança de tipo/schema, só o `value` do
 > componente. Confirmado sem erro de console depois.
 >
-> **Pendências reais para produção:** aplicar `0067`/`0068` em prod (`DATABASE_URL=
-> $ADMIN_DATABASE_URL alembic upgrade head`, molde D-93/D-94), rodar `sync_authz_catalog.py` em prod,
-> deploy backend+frontend, smoke test com credencial real.
+> **✅ DEPLOYADO em prod 2026-09-15** (backend `a4d24ad` + frontend `ddbeff3`; molde D-93/D-94):
+> backup `~/predeploy_d105_20260915_210624.sql` na VM → `git pull` (backend) +
+> `git submodule update --init --recursive` (frontend — `deploy/update.sh` sozinho não atualiza
+> submódulo, achado já conhecido do D-100) → migrations via `Dockerfile.migrate` (`0066`→`0068`) →
+> `docker compose -f docker-compose.app.yml up -d --build backend frontend` (ambos healthy) →
+> `scripts/sync_authz_catalog.py` rodado à parte montando o repo do host no container do backend
+> (catálogo 81 permissões/9 papéis/334 vínculos, igual a dev/staging). Validado: `/health` 200,
+> `/clientes` e `/vendas/balcao` 401 sem token, `app./api./apex` 200 por HTTPS, `/docs` 404 (V12
+> intacto), `alembic_version` = `0068_client_wallet`, logs do backend sem erro nos primeiros
+> minutos. **Falta só:** validação visual com credencial real de produção (a sessão fez a
+> validação completa em dev local antes do deploy, não em prod).
 
 **Pendente (visão do produto):** ~~Caixa~~ (✅ D-101 — abrir/fechar turno em tempo real, só dev/
 staging) · ~~Despesas ricas / contas a pagar / despesas recorrentes~~ (✅ D-102 — DEPLOYADO em prod
